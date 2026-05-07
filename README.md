@@ -87,4 +87,4 @@ Sistema robusto desenvolvido para centralizar e gerenciar requisições entre di
 
 ---
 
-© 2025 - Desenvolvido de cabo a rabo por **Eduardo Erig**.
+© 2026 - Desenvolvido por **Eduardo Erig**.
