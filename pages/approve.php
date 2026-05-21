@@ -51,7 +51,7 @@ if (!is_array($allowedSectors)) $allowedSectors = [];
 ?>
     <div class="main">
         <div class="page-header">
-            <div style="display: flex; align-items: center; gap: 15px;">
+            <div>
                 <i class="fa-solid fa-clipboard-check"></i>
                 <div>
                     <h3>Aprovar Requisições</h3>

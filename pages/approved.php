@@ -110,7 +110,7 @@ if (!is_array($allowedSectors)) $allowedSectors = [];
 ?>
     <div class="main">
         <div class="page-header">
-            <div style="display: flex; align-items: center; gap: 15px;">
+            <div>
                 <i class="fa-solid fa-circle-check" style="color: #10b981;"></i>
                 <div>
                     <h3>Requisições Aprovadas</h3>

@@ -109,7 +109,7 @@ if (!is_array($allowedSectors)) $allowedSectors = [];
 ?>
     <div class="main">
         <div class="page-header">
-            <div style="display: flex; align-items: center; gap: 15px;">
+            <div>
                 <i class="fa-solid fa-gears" style="color: #3b82f6;"></i>
                 <div>
                     <h3>Em Andamento</h3>

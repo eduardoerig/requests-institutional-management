@@ -131,11 +131,11 @@ $stepperMap = ['P' => 0, 'Y' => 1, 'W' => 2, 'C' => 3, 'N' => -1];
 </style>
 <div class="main">
 
-    <div class="page-header" style="display:flex; justify-content:space-between; align-items:center; width:100%; flex-wrap:wrap; gap:15px;">
-        <div style="display:flex; align-items:center; gap: 15px;">
+    <div class="page-header">
+        <div>
             <i class="fa-solid fa-chart-pie"></i>
             <div>
-                <h3 style="margin: 0;">Dashboard</h3>
+                <h3>Dashboard</h3>
                 <p style="font-size: 0.85rem; color: var(--text-muted); margin: 2px 0 0;">
                     <?php if ($isGestor): ?>
                         Visualizando requisições aprovadas dos seus setores
@@ -145,7 +145,7 @@ $stepperMap = ['P' => 0, 'Y' => 1, 'W' => 2, 'C' => 3, 'N' => -1];
                 </p>
             </div>
         </div>
-        <div style="display:flex; align-items:center; gap: 20px;">
+        <div>
             <a href="new_request" class="btn-primary"><i class="fas fa-plus"></i> Nova Requisição</a>
         </div>
     </div>

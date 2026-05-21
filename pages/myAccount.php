@@ -21,8 +21,8 @@ $role_labels = [
 ?>
 <div class="main" style="max-width: 900px; margin: 0 auto;">
     <div class="page-header">
-        <div style="display: flex; align-items: center; gap: 15px;">
-            <i class="fa-solid fa-user-gear" style="font-size: 1.8rem; color: var(--primary);"></i>
+        <div>
+            <i class="fa-solid fa-user-gear"></i>
             <h3>Minha Conta</h3>
         </div>
     </div>

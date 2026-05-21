@@ -20,8 +20,6 @@ $sectorNames = [
 ];
 ?>
 <style>
-@import url('https://fonts.googleapis.com/css2?family=Outfit:wght@600;800&display=swap');
-
 @media (max-width: 768px) {
     .myreq-filter-container {
         display: flex !important;
@@ -81,10 +79,10 @@ $sectorNames = [
 }
 </style>
 <div class="main">
-        <div class="page-header" style="margin-bottom: 24px; display: flex; justify-content: center;">
-            <div style="display: flex; align-items: center; gap: 12px; padding: 10px 20px;">
-                <i class="fa-solid fa-list-check" style="font-size: 1.8rem; color: var(--primary);"></i>
-                <h3 style="margin: 0; font-family: 'Outfit', sans-serif; font-size: 1.8rem; font-weight: 800; color: var(--text-color); letter-spacing: -0.5px;">Minhas Requisições</h3>
+        <div class="page-header">
+            <div>
+                <i class="fa-solid fa-list-check"></i>
+                <h3>Minhas Requisições</h3>
             </div>
         </div>
         <div class="filter_req myreq-filter-container" style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 16px;">

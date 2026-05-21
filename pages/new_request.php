@@ -1,8 +1,8 @@
 
     <div class="main">
         <div class="page-header">
-            <div style="display: flex; align-items: center; gap: 15px;">
-                <i class="fa-solid fa-file-circle-plus" style="font-size: 1.8rem; color: var(--primary);"></i>
+            <div>
+                <i class="fa-solid fa-file-circle-plus"></i>
                 <h3>Nova requisição</h3>
             </div>
         </div>

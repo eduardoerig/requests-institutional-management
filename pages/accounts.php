@@ -54,13 +54,13 @@ $full_role_labels = array_merge($role_labels, [
 <div class="main" style="max-width: 1300px; margin: 0 auto; padding: 20px;">
 
     <!-- 1. Header da Página -->
-    <div class="page-header" style="margin-bottom: 30px; display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid var(--border-color); padding-bottom: 20px;">
+    <div class="page-header">
         <div style="display: flex; align-items: center; gap: 15px;">
             <div style="background: var(--primary); color: white; width: 50px; height: 50px; border-radius: 12px; display: flex; align-items: center; justify-content: center; font-size: 1.5rem; box-shadow: 0 4px 12px rgba(124, 58, 237, 0.2);">
                 <i class="fa-solid fa-users-gear"></i>
             </div>
             <div>
-                <h3 style="margin: 0; font-size: 1.6rem; color: var(--text-main);">Gestão de Contas</h3>
+                <h3>Gestão de Contas</h3>
                 <p style="margin: 5px 0 0; font-size: 0.9rem; color: var(--text-muted);">Controle centralizado de usuários, permissões e setores do sistema.</p>
             </div>
         </div>
