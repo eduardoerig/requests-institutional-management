@@ -30,3 +30,18 @@ batch_*.json
 file_list.txt
 files_to_push.json
 files_to_push_v2.json
+
+# Dependencies
+vendor/
+node_modules/
+
+# User Uploads & Media
+uploads/
+assets/uploads/
+arquivos/
+
+# Database Backups & Dumps
+*.sql
+*.sqlite
+*.sqlite3
+*.db
