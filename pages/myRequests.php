@@ -20,6 +20,8 @@ $sectorNames = [
 ];
 ?>
 <style>
+@import url('https://fonts.googleapis.com/css2?family=Outfit:wght@600;800&display=swap');
+
 @media (max-width: 768px) {
     .myreq-filter-container {
         display: flex !important;
@@ -27,15 +29,13 @@ $sectorNames = [
         align-items: stretch !important;
         gap: 16px !important;
     }
-    .myreq-filter-container .left_group {
-        display: flex !important;
-        flex-direction: column !important;
+    .filter-sectors {
+        align-items: center !important;
         width: 100% !important;
-        gap: 16px !important;
     }
-    .myreq-filter-container .left_group > div:first-child {
-        width: 100% !important;
-        justify-content: center !important;
+    .filter-sectors span {
+        margin-left: 0 !important;
+        text-align: center !important;
     }
     .myreq-search-row {
         display: flex !important;
@@ -45,43 +45,67 @@ $sectorNames = [
     }
     .myreq-search-row .search_input {
         flex: 1 !important;
-        width: auto !important;
+        width: 100% !important;
+    }
+    .myreq-search-row .search_input input {
+        width: 100% !important;
     }
     .myreq-filter-container .order_icon {
         margin: 0 !important;
     }
+    
+    /* Configuração para o card ocupar toda a tela centralizado */
+    .inbox-split-layout.myreq-layout {
+        width: 100% !important;
+        padding: 0 10px !important;
+        box-sizing: border-box !important;
+        display: flex !important;
+        flex-direction: column !important;
+        align-items: center !important;
+    }
+    .request_list_container {
+        width: 100% !important;
+    }
+    .card-wrapper-scroll {
+        width: 100% !important;
+        display: flex !important;
+        flex-direction: column !important;
+        align-items: center !important;
+    }
+    .card_req {
+        width: 100% !important;
+        max-width: 100% !important;
+        margin: 0 auto !important;
+        box-sizing: border-box !important;
+    }
 }
 </style>
 <div class="main">
-        <div class="page-header">
-            <div style="display: flex; align-items: center; gap: 15px;">
+        <div class="page-header" style="margin-bottom: 24px; display: flex; justify-content: center;">
+            <div style="display: flex; align-items: center; gap: 12px; padding: 10px 20px;">
                 <i class="fa-solid fa-list-check" style="font-size: 1.8rem; color: var(--primary);"></i>
-                <h3>Minhas Requisições</h3>
+                <h3 style="margin: 0; font-family: 'Outfit', sans-serif; font-size: 1.8rem; font-weight: 800; color: var(--text-color); letter-spacing: -0.5px;">Minhas Requisições</h3>
             </div>
         </div>
-        <div class="filter_req myreq-filter-container">
-            <div class="left_group">
-                <div style="display: flex; gap: 20px; align-items: center; flex-wrap: wrap;">
-                    <div style="display: flex; flex-direction: column; gap: 4px; width: 100%;">
-                        <span style="font-size: 0.65rem; color: var(--text-muted); font-weight: 700; text-transform: uppercase; text-align: center;">Setores</span>
-                        <div class="radio_field">
-                            <input type="radio" value="service" name="tipo" class="radioType" data-tooltip="Serviços">
-                            <input type="radio" value="shop" name="tipo" class="radioType" data-tooltip="Compras">
-                            <input type="radio" value="xerox" name="tipo" class="radioType" data-tooltip="Reprografia">
-                            <input type="radio" value="ti" name="tipo" class="radioType" data-tooltip="TI">
-                            <input type="radio" value="mkt" name="tipo" class="radioType" data-tooltip="Marketing">
-                            <input type="radio" value="all" name="tipo" class="radioType" data-tooltip="Todos os Setores" checked>
-                        </div>
-                    </div>
+        <div class="filter_req myreq-filter-container" style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 16px;">
+            <div class="filter-sectors" style="display: flex; flex-direction: column; gap: 6px;">
+                <span style="font-size: 0.7rem; color: var(--text-muted); font-weight: 700; text-transform: uppercase; margin-left: 4px;">Setores</span>
+                <div class="radio_field" style="display: flex; gap: 8px;">
+                    <input type="radio" value="service" name="tipo" class="radioType" data-tooltip="Serviços">
+                    <input type="radio" value="shop" name="tipo" class="radioType" data-tooltip="Compras">
+                    <input type="radio" value="xerox" name="tipo" class="radioType" data-tooltip="Reprografia">
+                    <input type="radio" value="ti" name="tipo" class="radioType" data-tooltip="TI">
+                    <input type="radio" value="mkt" name="tipo" class="radioType" data-tooltip="Marketing">
+                    <input type="radio" value="all" name="tipo" class="radioType" data-tooltip="Todos os Setores" checked>
                 </div>
-                <div class="myreq-search-row">
-                    <div class="search_input">
-                        <i class="fas fa-search"></i>
-                        <input type="text" placeholder="Pesquisar..." id="campoPesquisa">
-                    </div>
-                    <div class="order_icon" id="orderIcon" data-order="desc">
-                        <i class="fas fa-sort-amount-down"></i>
-                    </div>
+            </div>
+            <div class="myreq-search-row" style="display: flex; gap: 12px; align-items: center;">
+                <div class="search_input" style="position: relative; display: flex; align-items: center;">
+                    <i class="fas fa-search" style="color: var(--text-muted); left: 16px; position: absolute;"></i>
+                    <input type="text" placeholder="Pesquisar..." id="campoPesquisa" style="padding-left: 48px; min-height: 44px; border-radius: 8px; border: 1px solid var(--border-color); width: 250px;">
+                </div>
+                <div class="order_icon" id="orderIcon" data-order="desc" style="display: flex; align-items: center; justify-content: center; width: 44px; height: 44px; border-radius: 8px; background: var(--bg-main); border: 1px solid var(--border-color); cursor: pointer;">
+                    <i class="fas fa-sort-amount-down" style="color: var(--text-muted);"></i>
                 </div>
             </div>
         </div>
