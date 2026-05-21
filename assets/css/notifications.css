@@ -123,6 +123,7 @@
 
 .notif-item-content {
     flex-grow: 1;
+    overflow: hidden; /* Essencial para que o texto longo não vaze */
 }
 
 .notif-mark-read {
@@ -163,6 +164,10 @@
     font-size: 0.8rem;
     color: var(--text-muted);
     line-height: 1.4;
+    display: -webkit-box;
+    -webkit-line-clamp: 1; /* Limita a mensagem a uma única linha limpa */
+    -webkit-box-orient: vertical;
+    overflow: hidden;
 }
 
 .notif-item-time {
@@ -205,4 +210,24 @@
 @media (max-width: 768px) {
     .top-bar { padding: 0 1rem; }
     .user-profile { display: none; }
+}
+
+/* Logo centralizado na topbar mobile */
+.top-bar-logo-mobile {
+    display: none;
+}
+
+@media (max-width: 768px) {
+    .top-bar-logo-mobile {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        flex: 1;
+    }
+    .topbar-logo-img {
+        height: 30px;
+        width: auto;
+        object-fit: contain;
+        opacity: 0.9;
+    }
 }

@@ -1,6 +1,7 @@
 <?php
 session_start();
 require_once __DIR__ . '/../config/conn.php';
+require_once __DIR__ . '/../config/security.php';
 
 header('Content-Type: application/json');
 
@@ -18,8 +19,8 @@ if (!$id || !$table) {
 }
 
 // Segurança: Validar tabela
-$allowed = ['mkt', 'shop', 'xerox', 'service', 'ti'];
-if (!in_array($table, $allowed)) {
+$table = normalizeRequestTable((string)$table);
+if ($table === null) {
     echo json_encode(['success' => false, 'message' => 'Tabela não permitida.']);
     exit;
 }
@@ -35,16 +36,9 @@ try {
         exit;
     }
 
-    // Segurança: Apenas dono, admin ou gestor
+    // Segurança: Apenas dono, admin autorizado ou gestor do setor/repasse.
     $role = $_SESSION['role'] ?? 'solicitante';
-    $adminRoles = ['admin', 'adm', 'coord', 'adm_sub'];
-    $gestorRoles = ['gestor', 'ti', 'xerox', 'service', 'shop', 'mkt', 'marketing'];
-
-    $isAdmin = in_array($role, $adminRoles);
-    $isGestor = in_array($role, $gestorRoles);
-    $isOwner = ((int)$req['created_by'] === (int)$_SESSION['id']);
-
-    if (!$isAdmin && !$isGestor && !$isOwner) {
+    if (!userCanViewRequest($pdo, $req, $table, (int)$_SESSION['id'], $role)) {
         echo json_encode(['success' => false, 'message' => 'Acesso negado.']);
         exit;
     }
@@ -52,5 +46,6 @@ try {
     echo json_encode(['success' => true, 'data' => $req]);
 
 } catch (Exception $e) {
-    echo json_encode(['success' => false, 'message' => $e->getMessage()]);
+    error_log('get_request_details.php: ' . $e->getMessage());
+    echo json_encode(['success' => false, 'message' => 'Erro interno ao carregar os detalhes.']);
 }

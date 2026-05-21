@@ -1,13 +1,19 @@
 <?php
 session_start();
 require_once __DIR__ . '/../config/conn.php';
+require_once __DIR__ . '/../config/security.php';
 require_once __DIR__ . '/../classes/RequestManager.php';
+require_once __DIR__ . '/../classes/RequestForwardService.php';
 
 header('Content-Type: application/json');
 
 if (!isset($_SESSION['id'])) {
     echo json_encode(['success' => false, 'message' => 'Sessão expirada. Por favor, faça login novamente.']);
     exit;
+}
+
+if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+    requireCsrfTokenFromRequest();
 }
 
 // Suporte para JSON e POST tradicional
@@ -23,12 +29,8 @@ $role = $_SESSION['role'] ?? 'solicitante';
 $user_id = $_SESSION['id'] ?? 0;
 $user_name = $_SESSION['name'] ?? 'Usuário';
 
-// DEBUG LOG (Opcional, mantido para rastreio)
-$logEntry = date('Y-m-d H:i:s') . " | UserID: $user_id | Action: $action | Data: " . json_encode($data) . "\n";
-@file_put_contents(__DIR__ . '/../scratch/api_debug.log', $logEntry, FILE_APPEND);
-
 if (!$id || !$table || !$action) {
-    echo json_encode(['success' => false, 'message' => 'Dados incompletos para a ação.', 'debug' => $data]);
+    echo json_encode(['success' => false, 'message' => 'Dados incompletos para a ação.']);
     exit;
 }
 
@@ -38,16 +40,20 @@ if (!preg_match('/^ctd_.*_frm$/', $table)) {
     exit;
 }
 
-$adminRoles = ['admin', 'adm', 'coord', 'adm_sub'];
-$gestorRoles = ['gestor', 'ti', 'xerox', 'service', 'shop', 'mkt', 'marketing'];
-
-$isAdmin = in_array($role, $adminRoles);
-$isGestor = in_array($role, $gestorRoles);
+$isAdmin = isAdminRole($role);
+$isGlobalAdmin = isGlobalAdminRole($role);
+$isGestor = isGestorRole($role);
 $canManage = $isAdmin || $isGestor;
 
-$sector = str_replace(['ctd_', '_frm'], '', $table);
+$normalizedTable = normalizeRequestTable((string)$table);
+if ($normalizedTable === null) {
+    echo json_encode(['success' => false, 'message' => 'Tabela de requisicao invalida.']);
+    exit;
+}
+$table = 'ctd_' . $normalizedTable . '_frm';
+$sector = $normalizedTable;
 $sectorLabels = [
-    'mkt' => 'Marketing', 'xerox' => 'Xerox', 'shop' => 'Compras',
+    'mkt' => 'Marketing', 'xerox' => 'Reprografia', 'shop' => 'Compras',
     'service' => 'Manutenção', 'ti' => 'TI',
 ];
 $sectorLabel = $sectorLabels[$sector] ?? strtoupper($sector);
@@ -67,20 +73,21 @@ try {
     switch ($action) {
         case 'reset_status':
             if (!$isAdmin && !$isGestor) throw new Exception('Apenas administradores e gestores podem reabrir uma requisição.');
-            
+
             $reqData = getRequestData($pdo, $table, $id);
             if (!$reqData) throw new Exception("Requisição #$id não encontrada.");
-            
-            // Verificação de subdivisão para adm_sub
-            if ($role === 'adm_sub') {
-                $userSubs = $_SESSION['subdivision_ids'] ?? [];
-                if (!in_array($reqData['subdivision_id'], $userSubs)) {
-                    throw new Exception('Você não tem permissão para gerenciar esta requisição (subdivisão diferente).');
-                }
+
+            if (!userCanActOnRequest($pdo, $reqData, $sector, (int)$user_id, $role)) {
+                throw new Exception('Você não tem permissão para gerenciar esta requisição.');
             }
-            
+
             $oldStatus = $reqData['status'] ?? 'P';
-            $newStatus = 'W'; // Vai direto para Em Andamento
+            $completedForward = isGestorRole($role)
+                ? getActiveForwardForUser($pdo, (int)$user_id, (int)$id, $sector, ['completed'])
+                : null;
+            $managesOriginalRequest = userCanManageOriginalRequest($pdo, $reqData, $sector, (int)$user_id, $role);
+            $isForwardReopen = !$managesOriginalRequest && $completedForward !== null;
+            $newStatus = $isForwardReopen ? 'F' : 'W';
 
             $stmt = $pdo->prepare("UPDATE `$table` SET status = ? WHERE id = ?");
             if (!$stmt->execute([$newStatus, $id])) {
@@ -88,11 +95,19 @@ try {
                 throw new Exception("Erro ao reabrir requisição: " . ($err[2] ?? 'Erro desconhecido'));
             }
 
-            RequestManager::addHistory($pdo, $id, $sector, $user_id, $user_name, 'Requisição reaberta para Em Andamento', $oldStatus, $newStatus);
-            
-            RequestManager::notifyStakeholders($pdo, $reqData, $sector, 
-                "Requisição Reaberta", 
-                "🔄 Requisição #$id ($sectorLabel) foi reaberta por $user_name e está em andamento.", 
+            if ($isForwardReopen) {
+                $stmtForward = $pdo->prepare("UPDATE request_forwards SET status = 'accepted', received_by = ? WHERE id = ?");
+                $stmtForward->execute([(int)$user_id, (int)$completedForward['id']]);
+            }
+
+            $historyMessage = $isForwardReopen
+                ? 'Repasse reaberto para atendimento'
+                : 'Requisição reaberta para Em Andamento';
+            RequestManager::addHistory($pdo, $id, $sector, $user_id, $user_name, $historyMessage, $oldStatus, $newStatus);
+
+            RequestManager::notifyStakeholders($pdo, $reqData, $sector,
+                "Requisição Reaberta",
+                "🔄 Requisição #$id ($sectorLabel) foi reaberta por $user_name e está em andamento.",
                 $link, $user_id);
 
             $msg = "Requisição reaberta com sucesso.";
@@ -100,10 +115,11 @@ try {
 
         case 'start_progress':
             if (!$isGestor) throw new Exception('Apenas gestores de setor podem iniciar o atendimento. O ADM apenas aprova a solicitação.');
-            
+            if (!isUserManagerOfSector($pdo, (int)$user_id, $sector)) throw new Exception('Você não gerencia este setor.');
+
             $reqData = getRequestData($pdo, $table, $id);
             if (!$reqData) throw new Exception("Requisição #$id não encontrada.");
-            
+
             $currentStatus = trim(strtoupper($reqData['status'] ?? 'P'));
             if ($currentStatus === '') $currentStatus = 'P';
 
@@ -131,20 +147,52 @@ try {
 
         case 'finish':
             if (!$isGestor) throw new Exception('Apenas gestores de setor podem concluir requisições.');
-            
+
             $reqData = getRequestData($pdo, $table, $id);
             if (!$reqData) throw new Exception("Requisição #$id não encontrada.");
-            
+
             $currentStatus = trim(strtoupper($reqData['status'] ?? 'P'));
+            if ($currentStatus === 'F') {
+                $activeForward = getActiveForwardForUser($pdo, (int)$user_id, (int)$id, $sector, ['accepted']);
+                if (!$activeForward) {
+                    throw new Exception('Você não gerencia este setor.');
+                }
+
+                $result = RequestForwardService::completeForward($pdo, (int)$activeForward['id'], (int)$user_id, $user_name);
+                if (empty($result['success'])) {
+                    throw new Exception($result['message'] ?? 'Não foi possível concluir o repasse.');
+                }
+
+                $msg = $result['message'] ?? 'Requisição concluída com sucesso via repasse!';
+                break;
+            }
+
+            if (!isUserManagerOfSector($pdo, (int)$user_id, $sector)) throw new Exception('Você não gerencia este setor.');
+
             if ($currentStatus !== 'W') {
                 throw new Exception("Apenas requisições em andamento podem ser concluídas. Status atual: $currentStatus");
             }
 
+            $pdo->beginTransaction();
+
             $stmt = $pdo->prepare("UPDATE `$table` SET status = 'C' WHERE id = ?");
             if (!$stmt->execute([$id])) {
+                $pdo->rollBack();
                 $err = $stmt->errorInfo();
                 throw new Exception("Erro ao concluir requisição: " . ($err[2] ?? 'Erro desconhecido'));
             }
+
+            // Fechar qualquer repasse ativo (pending ou accepted) vinculado a esta requisição
+            // Isso evita que o forward fique "pendurado" após a conclusão
+            $stmtCloseForwards = $pdo->prepare("
+                UPDATE request_forwards
+                SET status = 'completed', received_by = ?, updated_at = NOW()
+                WHERE request_id = ? AND request_table = ?
+                  AND status IN ('pending', 'accepted')
+            ");
+            $stmtCloseForwards->execute([$user_id, $id, $sector]);
+
+            $pdo->commit();
 
             RequestManager::addHistory($pdo, $id, $sector, $user_id, $user_name, 'Requisição concluída', 'Em Andamento', 'Concluída');
 
@@ -165,15 +213,11 @@ try {
 
             $reqData = getRequestData($pdo, $table, $id);
             if (!$reqData) throw new Exception("Requisição não encontrada.");
-            
-            // Verificação de subdivisão para adm_sub
-            if ($role === 'adm_sub') {
-                $userSubs = $_SESSION['subdivision_ids'] ?? [];
-                if (!in_array($reqData['subdivision_id'], $userSubs)) {
-                    throw new Exception('Você não tem permissão para gerenciar esta requisição (subdivisão diferente).');
-                }
+
+            if (!userCanActOnRequest($pdo, $reqData, $sector, (int)$user_id, $role)) {
+                throw new Exception('Você não tem permissão para gerenciar esta requisição.');
             }
-            
+
             $oldPri = $reqData['priority'] ?? 2;
 
             $stmt = $pdo->prepare("UPDATE `$table` SET priority = ? WHERE id = ?");
@@ -181,7 +225,7 @@ try {
                 $err = $stmt->errorInfo();
                 throw new Exception("Erro ao definir prioridade: " . ($err[2] ?? 'Erro desconhecido'));
             }
-            
+
             $priLabels = [1 => 'Baixa', 2 => 'Média', 3 => 'Alta', 4 => 'Crítica'];
             $oldVal = $priLabels[$oldPri] ?? 'Média';
             $newVal = $priLabels[$priority];
@@ -206,7 +250,9 @@ try {
             if ($currentStatus === '') $currentStatus = 'P';
 
             // Regra: Admin pode tudo. Solicitante apenas se for dono e estiver PENDENTE.
-            $canDelete = $isAdmin || ($isOwner && ($currentStatus === 'P'));
+            $canDelete = $isGlobalAdmin
+                || ($role === 'adm_sub' && userCanManageOriginalRequest($pdo, $reqData, $sector, (int)$user_id, $role))
+                || ($isOwner && ($currentStatus === 'P'));
 
             if (!$canDelete) {
                 if ($isOwner) {
@@ -236,5 +282,21 @@ try {
     echo json_encode(['success' => true, 'message' => $msg]);
 
 } catch (Exception $e) {
-    echo json_encode(['success' => false, 'message' => $e->getMessage()]);
+    error_log('request_actions.php: ' . $e->getMessage());
+    $safeMessages = [
+        'Apenas gestores de setor podem iniciar o atendimento. O ADM apenas aprova a solicitação.',
+        'Apenas gestores de setor podem concluir requisições.',
+        'Você não gerencia este setor.',
+        'Você não tem permissão para gerenciar esta requisição.',
+        'Sem permissão para alterar prioridade.',
+        'Prioridade inválida.',
+        'Sem permissão para excluir esta requisição.',
+        'Você só pode excluir requisições que ainda estão Pendentes. Caso já tenha sido aprovada, entre em contato com o setor.',
+    ];
+
+    $message = in_array($e->getMessage(), $safeMessages, true)
+        ? $e->getMessage()
+        : 'Nao foi possivel concluir a acao.';
+
+    echo json_encode(['success' => false, 'message' => $message]);
 }

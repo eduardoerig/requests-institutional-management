@@ -17,27 +17,29 @@ if (!$canManage) {
     exit;
 }
 
-$managingId = $isAdmin ? null : $user_id;
+$managingId = ($isAdmin || $isAdmSub) ? null : $user_id;
+$subdivisionFilter = $isAdmSub ? ($_SESSION['subdivision_ids'] ?? null) : null;
 
 // 1. Buscar requisições Em Andamento (W)
-$dataW = RequestManager::getRequests($pdo, null, $managingId, 'W');
+$dataW = RequestManager::getRequests($pdo, null, $managingId, 'W', null, null, 'DESC', [], null, null, $subdivisionFilter);
 $requests = $dataW['requests'] ?? [];
 
 // 2. Buscar requisições Repassadas (F)
-// Admin vê todas as Repassadas (F) do sistema
-if ($isAdmin) {
-    $dataF = RequestManager::getRequests($pdo, null, null, 'F');
-    $requestsF = $dataF['requests'] ?? [];
-    $requests = array_merge($requests, $requestsF);
+require_once __DIR__ . '/../classes/RequestForwardService.php';
+
+if ($isAdmin || $isAdmSub) {
+    // Admin: Buscar todos os repasses ativos e mapeá-los para o setor de destino
+    $allForwards = RequestForwardService::getForwardsByDestination($pdo, 'all', null, null, $subdivisionFilter, 'accepted');
+    $requests = array_merge($requests, $allForwards);
 } else {
-    // Gestor: Buscar repasses recebidos (Pendente ou Aceito)
-    require_once __DIR__ . '/../classes/RequestForwardService.php';
-    $pendingForwards = RequestForwardService::getPendingForwards($pdo, $user_id);
+    // Gestor: Buscar repasses recebidos (Apenas Aceitos)
+    $pendingForwards = RequestForwardService::getPendingForwards($pdo, $user_id, 'accepted');
     if ($pendingForwards['success'] && !empty($pendingForwards['data'])) {
         foreach ($pendingForwards['data'] as $fwd) {
             $rd = $fwd['request_data'] ?? [];
             if (empty($rd)) continue;
             
+            $destSlug = strtolower($fwd['to_area_name'] ?? '');
             $requests[] = [
                 'id' => $rd['id'],
                 'title' => $rd['title'] ?? 'Sem título',
@@ -49,16 +51,38 @@ if ($isAdmin) {
                 'st_raw' => 'F',
                 'table' => $fwd['request_table'],
                 'sector' => $fwd['request_table'],
+                'responsible_sector' => $destSlug,
                 'solicitor_name' => $rd['solicitor_name'] ?? '—',
                 'solicitor_name_formatted' => $rd['solicitor_name'] ?? '—',
-                'subdivision_name' => '',
-                'subdivision_slug' => '',
+                'subdivision_name' => $rd['subdivision_name'] ?? '',
+                'subdivision_slug' => $rd['subdivision_slug'] ?? '',
                 'is_forwarded_to_me' => true,
                 'forward_from' => $fwd['from_area_label'] ?? '',
             ];
         }
     }
 }
+
+// =========================================
+// DEDUPLICAÇÃO DE REQUISIÇÕES (Evitar A->B->A duplicado)
+// =========================================
+$uniqueRequests = [];
+foreach ($requests as $req) {
+    // Normalizar o nome da tabela (remover ctd_ e _frm) para garantir que as chaves batam sempre
+    $cleanTable = str_replace(['ctd_', '_frm'], '', strtolower(trim($req['table'] ?? '')));
+    $key = $cleanTable . '_' . trim($req['id'] ?? '');
+    
+    if (isset($uniqueRequests[$key])) {
+        // Se a existente NÃO é repasse e a atual É repasse, sobrescrevemos
+        // Isso garante que veremos a etiqueta "DE: SETOR" ao invés da versão original limpa
+        if (!isset($uniqueRequests[$key]['is_forwarded_to_me']) && isset($req['is_forwarded_to_me'])) {
+            $uniqueRequests[$key] = $req;
+        }
+    } else {
+        $uniqueRequests[$key] = $req;
+    }
+}
+$requests = array_values($uniqueRequests);
 
 $totalAndamento = count($requests);
 
@@ -71,15 +95,15 @@ $map = [
 ];
 
 $sectorNames = [
-    'mkt' => 'MKT', 'xerox' => 'Xerox', 'shop' => 'Compras',
+    'mkt' => 'MKT', 'xerox' => 'Reprografia', 'shop' => 'Compras',
     'service' => 'Manutenção', 'ti' => 'TI',
 ];
 
 $allowedSectors = [];
-if (!$isAdmin && $user_id) {
-    $stmtSectors = $pdo->prepare("SELECT LOWER(a.title) FROM ctd_area a JOIN cfg_user_area cua ON a.id = cua.id_area WHERE cua.id_user = ?");
+if (!$isAdmin && !$isAdmSub && $user_id) {
+    $stmtSectors = $pdo->prepare("SELECT a.title FROM ctd_area a JOIN cfg_user_area cua ON a.id = cua.id_area WHERE cua.id_user = ?");
     $stmtSectors->execute([$user_id]);
-    $allowedSectors = $stmtSectors->fetchAll(PDO::FETCH_COLUMN);
+    $allowedSectors = array_values(array_filter(array_map('areaTitleToSector', $stmtSectors->fetchAll(PDO::FETCH_COLUMN))));
 }
 if (!is_array($allowedSectors)) $allowedSectors = [];
 ?>
@@ -97,27 +121,58 @@ if (!is_array($allowedSectors)) $allowedSectors = [];
         </div>
         <div class="filter_req">
             <div class="left_group">
-                <div class="radio_field">
-                    <?php if ($isAdmin || in_array('service', $allowedSectors)): ?>
-                        <input type="radio" value="service" name="tipo" class="radioType" data-status="W" data-tooltip="Manutenção">
-                    <?php endif; ?>
-                    <?php if ($isAdmin || in_array('shop', $allowedSectors)): ?>
-                        <input type="radio" value="shop" name="tipo" class="radioType" data-status="W" data-tooltip="Compras">
-                    <?php endif; ?>
-                    <?php if ($isAdmin || in_array('xerox', $allowedSectors)): ?>
-                        <input type="radio" value="xerox" name="tipo" class="radioType" data-status="W" data-tooltip="Xerox">
-                    <?php endif; ?>
-                    <?php if ($isAdmin || in_array('ti', $allowedSectors)): ?>
-                        <input type="radio" value="ti" name="tipo" class="radioType" data-status="W" data-tooltip="TI">
-                    <?php endif; ?>
-                    <?php if ($isAdmin || in_array('mkt', $allowedSectors)): ?>
-                        <input type="radio" value="mkt" name="tipo" class="radioType" data-status="W" data-tooltip="Marketing">
-                    <?php endif; ?>
-                    <input type="radio" value="all" name="tipo" class="radioType" data-status="W" data-tooltip="Todas solicitações" checked>
-                </div>
-                <div class="search_input">
-                    <i class="fas fa-search"></i>
-                    <input type="text" placeholder="Pesquisar..." id="campoPesquisa">
+                <div style="display: flex; gap: 24px; align-items: center; flex-wrap: wrap; width: 100%;">
+                    <!-- Filtro de Setor -->
+                    <div style="display: flex; flex-direction: column; gap: 4px;">
+                        <span style="font-size: 0.7rem; color: var(--text-muted); font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px;">Filtrar por Setor</span>
+                        <div class="radio_field">
+                            <?php 
+                            // 1. Calcular setores que possuem requisições PRÓPRIAS (W)
+                            $activeSectors = [];
+                            $hasForwards = false;
+                            foreach ($requests as $r) {
+                                if (($r['st_raw'] ?? '') === 'W') {
+                                    $activeSectors[] = $r['table'];
+                                } elseif (($r['st_raw'] ?? '') === 'F') {
+                                    $hasForwards = true;
+                                }
+                            }
+                            $activeSectors = array_unique($activeSectors);
+
+                            // Bolinhas dos setores permitidos que têm requisições W
+                            foreach ($sectorNames as $slug => $name): 
+                                if (in_array($slug, $activeSectors)):
+                                    if (!$isAdmin && !$isAdmSub && !in_array($slug, $allowedSectors)) continue;
+                            ?>
+                                <input type="radio" value="<?= $slug ?>" name="tipo" class="radioType" data-status="W" data-tooltip="<?= $name ?>">
+                            <?php 
+                                endif;
+                            endforeach; 
+                            
+                            // 2. Bolinha de Repassadas
+                            if ($hasForwards):
+                            ?>
+                                <input type="radio" value="forwarded" name="tipo" class="radioType" data-status="W" data-tooltip="Repassadas">
+                            <?php endif; ?>
+
+                            <input type="radio" value="all" name="tipo" class="radioType" data-status="W" data-tooltip="Todas req" checked>
+                        </div>
+                    </div>
+
+                    <!-- Busca -->
+                    <div style="flex: 1; min-width: 200px; display: flex; flex-direction: column; gap: 4px;">
+                        <span style="font-size: 0.7rem; color: var(--text-muted); font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px;">Busca</span>
+                        <div class="search_input" style="width: 100%; margin: 0;">
+                            <i class="fas fa-search"></i>
+                            <input type="text" placeholder="Pesquisar título..." id="campoPesquisa">
+                        </div>
+                    </div>
+
+                    <!-- Filtro de Data -->
+                    <div style="display: flex; flex-direction: column; gap: 4px;">
+                        <span style="font-size: 0.7rem; color: var(--text-muted); font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px;">Data</span>
+                        <input type="date" id="dataFiltro" style="padding: 6px 12px; border-radius: 6px; border: 1px solid var(--border-color); outline: none; background: #fff; color: var(--text-muted); font-family: var(--font-sans); font-size: 0.85rem; cursor: pointer; height: 38px; box-shadow: var(--shadow-sm);">
+                    </div>
                 </div>
             </div>
             <div class="order_icon" id="orderIcon" data-order="desc">
@@ -162,19 +217,22 @@ if (!is_array($allowedSectors)) $allowedSectors = [];
                                 }
                             }
                             
+                            $rd = $row['date'] ?? '';
+                            $prazoBadge = getPrazoBadge($rd, $row['status'] ?? 'P');
+                            
                             echo '
                                 <div class="card_req ' . $cardClass . $forwardedClass . '" data-id="' . $row['id'] . '" data-table="' . $row['table'] . '">
                                     <div class="card_header">
-                                        <span class="req_nome">Requisição #' . $row['id'] . '</span>
+                                        <span class="req_nome">Requisição ' . strtoupper($sectorNames[$row['table']] ?? $row['table'] ?? '') . ' #' . $row['id'] . ($isForwarded ? ' <i class="fa-solid fa-share" style="font-size: 0.8rem; color: #f59e0b;"></i>' : '') . '</span>
                                         <span class="card-timer ' . $timeClass . '"><i class="fa-solid fa-stopwatch"></i> ' . $timeLabel . '</span>
-                                    </div>
-                                    <div class="card_title">' . htmlspecialchars($row['title']) . '</div>
-                                    <div style="display:flex; justify-content:space-between; align-items:center; margin-top:8px; flex-wrap:wrap; gap:6px;">
-                                        <div class="card_date">Entrega: ' . ($row['date'] ?? '—') . '</div>
-                                        ' . $forwardedBadge . $sectorBadge . $subBadge . '
-                                    </div>
-                                </div>
-                            ';
+                                     </div>
+                                     <div class="card_title">' . htmlspecialchars($row['title']) . '</div>
+                                     <div style="display:flex; justify-content:space-between; align-items:center; margin-top:8px; flex-wrap:wrap; gap:6px;">
+                                         <div class="card_date" style="display:flex; align-items:center;">' . $prazoBadge . '</div>
+                                         <div style="display:flex; gap:6px; align-items:center;">' . $forwardedBadge . $sectorBadge . '</div>
+                                     </div>
+                                 </div>
+                             ';
                         }
                     } else {
                         echo '<div class="empty-state"><i class="fa-solid fa-inbox"></i><p>Nenhuma requisição em andamento.</p><p style="font-size:0.85rem; color:var(--text-muted);">Vá para "Aprovadas" para iniciar atendimentos.</p></div>';
@@ -215,8 +273,9 @@ if (!is_array($allowedSectors)) $allowedSectors = [];
                 </form>
 
                 <div class="empty-state" id="modalEmptyState">
-                    <i class="fa-solid fa-hand-pointer"></i>
-                    <p>Selecione uma requisição em andamento para visualizar detalhes e concluir.</p>
+                    <i class="fa-solid fa-clipboard-list" style="color: #94a3b8;"></i>
+                    <p>Nenhuma requisição selecionada</p>
+                    <p style="font-size: 0.83rem; color: var(--text-muted); margin-top: 4px;">Clique em uma requisição da lista para ver os detalhes e iniciar o atendimento.</p>
                 </div>
             </div>
         </div>

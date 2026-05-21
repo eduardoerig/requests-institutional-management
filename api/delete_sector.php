@@ -1,6 +1,7 @@
 <?php
 session_start();
 require_once __DIR__ . '/../config/conn.php';
+require_once __DIR__ . '/../config/security.php';
 
 header('Content-Type: application/json');
 
@@ -8,6 +9,7 @@ if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
     echo json_encode(['success' => false, 'message' => 'Método inválido.']);
     exit;
 }
+requireCsrfTokenFromRequest();
 
 if (!in_array($_SESSION['role'], ['admin', 'adm'])) {
     echo json_encode(['success' => false, 'message' => 'Acesso negado.']);
@@ -35,5 +37,6 @@ try {
 
     echo json_encode(['success' => true, 'message' => 'Setor excluído com sucesso!']);
 } catch (PDOException $e) {
-    echo json_encode(['success' => false, 'message' => 'Erro ao excluir setor: ' . $e->getMessage()]);
+    error_log('delete_sector.php: ' . $e->getMessage());
+    echo json_encode(['success' => false, 'message' => 'Erro interno ao excluir setor.']);
 }

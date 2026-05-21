@@ -4,10 +4,6 @@
    ========================================= */
 .detail-page { max-width: 1200px; margin: 0 auto; }
 
-.breadcrumb-nav { display: flex; align-items: center; gap: 8px; margin-bottom: 20px; font-size: 0.9rem; color: var(--text-muted); }
-.breadcrumb-nav a { color: var(--primary); font-weight: 500; }
-.breadcrumb-nav a:hover { text-decoration: underline; }
-.breadcrumb-nav i { font-size: 0.75rem; }
 
 .detail-header { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 30px; background: var(--bg-card); padding: 30px; border-radius: var(--radius-lg); border: 1px solid var(--border-color); box-shadow: var(--shadow-sm); }
 .detail-title { font-size: 2rem; font-weight: 800; color: var(--text-main); margin: 15px 0 10px; }

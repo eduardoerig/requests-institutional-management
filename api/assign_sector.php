@@ -1,6 +1,7 @@
 <?php
 session_start();
 require_once '../config/conn.php';
+require_once '../config/security.php';
 
 header('Content-Type: application/json');
 
@@ -10,6 +11,7 @@ if (!in_array($current_role, ['admin', 'adm'])) {
     echo json_encode(['success' => false, 'message' => 'Acesso negado.']);
     exit;
 }
+requireCsrfTokenFromRequest();
 
 $userId   = $_POST['user_id'] ?? null;
 $sectorId = $_POST['sector_id'] ?? null;
@@ -20,6 +22,22 @@ if (!$userId || !$sectorId) {
 }
 
 try {
+    $stmtUser = $pdo->prepare("SELECT role FROM ctd_users WHERE id = ?");
+    $stmtUser->execute([(int)$userId]);
+    $targetRole = $stmtUser->fetchColumn();
+
+    if (!$targetRole || (!isGestorRole($targetRole) && !isGlobalAdminRole($targetRole))) {
+        echo json_encode(['success' => false, 'message' => 'Somente gestores e administradores podem ser vinculados a setores.']);
+        exit;
+    }
+
+    $stmtArea = $pdo->prepare("SELECT id FROM ctd_area WHERE id = ?");
+    $stmtArea->execute([(int)$sectorId]);
+    if (!$stmtArea->fetchColumn()) {
+        echo json_encode(['success' => false, 'message' => 'Setor informado não existe.']);
+        exit;
+    }
+
     // Verificar se já está vinculado
     $check = $pdo->prepare("SELECT id FROM cfg_user_area WHERE id_user = ? AND id_area = ?");
     $check->execute([$userId, $sectorId]);
@@ -37,5 +55,6 @@ try {
     }
 
 } catch (Exception $e) {
-    echo json_encode(['success' => false, 'message' => 'Erro: ' . $e->getMessage()]);
+    error_log('assign_sector.php: ' . $e->getMessage());
+    echo json_encode(['success' => false, 'message' => 'Erro interno ao vincular setor.']);
 }

@@ -1,13 +1,23 @@
 <?php
 session_start();
 include 'conn.php';
+require_once __DIR__ . '/security.php';
 
 if (!isset($_SESSION['id'])) {
     header('home');
     exit();
 }
 
+if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+    requireCsrfTokenFromRequest();
+}
+
 $subdivision_id = $_SESSION['subdivision_id'] ?? null;
+$role = $_SESSION['role'] ?? 'solicitante';
+if (in_array($role, ['solicitante', 'adm_sub'], true) && empty($subdivision_id)) {
+    echo json_encode(['success' => false, 'message' => 'Seu usuário precisa estar vinculado a uma subdivisão antes de abrir requisições.']);
+    exit();
+}
 
 if (isset($_POST['type']) && $_POST['type'] === 'service') {
     $title = $_POST['title'];

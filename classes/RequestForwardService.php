@@ -1,14 +1,15 @@
 <?php
 /**
  * RequestForwardService — Serviço de Repasse de Requisições entre Setores
- * 
+ *
  * Gerencia todo o ciclo de vida de um repasse:
  * criar → aceitar/recusar → concluir
- * 
+ *
  * Integrado com RequestManager para histórico e notificações.
  */
 
 require_once __DIR__ . '/RequestManager.php';
+require_once __DIR__ . '/../config/security.php';
 
 class RequestForwardService {
 
@@ -16,7 +17,7 @@ class RequestForwardService {
      * Labels dos setores para mensagens amigáveis
      */
     private static $sectorLabels = [
-        'mkt' => 'Marketing', 'xerox' => 'Xerox', 'shop' => 'Compras',
+        'mkt' => 'Marketing', 'xerox' => 'Reprografia', 'shop' => 'Compras',
         'service' => 'Manutenção', 'ti' => 'TI',
     ];
 
@@ -34,6 +35,11 @@ class RequestForwardService {
      */
     public static function forwardRequest($pdo, $reqId, $reqTable, $toAreaId, $observation, $userId, $userName) {
         try {
+            $reqTable = normalizeRequestTable((string)$reqTable);
+            if ($reqTable === null) {
+                return ['success' => false, 'message' => 'Tabela de requisição inválida.'];
+            }
+
             // 1. Validar se a requisição existe
             $fullTable = "ctd_{$reqTable}_frm";
             $stmt = $pdo->prepare("SELECT * FROM `$fullTable` WHERE id = ?");
@@ -44,14 +50,14 @@ class RequestForwardService {
                 return ['success' => false, 'message' => "Requisição #{$reqId} não encontrada."];
             }
 
-            // 2. Validar status — só pode repassar se estiver Em Andamento (W)
+            // 2. Validar status — pode repassar se estiver Aprovada (Y) ou Em Andamento (W) ou Repassada (F)
             $currentStatus = trim(strtoupper($reqData['status'] ?? 'P'));
             if ($currentStatus === '') $currentStatus = 'P';
 
-            if ($currentStatus !== 'W') {
+            if (!in_array($currentStatus, ['Y', 'W', 'F'], true)) {
                 $statusNames = ['P' => 'Pendente', 'Y' => 'Aprovada', 'N' => 'Recusada', 'C' => 'Concluída', 'F' => 'Repassada'];
                 $statusName = $statusNames[$currentStatus] ?? $currentStatus;
-                return ['success' => false, 'message' => "Não é possível repassar uma requisição com status \"{$statusName}\". Apenas requisições Em Andamento podem ser repassadas."];
+                return ['success' => false, 'message' => "Não é possível repassar uma requisição com status \"{$statusName}\". A requisição deve estar Aprovada ou Em Andamento."];
             }
 
             // 3. Validar se o gestor tem permissão sobre o setor de ORIGEM
@@ -60,8 +66,13 @@ class RequestForwardService {
                 return ['success' => false, 'message' => "Setor de origem \"{$reqTable}\" não encontrado na base de dados."];
             }
 
+            $activeForward = null;
             if (!self::userHasAreaPermission($pdo, $userId, $fromAreaId)) {
-                return ['success' => false, 'message' => 'Você não tem permissão para repassar requisições deste setor.'];
+                $activeForward = getActiveForwardForUser($pdo, $userId, $reqId, $reqTable, ['accepted']);
+                if (!$activeForward) {
+                    return ['success' => false, 'message' => 'Você não tem permissão para repassar requisições deste setor. É necessário aceitar formalmente o repasse antes de encaminhá-lo.'];
+                }
+                $fromAreaId = (int)$activeForward['to_area_id'];
             }
 
             // 4. Validar se o setor de destino existe
@@ -75,18 +86,27 @@ class RequestForwardService {
                 return ['success' => false, 'message' => 'Não é possível repassar para o mesmo setor de origem.'];
             }
 
-            // 6. Verificar repasse circular (A→B→A) na mesma cadeia ativa
-            if (self::hasCircularForward($pdo, $reqId, $reqTable, $fromAreaId, $toAreaId)) {
-                return ['success' => false, 'message' => 'Repasse circular detectado! Esta requisição já foi repassada por este setor de destino anteriormente. Encerre o repasse atual antes de criar um novo.'];
-            }
+            // 6. Removido o bloqueio de repasse circular. Devolver para a origem (A->B->A) é um fluxo legítimo de trabalho.
 
             // 7. Criar o registro de repasse
+            $pdo->beginTransaction();
+
+            // Fechar qualquer repasse pendente ou ativo anterior desta mesma requisição (evita múltiplos repasses soltos)
+            $existingActive = self::getActiveForward($pdo, $reqId, $reqTable);
+            if ($existingActive) {
+                $stmt = $pdo->prepare("UPDATE request_forwards SET status = 'completed', received_by = COALESCE(received_by, ?) WHERE id = ?");
+                $stmt->execute([$userId, (int)$existingActive['id']]);
+                
+                // Se o fromAreaId original estava nulo ou vamos forçar rastreabilidade, podemos ajustar,
+                // mas a validação de origem já garantiu que quem está repassando pode fazê-lo.
+            }
+
             $stmt = $pdo->prepare("
-                INSERT INTO request_forwards 
-                (request_id, request_table, from_area_id, forwarded_by, to_area_id, observation, status) 
-                VALUES (?, ?, ?, ?, ?, ?, 'pending')
+                INSERT INTO request_forwards
+                (request_id, request_table, from_area_id, forwarded_by, to_area_id, observation, status, previous_status)
+                VALUES (?, ?, ?, ?, ?, ?, 'pending', ?)
             ");
-            $stmt->execute([$reqId, $reqTable, $fromAreaId, $userId, $toAreaId, $observation]);
+            $stmt->execute([$reqId, $reqTable, $fromAreaId, $userId, $toAreaId, $observation, $currentStatus]);
             $forwardId = $pdo->lastInsertId();
 
             // 8. Atualizar o status da requisição para 'F' (Repassada)
@@ -115,7 +135,7 @@ class RequestForwardService {
                 RequestManager::notify(
                     $pdo, $manager['id'],
                     "📨 Repasse Recebido",
-                    "A requisição #{$reqId} ({$fromAreaLabel}) — \"{$reqTitle}\" — foi repassada para {$toAreaLabel} por {$userName}." . 
+                    "A requisição #{$reqId} ({$fromAreaLabel}) — \"{$reqTitle}\" — foi repassada para {$toAreaLabel} por {$userName}." .
                     ($observation ? " Obs: {$observation}" : ''),
                     $link
                 );
@@ -132,6 +152,8 @@ class RequestForwardService {
                 );
             }
 
+            $pdo->commit();
+
             return [
                 'success' => true,
                 'message' => "Requisição repassada com sucesso para {$toAreaLabel}!",
@@ -139,7 +161,11 @@ class RequestForwardService {
             ];
 
         } catch (Exception $e) {
-            return ['success' => false, 'message' => 'Erro ao repassar requisição: ' . $e->getMessage()];
+            if ($pdo->inTransaction()) {
+                $pdo->rollBack();
+            }
+            error_log('RequestForwardService::forwardRequest: ' . $e->getMessage());
+            return ['success' => false, 'message' => 'Erro ao repassar requisição.'];
         }
     }
 
@@ -164,8 +190,15 @@ class RequestForwardService {
             }
 
             // Atualizar o repasse
+            $pdo->beginTransaction();
+
             $stmt = $pdo->prepare("UPDATE request_forwards SET status = 'accepted', received_by = ? WHERE id = ?");
             $stmt->execute([$userId, $forwardId]);
+
+            // Ao aceitar o repasse, colocar a requisição Em Andamento (W) no setor de destino
+            $fullTable = "ctd_{$forward['request_table']}_frm";
+            $stmt = $pdo->prepare("UPDATE `$fullTable` SET status = 'W' WHERE id = ?");
+            $stmt->execute([$forward['request_id']]);
 
             // Gravar no histórico
             $toArea = self::getAreaById($pdo, $forward['to_area_id']);
@@ -173,9 +206,9 @@ class RequestForwardService {
 
             RequestManager::addHistory(
                 $pdo, $forward['request_id'], $forward['request_table'], $userId, $userName,
-                "Repasse aceito por {$userName} ({$toAreaLabel})",
-                'Pendente',
-                'Aceito'
+                "Repasse aceito por {$userName} ({$toAreaLabel}) — Em Andamento",
+                'Repassada',
+                'Em Andamento'
             );
 
             // Notificar quem repassou
@@ -190,10 +223,15 @@ class RequestForwardService {
                 $link
             );
 
+            $pdo->commit();
             return ['success' => true, 'message' => "Repasse aceito! Agora você é responsável pelo atendimento."];
 
         } catch (Exception $e) {
-            return ['success' => false, 'message' => 'Erro ao aceitar repasse: ' . $e->getMessage()];
+            if ($pdo->inTransaction()) {
+                $pdo->rollBack();
+            }
+            error_log('RequestForwardService::acceptForward: ' . $e->getMessage());
+            return ['success' => false, 'message' => 'Erro ao aceitar repasse.'];
         }
     }
 
@@ -218,38 +256,46 @@ class RequestForwardService {
             }
 
             // Atualizar o repasse para recusado
+            $pdo->beginTransaction();
+
             $stmt = $pdo->prepare("UPDATE request_forwards SET status = 'refused', received_by = ? WHERE id = ?");
             $stmt->execute([$userId, $forwardId]);
 
-            // Voltar o status da requisição para 'W' (Em Andamento)
+            // Voltar o status da requisição para o status anterior (previous_status)
+            $prevStatus = $forward['previous_status'] ?? 'Y';
             $fullTable = "ctd_{$forward['request_table']}_frm";
-            $stmt = $pdo->prepare("UPDATE `$fullTable` SET status = 'W' WHERE id = ?");
-            $stmt->execute([$forward['request_id']]);
+            $stmt = $pdo->prepare("UPDATE `$fullTable` SET status = ? WHERE id = ?");
+            $stmt->execute([$prevStatus, $forward['request_id']]);
 
             // Gravar no histórico
             $toArea = self::getAreaById($pdo, $forward['to_area_id']);
             $toAreaLabel = self::$sectorLabels[strtolower($toArea['title'] ?? '')] ?? ($toArea['title'] ?? 'Setor');
+            $prevLabel = ($prevStatus === 'W') ? 'Em Andamento' : 'Aprovada';
 
             RequestManager::addHistory(
                 $pdo, $forward['request_id'], $forward['request_table'], $userId, $userName,
-                "Repasse recusado por {$userName} ({$toAreaLabel})",
+                "Repasse recusado por {$userName} ({$toAreaLabel}) — Retornou para $prevLabel",
                 'Repassada',
-                'Em Andamento'
+                $prevLabel
             );
 
-            // Notificar quem repassou
             $link = "request_detail?id={$forward['request_id']}&table={$forward['request_table']}";
             RequestManager::notify(
                 $pdo, $forward['forwarded_by'],
                 "❌ Repasse Recusado",
-                "O repasse da requisição #{$forward['request_id']} foi recusado por {$userName} ({$toAreaLabel}). A requisição voltou para o seu setor.",
+                "O repasse da requisição #{$forward['request_id']} foi recusado por {$userName} ({$toAreaLabel}). A requisição voltou para o status $prevLabel no seu setor.",
                 $link
             );
 
-            return ['success' => true, 'message' => "Repasse recusado. A requisição voltou ao setor de origem."];
+            $pdo->commit();
+            return ['success' => true, 'message' => "Repasse recusado. A requisição voltou ao status $prevLabel no setor de origem."];
 
         } catch (Exception $e) {
-            return ['success' => false, 'message' => 'Erro ao recusar repasse: ' . $e->getMessage()];
+            if ($pdo->inTransaction()) {
+                $pdo->rollBack();
+            }
+            error_log('RequestForwardService::refuseForward: ' . $e->getMessage());
+            return ['success' => false, 'message' => 'Erro ao recusar repasse.'];
         }
     }
 
@@ -274,6 +320,8 @@ class RequestForwardService {
             }
 
             // Atualizar o repasse
+            $pdo->beginTransaction();
+
             $stmt = $pdo->prepare("UPDATE request_forwards SET status = 'completed' WHERE id = ?");
             $stmt->execute([$forwardId]);
 
@@ -310,10 +358,15 @@ class RequestForwardService {
                 );
             }
 
+            $pdo->commit();
             return ['success' => true, 'message' => "Requisição concluída com sucesso via repasse!"];
 
         } catch (Exception $e) {
-            return ['success' => false, 'message' => 'Erro ao concluir repasse: ' . $e->getMessage()];
+            if ($pdo->inTransaction()) {
+                $pdo->rollBack();
+            }
+            error_log('RequestForwardService::completeForward: ' . $e->getMessage());
+            return ['success' => false, 'message' => 'Erro ao concluir repasse.'];
         }
     }
 
@@ -323,8 +376,13 @@ class RequestForwardService {
      */
     public static function getForwardChain($pdo, $reqId, $reqTable) {
         try {
+            $reqTable = normalizeRequestTable((string)$reqTable);
+            if ($reqTable === null) {
+                return ['success' => false, 'message' => 'Tabela de requisição inválida.', 'data' => []];
+            }
+
             $stmt = $pdo->prepare("
-                SELECT 
+                SELECT
                     rf.*,
                     uf.name AS forwarded_by_name,
                     ur.name AS received_by_name,
@@ -352,7 +410,8 @@ class RequestForwardService {
             return ['success' => true, 'data' => $chain];
 
         } catch (Exception $e) {
-            return ['success' => false, 'message' => $e->getMessage(), 'data' => []];
+            error_log('RequestForwardService::getForwardChain: ' . $e->getMessage());
+            return ['success' => false, 'message' => 'Erro ao carregar repasses.', 'data' => []];
         }
     }
 
@@ -360,13 +419,13 @@ class RequestForwardService {
      * Lista repasses pendentes para um gestor específico.
      * Busca por repasses onde o setor de destino está nos setores vinculados ao gestor.
      */
-    public static function getPendingForwards($pdo, $userId) {
+    public static function getPendingForwards($pdo, $userId, $forwardStatus = null) {
         try {
             // Buscar os setores do gestor
             $stmt = $pdo->prepare("
                 SELECT a.id AS area_id, LOWER(a.title) AS sector
-                FROM ctd_area a 
-                JOIN cfg_user_area cua ON a.id = cua.id_area 
+                FROM ctd_area a
+                JOIN cfg_user_area cua ON a.id = cua.id_area
                 WHERE cua.id_user = ?
             ");
             $stmt->execute([$userId]);
@@ -380,8 +439,8 @@ class RequestForwardService {
             $placeholders = implode(',', array_fill(0, count($areaIds), '?'));
 
             // Buscar repasses pendentes para esses setores
-            $stmt = $pdo->prepare("
-                SELECT 
+            $query = "
+                SELECT
                     rf.*,
                     uf.name AS forwarded_by_name,
                     af.title AS from_area_name,
@@ -391,10 +450,20 @@ class RequestForwardService {
                 LEFT JOIN ctd_area af ON rf.from_area_id = af.id
                 LEFT JOIN ctd_area at2 ON rf.to_area_id = at2.id
                 WHERE rf.to_area_id IN ($placeholders)
-                AND rf.status IN ('pending', 'accepted')
-                ORDER BY rf.created_at DESC
-            ");
-            $stmt->execute($areaIds);
+            ";
+            $params = $areaIds;
+
+            if ($forwardStatus) {
+                $query .= " AND rf.status = ?";
+                $params[] = $forwardStatus;
+            } else {
+                $query .= " AND rf.status IN ('pending', 'accepted')";
+            }
+
+            $query .= " ORDER BY rf.created_at DESC";
+
+            $stmt = $pdo->prepare($query);
+            $stmt->execute($params);
             $forwards = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
             // Para cada repasse, buscar dados da requisição original
@@ -422,7 +491,8 @@ class RequestForwardService {
             return ['success' => true, 'data' => $forwards];
 
         } catch (Exception $e) {
-            return ['success' => false, 'message' => $e->getMessage(), 'data' => []];
+            error_log('RequestForwardService::getPendingForwards: ' . $e->getMessage());
+            return ['success' => false, 'message' => 'Erro ao carregar repasses pendentes.', 'data' => []];
         }
     }
 
@@ -432,8 +502,8 @@ class RequestForwardService {
      */
     public static function getActiveForward($pdo, $reqId, $reqTable) {
         $stmt = $pdo->prepare("
-            SELECT rf.*, 
-                   af.title AS from_area_name, 
+            SELECT rf.*,
+                   af.title AS from_area_name,
                    at2.title AS to_area_name,
                    uf.name AS forwarded_by_name
             FROM request_forwards rf
@@ -449,6 +519,131 @@ class RequestForwardService {
         return $stmt->fetch(PDO::FETCH_ASSOC) ?: null;
     }
 
+    /**
+     * Busca repasses filtrados pelo setor de DESTINO (slug).
+     * Útil para filtros dinâmicos onde queremos ver o que um setor recebeu.
+     */
+    public static function getForwardsByDestination($pdo, $sectorSlug, $searchText = null, $searchDate = null, $subdivisionId = null, $forwardStatus = null) {
+        try {
+            $query = "
+                SELECT
+                    rf.*,
+                    uf.name AS forwarded_by_name,
+                    af.title AS from_area_name,
+                    at2.title AS to_area_name
+                FROM request_forwards rf
+                LEFT JOIN ctd_users uf ON rf.forwarded_by = uf.id
+                LEFT JOIN ctd_area af ON rf.from_area_id = af.id
+                LEFT JOIN ctd_area at2 ON rf.to_area_id = at2.id
+                WHERE 1=1
+            ";
+            $params = [];
+
+            if ($forwardStatus) {
+                $query .= " AND rf.status = ?";
+                $params[] = $forwardStatus;
+            } else {
+                $query .= " AND rf.status IN ('pending', 'accepted')";
+            }
+
+            if ($sectorSlug && $sectorSlug !== 'all') {
+                $aliases = sectorAreaAliases((string)$sectorSlug);
+                $placeholders = implode(',', array_fill(0, count($aliases), '?'));
+                $query .= " AND LOWER(at2.title) IN ($placeholders)";
+                $params = array_merge($params, $aliases);
+            }
+
+            $query .= " ORDER BY rf.created_at DESC";
+
+            $stmt = $pdo->prepare($query);
+            $stmt->execute($params);
+            $forwards = $stmt->fetchAll(PDO::FETCH_ASSOC);
+
+            $filteredForwards = [];
+            foreach ($forwards as $fwd) {
+                $sector = $fwd['request_table'];
+                $fullTable = "ctd_{$sector}_frm";
+
+                $reqQuery = "
+                    SELECT r.id, r.title, r.created_at, r.date, r.urgent, r.priority,
+                           u.name AS solicitor_name,
+                           sub.name AS subdivision_name, sub.slug AS subdivision_slug
+                    FROM `$fullTable` r
+                    LEFT JOIN ctd_users u ON r.created_by = u.id
+                    LEFT JOIN ctd_subdivision sub ON r.subdivision_id = sub.id
+                    WHERE r.id = ?
+                ";
+                $reqParams = [$fwd['request_id']];
+
+                if ($searchText) {
+                    $reqQuery .= " AND r.title LIKE ?";
+                    $reqParams[] = "%$searchText%";
+                }
+                if ($searchDate) {
+                    $reqQuery .= " AND r.date = ?";
+                    $reqParams[] = $searchDate;
+                }
+                if ($subdivisionId !== null) {
+                    if (is_array($subdivisionId)) {
+                        if (empty($subdivisionId)) {
+                            continue;
+                        }
+                        $placeholders = implode(',', array_fill(0, count($subdivisionId), '?'));
+                        $subdivisionIds = array_map('intval', $subdivisionId);
+                        $reqQuery .= " AND (
+                            r.subdivision_id IN ($placeholders)
+                            OR EXISTS (
+                                SELECT 1
+                                FROM cfg_user_subdivision cus
+                                WHERE cus.id_user = r.created_by
+                                  AND cus.id_subdivision IN ($placeholders)
+                            )
+                        )";
+                        $reqParams = array_merge($reqParams, $subdivisionIds, $subdivisionIds);
+                    } else {
+                        $reqQuery .= " AND (
+                            r.subdivision_id = ?
+                            OR EXISTS (
+                                SELECT 1
+                                FROM cfg_user_subdivision cus
+                                WHERE cus.id_user = r.created_by
+                                  AND cus.id_subdivision = ?
+                            )
+                        )";
+                        $reqParams[] = (int)$subdivisionId;
+                        $reqParams[] = (int)$subdivisionId;
+                    }
+                }
+
+                $reqStmt = $pdo->prepare($reqQuery);
+                $reqStmt->execute($reqParams);
+                $reqData = $reqStmt->fetch(PDO::FETCH_ASSOC);
+
+                if ($reqData) {
+                    $fwd['request_data'] = $reqData;
+                    $fwd['from_area_label'] = self::$sectorLabels[strtolower($fwd['from_area_name'] ?? '')] ?? $fwd['from_area_name'];
+                    $fwd['to_area_label'] = self::$sectorLabels[strtolower($fwd['to_area_name'] ?? '')] ?? $fwd['to_area_name'];
+
+                    // Mapear para o formato esperado pelo front
+                    $row = $reqData;
+                    $row['status'] = 'F';
+                    $row['st_raw'] = 'F';
+                    $row['table'] = $fwd['request_table'];
+                    $row['sector'] = $fwd['request_table'];
+                    $row['responsible_sector'] = strtolower($fwd['to_area_name'] ?? '');
+                    $row['is_forwarded_to_me'] = true;
+                    $row['forward_from'] = $fwd['from_area_label'];
+
+                    $filteredForwards[] = $row;
+                }
+            }
+
+            return $filteredForwards;
+        } catch (Exception $e) {
+            return [];
+        }
+    }
+
     // ========================
     // MÉTODOS AUXILIARES PRIVADOS
     // ========================
@@ -459,7 +654,7 @@ class RequestForwardService {
      */
     private static function hasCircularForward($pdo, $reqId, $reqTable, $fromAreaId, $toAreaId) {
         $stmt = $pdo->prepare("
-            SELECT COUNT(*) FROM request_forwards 
+            SELECT COUNT(*) FROM request_forwards
             WHERE request_id = ? AND request_table = ?
             AND from_area_id = ? AND to_area_id = ?
             AND status IN ('pending', 'accepted')
@@ -472,8 +667,10 @@ class RequestForwardService {
      * Busca o ID do setor (ctd_area) pelo nome do setor (ex: 'ti' → id).
      */
     private static function getAreaIdBySector($pdo, $sectorName) {
-        $stmt = $pdo->prepare("SELECT id FROM ctd_area WHERE LOWER(title) = ?");
-        $stmt->execute([strtolower($sectorName)]);
+        $aliases = sectorAreaAliases((string)$sectorName);
+        $placeholders = implode(',', array_fill(0, count($aliases), '?'));
+        $stmt = $pdo->prepare("SELECT id FROM ctd_area WHERE LOWER(title) IN ($placeholders) ORDER BY id LIMIT 1");
+        $stmt->execute($aliases);
         return $stmt->fetchColumn() ?: null;
     }
 
@@ -504,7 +701,7 @@ class RequestForwardService {
         $stmt = $pdo->prepare("SELECT role FROM ctd_users WHERE id = ?");
         $stmt->execute([$userId]);
         $userRole = $stmt->fetchColumn();
-        
+
         if (in_array($userRole, ['admin', 'adm', 'coord'])) {
             return true;
         }

@@ -14,6 +14,7 @@
 
 session_start();
 require_once __DIR__ . '/../config/conn.php';
+require_once __DIR__ . '/../config/security.php';
 require_once __DIR__ . '/../classes/RequestForwardService.php';
 
 header('Content-Type: application/json');
@@ -40,6 +41,10 @@ if (!$input) {
 
 $action = $input['action'] ?? null;
 
+if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+    requireCsrfTokenFromRequest();
+}
+
 if (!$action) {
     echo json_encode(['success' => false, 'message' => 'Ação não especificada.']);
     exit;
@@ -63,10 +68,28 @@ try {
             $observation = trim($input['observation'] ?? '');
 
             // Limpar prefixo da tabela se veio completo (ctd_ti_frm → ti)
-            $reqTable = str_replace(['ctd_', '_frm'], '', $reqTable);
+            $reqTable = normalizeRequestTable((string)$reqTable);
 
             if (!$reqId || !$reqTable || !$toAreaId) {
                 echo json_encode(['success' => false, 'message' => 'Dados incompletos. Informe ID, tabela e setor de destino.']);
+                exit;
+            }
+
+            $reqData = getRequestRow($pdo, $reqTable, $reqId);
+            if (!$reqData) {
+                echo json_encode(['success' => false, 'message' => 'Requisição não encontrada.']);
+                exit;
+            }
+
+            $canForward = userCanActOnRequest($pdo, $reqData, $reqTable, $userId, $role);
+            if (!$canForward && $isGestor) {
+                // Permite repasse em cadeia apenas se o setor já aceitou formalmente o repasse anterior.
+                $activeForward = getActiveForwardForUser($pdo, $userId, $reqId, $reqTable, ['accepted']);
+                $canForward = $activeForward !== null;
+            }
+
+            if (!$canForward) {
+                echo json_encode(['success' => false, 'message' => 'Você não tem permissão para repassar esta requisição.']);
                 exit;
             }
 
@@ -137,10 +160,16 @@ try {
         case 'chain':
             $reqId    = (int)($input['id'] ?? 0);
             $reqTable = $input['table'] ?? '';
-            $reqTable = str_replace(['ctd_', '_frm'], '', $reqTable);
+            $reqTable = normalizeRequestTable((string)$reqTable);
 
             if (!$reqId || !$reqTable) {
                 echo json_encode(['success' => false, 'message' => 'ID e tabela são obrigatórios.']);
+                exit;
+            }
+
+            $reqData = getRequestRow($pdo, $reqTable, $reqId);
+            if (!$reqData || !userCanViewRequest($pdo, $reqData, $reqTable, $userId, $role)) {
+                echo json_encode(['success' => false, 'message' => 'Acesso negado.']);
                 exit;
             }
 
@@ -179,5 +208,6 @@ try {
     }
 
 } catch (Exception $e) {
-    echo json_encode(['success' => false, 'message' => 'Erro interno: ' . $e->getMessage()]);
+    error_log('request_forwards.php: ' . $e->getMessage());
+    echo json_encode(['success' => false, 'message' => 'Erro interno ao processar o repasse.']);
 }

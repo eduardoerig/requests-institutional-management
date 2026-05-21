@@ -22,8 +22,17 @@ $badge_andamento = 0;
 $badge_concluidas = 0;
 $badge_repassadas = 0;
 
+// Buscar notificações não lidas
+$badge_notifs = 0;
+if ($sidebar_user_id) {
+    $stmtNotifs = $pdo->prepare("SELECT COUNT(*) FROM notifications WHERE user_id = ? AND is_read = 0");
+    $stmtNotifs->execute([$sidebar_user_id]);
+    $badge_notifs = (int)$stmtNotifs->fetchColumn();
+}
+
 if ($canManage || $isAdmSub) {
-    $managingId = $isAdmin ? null : $sidebar_user_id;
+    // adm_sub vê todos os setores, filtrados apenas pelas suas subdivisões
+    $managingId = ($isAdmin || $isAdmSub) ? null : $sidebar_user_id;
     $subdivisionFilter = $isAdmSub ? ($_SESSION['subdivision_ids'] ?? null) : null;
     $sidebarData = RequestManager::getRequests($pdo, null, $managingId, null, null, null, 'DESC', [], null, null, $subdivisionFilter);
     $sidebarStats = $sidebarData['stats'];
@@ -31,21 +40,68 @@ if ($canManage || $isAdmSub) {
     $badge_aprovadas = $sidebarStats['aprovadas'] ?? 0;
     $badge_concluidas = $sidebarStats['concluidas'] ?? 0;
 
-    // Lógica para "Em Andamento"
-    if ($isAdmin || $isAdmSub) {
-        // Admins (Globais ou de Subdivisão) veem tudo no seu escopo: W + F
-        $badge_andamento = ($sidebarStats['emAndamento'] ?? 0) + ($sidebarStats['repassadas'] ?? 0);
-    } else {
-        // Gestor vê o que está no prato dele:
-        // 1. Suas próprias requisições em W
-        $badge_andamento = ($sidebarStats['emAndamento'] ?? 0);
-        
-        // 2. Requisições repassadas PARA os setores dele (pendentes ou aceitas)
-        require_once __DIR__ . '/../classes/RequestForwardService.php';
-        $pendingFwds = RequestForwardService::getPendingForwards($pdo, $sidebar_user_id);
-        if ($pendingFwds['success']) {
-            $badge_andamento += count($pendingFwds['data']);
+    // Lógica para "Em Andamento" e "Aprovadas" com repasses deduplicados
+    require_once __DIR__ . '/../classes/RequestForwardService.php';
+    
+    // Obter todas as requisições W e Y nativas
+    $allReqs = $sidebarData['requests'] ?? [];
+    $reqW = array_filter($allReqs, function($r) { return trim(strtoupper($r['st_raw'] ?? '')) === 'W'; });
+    $reqY = array_filter($allReqs, function($r) { return trim(strtoupper($r['st_raw'] ?? '')) === 'Y'; });
+    
+    $dedupCount = function($baseArr, $fwdArr) {
+        $unique = [];
+        foreach ($baseArr as $r) {
+            $cT = str_replace(['ctd_', '_frm'], '', strtolower(trim($r['table'] ?? '')));
+            $key = $cT . '_' . trim($r['id'] ?? '');
+            $unique[$key] = true;
         }
+        foreach ($fwdArr as $f) {
+            $rd = $f['request_data'] ?? [];
+            if (empty($rd)) continue;
+            // fwdArr pode vir de RequestForwardService (onde tem request_table) 
+            // ou de getForwardsByDestination mapeado
+            $cT = str_replace(['ctd_', '_frm'], '', strtolower(trim($f['request_table'] ?? $f['table'] ?? '')));
+            $reqId = trim($rd['id'] ?? $f['id'] ?? '');
+            if ($reqId) {
+                $key = $cT . '_' . $reqId;
+                $unique[$key] = true;
+            }
+        }
+        return count($unique);
+    };
+
+    if ($isAdmin || $isAdmSub) {
+        // Admin: W e Y + Forwards
+        $fwdW = RequestForwardService::getForwardsByDestination($pdo, 'all', null, null, $subdivisionFilter, 'accepted');
+        $badge_andamento = $dedupCount($reqW, $fwdW);
+        
+        $fwdY = RequestForwardService::getForwardsByDestination($pdo, 'all', null, null, $subdivisionFilter, 'completed');
+        $reqF = array_filter($allReqs, function($r) { return trim(strtoupper($r['st_raw'] ?? '')) === 'F'; }); // Repassadas pendentes
+        
+        // O admin via as F pendentes nas aprovadas antigamente. Vamos manter a lógica deduplicada
+        $uniqueAprovadas = [];
+        $allAprovadas = array_merge($reqY, $reqF, $fwdY);
+        foreach ($allAprovadas as $r) {
+            $cT = str_replace(['ctd_', '_frm'], '', strtolower(trim($r['table'] ?? $r['request_table'] ?? '')));
+            // Para repasses do fwdY, o ID pode estar em request_id ou request_data['id']
+            $reqId = trim($r['id'] ?? $r['request_id'] ?? '');
+            if (!$reqId && isset($r['request_data'])) $reqId = trim($r['request_data']['id'] ?? '');
+            
+            if ($reqId) {
+                $key = $cT . '_' . $reqId;
+                $uniqueAprovadas[$key] = true;
+            }
+        }
+        $badge_aprovadas = count($uniqueAprovadas);
+    } else {
+        // Gestor
+        $pendingFwds = RequestForwardService::getPendingForwards($pdo, $sidebar_user_id, 'pending');
+        $fwdY_data = $pendingFwds['success'] ? $pendingFwds['data'] : [];
+        $badge_aprovadas = $dedupCount($reqY, $fwdY_data);
+        
+        $acceptedFwds = RequestForwardService::getPendingForwards($pdo, $sidebar_user_id, 'accepted');
+        $fwdW_data = $acceptedFwds['success'] ? $acceptedFwds['data'] : [];
+        $badge_andamento = $dedupCount($reqW, $fwdW_data);
     }
 }
 ?>
@@ -120,8 +176,8 @@ if ($canManage || $isAdmSub) {
     </nav>
     <footer>
         <div class="copy">
-            <p>Colégio Evangélico Martin Luther © 2025</p>
-            <p>Developed by <br><a href="https://github.com/BruDu1545" target="_blank" rel="noopener">Bruno C. Adamczyk</a> &amp; <a href="https://github.com/eduardoerig" rel="noopener">Eduardo F. S. Erig</a></p>
+            <p>Colégio Evangélico Martin Luther © 2026</p>
+            <p>Developed by <a href="https://github.com/eduardoerig" rel="noopener" target="_blank">Eduardo F. S. Erig</a></p>
         </div>
     </footer>
 </aside>

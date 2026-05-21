@@ -1,6 +1,7 @@
 <?php
 session_start();
 include 'conn.php';
+require_once __DIR__ . '/security.php';
 require_once __DIR__ . '/../classes/RequestManager.php';
 
 if (!isset($_SESSION['id'])) {
@@ -17,6 +18,7 @@ if (!in_array($role, $approverRoles)) {
 }
 
 if (isset($_POST['action']) && $_POST['action'] === 'post') {
+    requireCsrfTokenFromRequest();
     $id = $_POST['id'];
     $table = $_POST['table'];
     $value = $_POST['value'];
@@ -28,7 +30,7 @@ if (isset($_POST['action']) && $_POST['action'] === 'post') {
 
     $sectorLabels = [
         'mkt' => 'Marketing',
-        'xerox' => 'Xerox',
+        'xerox' => 'Reprografia',
         'shop' => 'Compras',
         'service' => 'Manutenção',
         'ti' => 'TI',
@@ -50,7 +52,22 @@ if (isset($_POST['action']) && $_POST['action'] === 'post') {
         if ($role === 'adm_sub') {
             $userSubs = $_SESSION['subdivision_ids'] ?? [];
             $reqSubId = $reqData['subdivision_id'] ?? null;
-            if (!in_array($reqSubId, $userSubs)) {
+            $creatorId = $reqData['created_by'] ?? null;
+            
+            $canApproveSub = false;
+            if (in_array($reqSubId, $userSubs)) {
+                $canApproveSub = true;
+            } elseif ($creatorId && !empty($userSubs)) {
+                $placeholders = implode(',', array_fill(0, count($userSubs), '?'));
+                $checkSubStmt = $pdo->prepare("SELECT 1 FROM cfg_user_subdivision WHERE id_user = ? AND id_subdivision IN ($placeholders) LIMIT 1");
+                $params = array_merge([$creatorId], $userSubs);
+                $checkSubStmt->execute($params);
+                if ($checkSubStmt->fetchColumn()) {
+                    $canApproveSub = true;
+                }
+            }
+
+            if (!$canApproveSub) {
                 echo json_encode(['success' => false, 'message' => 'Você não tem permissão para aprovar requisições desta subdivisão.']);
                 exit();
             }

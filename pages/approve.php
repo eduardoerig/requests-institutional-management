@@ -34,7 +34,7 @@ $map = [
 
 $sectorNames = [
     'mkt' => 'MKT',
-    'xerox' => 'Xerox',
+    'xerox' => 'Reprografia',
     'shop' => 'Compras',
     'service' => 'Manutenção',
     'ti' => 'TI',
@@ -49,7 +49,6 @@ if ($user_id) {
 }
 if (!is_array($allowedSectors)) $allowedSectors = [];
 ?>
-    <!-- DEBUG: count($requests) = <?= count($requests) ?> -->
     <div class="main">
         <div class="page-header">
             <div style="display: flex; align-items: center; gap: 15px;">
@@ -68,27 +67,41 @@ if (!is_array($allowedSectors)) $allowedSectors = [];
 
         <div class="filter_req">
             <div class="left_group">
-                <div class="radio_field">
-                    <?php if ($isAdmin || in_array('service', $allowedSectors)): ?>
-                        <input type="radio" value="service" name="tipo" class="radioType" data-status="MY" data-tooltip="Manutenção">
-                    <?php endif; ?>
-                    <?php if ($isAdmin || in_array('shop', $allowedSectors)): ?>
-                        <input type="radio" value="shop" name="tipo" class="radioType" data-status="MY" data-tooltip="Compras">
-                    <?php endif; ?>
-                    <?php if ($isAdmin || in_array('xerox', $allowedSectors)): ?>
-                        <input type="radio" value="xerox" name="tipo" class="radioType" data-status="MY" data-tooltip="Xerox">
-                    <?php endif; ?>
-                    <?php if ($isAdmin || in_array('ti', $allowedSectors)): ?>
-                        <input type="radio" value="ti" name="tipo" class="radioType" data-status="MY" data-tooltip="TI">
-                    <?php endif; ?>
-                    <?php if ($isAdmin || in_array('mkt', $allowedSectors)): ?>
-                        <input type="radio" value="mkt" name="tipo" class="radioType" data-status="MY" data-tooltip="Marketing">
-                    <?php endif; ?>
-                    <input type="radio" value="all" name="tipo" class="radioType" data-status="MY" data-tooltip="Todas solicitações" checked>
-                </div>
-                <div class="search_input">
-                    <i class="fas fa-search"></i>
-                    <input type="text" placeholder="Pesquisar..." id="campoPesquisa">
+                <div style="display: flex; gap: 24px; align-items: center; flex-wrap: wrap; width: 100%;">
+                    <!-- Filtro de Setor -->
+                    <div style="display: flex; flex-direction: column; gap: 4px;">
+                        <span style="font-size: 0.7rem; color: var(--text-muted); font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px;">Filtrar por Setor</span>
+                        <div class="radio_field">
+                            <?php 
+                            $activeSectors = array_unique(array_column($requests, 'table'));
+                            foreach ($sectorNames as $slug => $name): 
+                                if (in_array($slug, $activeSectors)):
+                                    // Se não for admin nem adm_sub, só mostra se estiver nos allowedSectors
+                                    if (!$isAdmin && !$isAdmSub && !in_array($slug, $allowedSectors)) continue;
+                            ?>
+                                <input type="radio" value="<?= $slug ?>" name="tipo" class="radioType" data-tooltip="<?= $name ?>">
+                            <?php 
+                                endif;
+                            endforeach; 
+                            ?>
+                            <input type="radio" value="all" name="tipo" class="radioType" data-tooltip="Todas req" checked>
+                        </div>
+                    </div>
+
+                    <!-- Busca -->
+                    <div style="flex: 1; min-width: 200px; display: flex; flex-direction: column; gap: 4px;">
+                        <span style="font-size: 0.7rem; color: var(--text-muted); font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px;">Busca</span>
+                        <div class="search_input" style="width: 100%; margin: 0;">
+                            <i class="fas fa-search"></i>
+                            <input type="text" placeholder="Pesquisar título..." id="campoPesquisa">
+                        </div>
+                    </div>
+
+                    <!-- Filtro de Data -->
+                    <div style="display: flex; flex-direction: column; gap: 4px;">
+                        <span style="font-size: 0.7rem; color: var(--text-muted); font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px;">Data</span>
+                        <input type="date" id="dataFiltro" style="padding: 6px 12px; border-radius: 6px; border: 1px solid var(--border-color); outline: none; background: #fff; color: var(--text-muted); font-family: var(--font-sans); font-size: 0.85rem; cursor: pointer; height: 38px; box-shadow: var(--shadow-sm);">
+                    </div>
                 </div>
             </div>
             <div class="order_icon" id="orderIcon" data-order="desc">
@@ -100,6 +113,14 @@ if (!is_array($allowedSectors)) $allowedSectors = [];
             <div class="request_list_container">
                 <div class="card-wrapper-scroll">
                     <?php
+                    // Pre-carregar subdivisões do adm_sub (evitar N+1 queries)
+                    $mySubData = [];
+                    if ($isAdmSub && $user_id) {
+                        $mySubSlugsStmt = $pdo->prepare("SELECT s.slug, s.name FROM ctd_subdivision s JOIN cfg_user_subdivision cus ON s.id = cus.id_subdivision WHERE cus.id_user = ?");
+                        $mySubSlugsStmt->execute([$user_id]);
+                        $mySubData = $mySubSlugsStmt->fetchAll(PDO::FETCH_KEY_PAIR); // slug => name
+                    }
+
                     if (count($requests) > 0) {
                         foreach ($requests as $row) {
                             $urgentMark = !empty($row['urgent']) ? '<span class="req_alert">!</span>' : '';
@@ -111,20 +132,39 @@ if (!is_array($allowedSectors)) $allowedSectors = [];
                             
                             $sectorBadge = '<span class="card-sector-tag">' . ($sectorNames[$row['table']] ?? '') . '</span>';
                             $subBadge = '';
-                            if (!empty($row['subdivision_name'])) {
+                            if ($isAdmSub && !empty($row['all_subdivision_slugs']) && !empty($mySubData)) {
+                                // Para adm_sub: mostra apenas as subdivisões que ele gerencia
+                                $allSlugs = explode(',', $row['all_subdivision_slugs']);
+                                
+                                $matchedBadges = [];
+                                foreach ($allSlugs as $slug) {
+                                    $slug = trim($slug);
+                                    if (isset($mySubData[$slug])) {
+                                        $matchedBadges[] = '<span class="badge-subdivision badge-sub-' . $slug . '">' . htmlspecialchars($mySubData[$slug]) . '</span>';
+                                    }
+                                }
+                                $subBadge = implode(' ', $matchedBadges);
+                                
+                                // Fallback: se não achou nenhuma em comum, mostra a da requisição
+                                if (empty($subBadge) && !empty($row['subdivision_name'])) {
+                                    $subBadge = '<span class="badge-subdivision badge-sub-' . ($row['subdivision_slug'] ?? 'default') . '">' . htmlspecialchars($row['subdivision_name']) . '</span>';
+                                }
+                            } elseif (!empty($row['subdivision_name'])) {
                                 $subBadge = '<span class="badge-subdivision badge-sub-' . ($row['subdivision_slug'] ?? 'default') . '">' . htmlspecialchars($row['subdivision_name']) . '</span>';
                             }
                             
+                            $rd = $row['date'] ?? '';
+                            $prazoBadge = getPrazoBadge($rd, $row['status'] ?? 'P');
                             echo '
                                 <div class="card_req ' . $cardClass . '" data-id="' . $row['id'] . '" data-table="' . $row['table'] . '">
                                     <div class="card_header">
-                                        <span class="req_nome">' . htmlspecialchars($row['table'] ?? '') . ' #' . $row['id'] . '</span>
+                                        <span class="req_nome">Requisição ' . strtoupper($sectorNames[$row['table']] ?? $row['table'] ?? '') . ' #' . $row['id'] . '</span>
                                         <div style="display:flex; gap:6px; align-items:center;">' . $priBadge . $urgentMark . '</div>
                                     </div>
                                     <div class="card_title">' . htmlspecialchars($row['title'] ?? 'Sem Título') . '</div>
                                     <div style="display:flex; justify-content:space-between; align-items:center; margin-top:8px; flex-wrap:wrap; gap:6px;">
-                                        <div class="card_date">Entrega: ' . htmlspecialchars($row['date'] ?? '—') . '</div>
-                                        ' . $sectorBadge . $subBadge . '
+                                        <div class="card_date" style="display:flex; align-items:center;">' . $prazoBadge . '</div>
+                                        <div style="display:flex; gap:6px; align-items:center;">' . $sectorBadge . '</div>
                                     </div>
                                 </div>
                             ';
@@ -167,8 +207,9 @@ if (!is_array($allowedSectors)) $allowedSectors = [];
                 </form>
 
                 <div class="empty-state" id="modalEmptyState">
-                    <i class="fa-solid fa-hand-pointer"></i>
-                    <p>Selecione uma requisição ao lado para analisar os detalhes e aprovar ou reprovar.</p>
+                    <i class="fa-solid fa-clipboard-check" style="color: #94a3b8;"></i>
+                    <p>Nenhuma requisição selecionada</p>
+                    <p style="font-size: 0.83rem; color: var(--text-muted); margin-top: 4px;">Selecione uma requisição ao lado para analisar os detalhes e aprovar ou reprovar.</p>
                 </div>
             </div>
         </div>

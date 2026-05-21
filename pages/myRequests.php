@@ -6,8 +6,52 @@ $data = RequestManager::getRequests($pdo, $user_id);
 $requests = $data['requests'];
 
 
-$map = ['mkt' => 'gray', 'xerox' => 'blue', 'shop' => 'green', 'service' => 'yellow', 'ti' => 'red'];
+$map = [
+    'mkt' => 'gray',
+    'xerox' => 'blue',
+    'shop' => 'green',
+    'service' => 'yellow',
+    'ti' => 'red',
+];
+
+$sectorNames = [
+    'mkt' => 'MKT', 'marketing' => 'Marketing', 'xerox' => 'Reprografia', 
+    'shop' => 'Compras', 'service' => 'Manutenção', 'ti' => 'TI',
+];
 ?>
+<style>
+@media (max-width: 768px) {
+    .myreq-filter-container {
+        display: flex !important;
+        flex-direction: column !important;
+        align-items: stretch !important;
+        gap: 16px !important;
+    }
+    .myreq-filter-container .left_group {
+        display: flex !important;
+        flex-direction: column !important;
+        width: 100% !important;
+        gap: 16px !important;
+    }
+    .myreq-filter-container .left_group > div:first-child {
+        width: 100% !important;
+        justify-content: center !important;
+    }
+    .myreq-search-row {
+        display: flex !important;
+        gap: 12px !important;
+        width: 100% !important;
+        align-items: center !important;
+    }
+    .myreq-search-row .search_input {
+        flex: 1 !important;
+        width: auto !important;
+    }
+    .myreq-filter-container .order_icon {
+        margin: 0 !important;
+    }
+}
+</style>
 <div class="main">
         <div class="page-header">
             <div style="display: flex; align-items: center; gap: 15px;">
@@ -15,26 +59,33 @@ $map = ['mkt' => 'gray', 'xerox' => 'blue', 'shop' => 'green', 'service' => 'yel
                 <h3>Minhas Requisições</h3>
             </div>
         </div>
-        <div class="filter_req">
+        <div class="filter_req myreq-filter-container">
             <div class="left_group">
-                <div class="radio_field">
-                    <input type="radio" value="service" name="tipo" class="radioType" data-status="MY" data-tooltip="Solicitação de Serviço">
-                    <input type="radio" value="shop" name="tipo" class="radioType" data-status="MY" data-tooltip="Solicitação de Compra">
-                    <input type="radio" value="xerox" name="tipo" class="radioType" data-status="MY" data-tooltip="Solicitação de Cópia Colorida">
-                    <input type="radio" value="ti" name="tipo" class="radioType" data-status="MY" data-tooltip="Abertura de Chamado TI">
-                    <input type="radio" value="mkt" name="tipo" class="radioType" data-status="MY" data-tooltip="Solicitação de MKT">
-                    <input type="radio" value="all" name="tipo" class="radioType" data-status="MY" data-tooltip="Todas solicitações" checked>
+                <div style="display: flex; gap: 20px; align-items: center; flex-wrap: wrap;">
+                    <div style="display: flex; flex-direction: column; gap: 4px; width: 100%;">
+                        <span style="font-size: 0.65rem; color: var(--text-muted); font-weight: 700; text-transform: uppercase; text-align: center;">Setores</span>
+                        <div class="radio_field">
+                            <input type="radio" value="service" name="tipo" class="radioType" data-tooltip="Serviços">
+                            <input type="radio" value="shop" name="tipo" class="radioType" data-tooltip="Compras">
+                            <input type="radio" value="xerox" name="tipo" class="radioType" data-tooltip="Reprografia">
+                            <input type="radio" value="ti" name="tipo" class="radioType" data-tooltip="TI">
+                            <input type="radio" value="mkt" name="tipo" class="radioType" data-tooltip="Marketing">
+                            <input type="radio" value="all" name="tipo" class="radioType" data-tooltip="Todos os Setores" checked>
+                        </div>
+                    </div>
                 </div>
-                <div class="search_input">
-                    <i class="fas fa-search"></i>
-                    <input type="text" placeholder="Pesquisar..." id="campoPesquisa">
+                <div class="myreq-search-row">
+                    <div class="search_input">
+                        <i class="fas fa-search"></i>
+                        <input type="text" placeholder="Pesquisar..." id="campoPesquisa">
+                    </div>
+                    <div class="order_icon" id="orderIcon" data-order="desc">
+                        <i class="fas fa-sort-amount-down"></i>
+                    </div>
                 </div>
-            </div>
-            <div class="order_icon" id="orderIcon" data-order="desc">
-                <i class="fas fa-sort-amount-down"></i>
             </div>
         </div>
-        <div class="inbox-split-layout">
+        <div class="inbox-split-layout myreq-layout">
             <!-- Esquerda: Lista de Requisições -->
             <div class="request_list_container">
                 <div class="card-wrapper-scroll">
@@ -54,12 +105,14 @@ $map = ['mkt' => 'gray', 'xerox' => 'blue', 'shop' => 'green', 'service' => 'yel
                             } elseif ($row['status'] === 'F') {
                                 echo '<span class="req_alert" style="color:#d97706;"><i class="fa-solid fa-share-from-square"></i></span>';
                             }
-                            echo '<span class="req_nome">Requisição #' . $row['id'] . '</span>';
+                            echo '<span class="req_nome">Requisição ' . strtoupper($sectorNames[$row['table']] ?? $row['table'] ?? '') . ' #' . $row['id'] . '</span>';
                             echo !empty($row['urgent']) ? '<span class="req_alert">!</span>' : '';
                             echo '</div>
-                                    <div class="card_title">' . $row['title'] . '</div>
-                                    <div style="display:flex; justify-content:space-between; align-items:center; margin-top:4px; flex-wrap:wrap; gap:6px;">
-                                        <div class="card_date">Data de entrega: ' . $row['date'] . '</div>';
+                                    <div class="card_title">' . htmlspecialchars($row['title']) . '</div>
+                                    <div style="display:flex; justify-content:space-between; align-items:center; margin-top:4px; flex-wrap:wrap; gap:6px;">';
+                            $rawDate = $row['date'] ?? '';
+                            $prazoBadge = getPrazoBadge($rawDate, $row['status'] ?? 'P');
+                            echo '<div class="card_date" style="display:flex; align-items:center;">' . $prazoBadge . '</div>';
                             if ($row['status'] === 'F') {
                                 echo '<span class="badge-forwarded"><i class="fa-solid fa-share-from-square"></i> Repassada</span>';
                             }
@@ -74,7 +127,7 @@ $map = ['mkt' => 'gray', 'xerox' => 'blue', 'shop' => 'green', 'service' => 'yel
             </div>
 
             <!-- Direita: Visualização Detalhada da Requisição -->
-            <div class="form-container-embedded">
+            <div class="form-container-embedded myreq-detail-panel">
                 <form class="modal_req_embedded" id="modalReqCard" style="display: none;">
                     <input type="hidden" class="Rtype">
                     <input type="hidden" class="Rid">
@@ -111,27 +164,31 @@ document.addEventListener('DOMContentLoaded', function() {
     const modal = document.getElementById('modalReqCard');
     const emptyState = document.getElementById('modalEmptyState');
     const btnViewDetail = document.getElementById('btnViewDetail');
+    const isMobile = () => window.innerWidth <= 768;
 
     cards.forEach(card => {
         card.addEventListener('click', function() {
             const id = this.getAttribute('data-id');
             const table = this.getAttribute('data-table');
 
-            // Reset selection
+            // MOBILE: Navegar direto para a página de detalhes
+            if (isMobile()) {
+                window.location.href = `request_detail?id=${id}&table=${table}`;
+                return;
+            }
+
+            // DESKTOP: Manter comportamento split-layout
             cards.forEach(c => c.classList.remove('selected'));
             this.classList.add('selected');
 
-            // Se o modal já estiver aberto, dar um fade out rápido para trocar os dados
             if (modal && modal.style.display === 'flex') {
                 modal.style.opacity = '0.5';
             }
 
-            // Buscar dados completos via API
             fetch(`api/get_request_details.php?id=${id}&table=${table}`)
                 .then(r => r.json())
                 .then(data => {
                     if (data.success) {
-                        // Preencher campos
                         modal.querySelector('.Rid').value = id;
                         modal.querySelector('.Rtype').value = table;
                         document.getElementById('modalTitle').textContent = data.data.title;
@@ -139,12 +196,10 @@ document.addEventListener('DOMContentLoaded', function() {
                         document.getElementById('modalObs').textContent = data.data.obs || 'Sem observações';
                         document.getElementById('modalDate').textContent = 'Prazo: ' + (data.data.date || '—');
 
-                        // Atualizar link de detalhes
                         if (btnViewDetail) {
                             btnViewDetail.href = `request_detail?id=${id}&table=${table}`;
                         }
 
-                        // Mostrar modal com animação suave
                         modal.style.display = 'flex';
                         modal.style.transition = 'opacity 0.3s ease';
                         modal.style.opacity = '1';

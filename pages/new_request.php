@@ -31,19 +31,20 @@
             </div>
 
             <!-- Coluna da Direita: Formulário Dinâmico -->
-            <div class="form-container">
-                <div class="form">
+            <div class="form-container" id="formContainer">
+                <div class="form" id="dynamicForm">
                     <div class="empty-state">
                         <i class="fa-solid fa-hand-pointer"></i>
-                        <p>Selecione a requisição desejada no menu lateral e o formulário será carregado aqui.</p>
+                        <p>Selecione a requisição desejada acima e o formulário será carregado aqui.</p>
                     </div>
                 </div>
             </div>
         </div>
     </div>
     <script>
-        let cards = document.querySelectorAll('.card');
-        let form = document.querySelector('.form');
+        let cards = document.querySelectorAll('.request_models .card');
+        let form = document.getElementById('dynamicForm');
+        const formContainer = document.getElementById('formContainer');
 
         cards.forEach(card => {
             card.addEventListener('click', async (e) => {
@@ -56,6 +57,13 @@
                 // Estado de carregamento
                 form.innerHTML = '<div class="empty-state"><div class="spinner" style="margin:0 auto 20px;"></div><p>Carregando formulário...</p></div>';
 
+                // Mobile: scroll para o formulário
+                if (window.innerWidth <= 768 && formContainer) {
+                    setTimeout(() => {
+                        formContainer.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                    }, 100);
+                }
+
                 let formData = new FormData();
                 formData.append('action', 'get');
                 formData.append('id', card.dataset.id);
@@ -64,7 +72,15 @@
                 if (data.success) {
                     form.innerHTML = data.form;
                     bindFormRequests();
+                    
+                    // Mobile: scroll novamente após o form carregar
+                    if (window.innerWidth <= 768 && formContainer) {
+                        setTimeout(() => {
+                            formContainer.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                        }, 150);
+                    }
                 }
             });
         });
-    </script>
+    </script>
+

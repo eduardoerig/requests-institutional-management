@@ -12,10 +12,16 @@ if ($_POST['action'] === "get") {
         $user = $stmt->fetch(PDO::FETCH_ASSOC);
 
         if ($user) {
+            if ((int)($user['status'] ?? 1) !== 1) {
+                echo json_encode(['success' => false, 'message' => "Usuario inativo. Contate o administrador."]);
+                exit;
+            }
+
             if (password_verify($password, $user['password'])) {
                 $_SESSION['id'] = $user['id'];
                 $_SESSION['name'] = $user['name'];
                 $_SESSION['role'] = $user['role'];
+                $_SESSION['force_reset'] = (int)($user['force_reset'] ?? 0);
 
                 // Carregar subdivisões do usuário (Múltiplas)
                 $_SESSION['subdivision_ids'] = [];

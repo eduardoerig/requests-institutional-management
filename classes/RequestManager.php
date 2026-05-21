@@ -1,4 +1,5 @@
 <?php
+require_once __DIR__ . '/../config/security.php';
 
 class RequestManager {
     /**
@@ -16,16 +17,28 @@ class RequestManager {
      * @param int|null $subdivisionId - Filtra por subdivisão específica (para adm_sub)
      */
     public static function getRequests($pdo, $userId = null, $managingUserId = null, $status = null, $specificSector = null, $searchText = null, $order = 'DESC', $excludeStatuses = [], $dateStart = null, $dateEnd = null, $subdivisionId = null) {
+        $order = strtoupper($order) === 'ASC' ? 'ASC' : 'DESC';
         $allowedSectors = [];
         if ($managingUserId) {
-            $stmt = $pdo->prepare("SELECT LOWER(a.title) FROM ctd_area a JOIN cfg_user_area cua ON a.id = cua.id_area WHERE cua.id_user = ?");
+            $stmt = $pdo->prepare("SELECT a.title FROM ctd_area a JOIN cfg_user_area cua ON a.id = cua.id_area WHERE cua.id_user = ?");
             $stmt->execute([$managingUserId]);
-            $allowedSectors = $stmt->fetchAll(PDO::FETCH_COLUMN);
+            $allowedSectors = array_values(array_filter(array_map('areaTitleToSector', $stmt->fetchAll(PDO::FETCH_COLUMN))));
         }
 
         $tables = [];
         if ($specificSector && $specificSector !== 'all') {
-            $tables[] = "ctd_" . $specificSector . "_frm";
+            $normalizedSector = normalizeRequestTable((string)$specificSector);
+            if ($normalizedSector === null) {
+                return [
+                    'requests' => [],
+                    'stats' => [
+                        'total' => 0, 'pendentes' => 0, 'aprovadas' => 0, 'emAndamento' => 0, 'concluidas' => 0, 'recusadas' => 0, 'repassadas' => 0, 'atrasadas' => 0, 'urgentes' => 0, 'criticas' => 0,
+                        'statusCounts' => ['P' => 0, 'Y' => 0, 'N' => 0, 'W' => 0, 'C' => 0, 'R' => 0, 'F' => 0],
+                        'categoryCounts' => []
+                    ]
+                ];
+            }
+            $tables[] = "ctd_" . $normalizedSector . "_frm";
         } else {
             $stmtTables = $pdo->query("SHOW TABLES LIKE 'ctd_%_frm'");
             while($row = $stmtTables->fetch(PDO::FETCH_NUM)) {
@@ -52,7 +65,16 @@ class RequestManager {
 
         foreach ($tables as $t) {
             try {
-                $query = "SELECT r.*, u.name as solicitor_name, sub.name as subdivision_name, sub.slug as subdivision_slug FROM $t r LEFT JOIN ctd_users u ON r.created_by = u.id LEFT JOIN ctd_subdivision sub ON r.subdivision_id = sub.id WHERE 1=1";
+                $query = "SELECT r.*, u.name as solicitor_name, sub.name as subdivision_name, sub.slug as subdivision_slug,
+                    (SELECT GROUP_CONCAT(s2.name ORDER BY s2.id SEPARATOR ', ')
+                     FROM cfg_user_subdivision cus2
+                     JOIN ctd_subdivision s2 ON cus2.id_subdivision = s2.id
+                     WHERE cus2.id_user = r.created_by) as all_subdivision_names,
+                    (SELECT GROUP_CONCAT(s2.slug ORDER BY s2.id SEPARATOR ',')
+                     FROM cfg_user_subdivision cus2
+                     JOIN ctd_subdivision s2 ON cus2.id_subdivision = s2.id
+                     WHERE cus2.id_user = r.created_by) as all_subdivision_slugs
+                FROM $t r LEFT JOIN ctd_users u ON r.created_by = u.id LEFT JOIN ctd_subdivision sub ON r.subdivision_id = sub.id WHERE 1=1";
                 $params = [];
                 
                 if ($userId !== null) {
@@ -100,11 +122,28 @@ class RequestManager {
                     if (is_array($subdivisionId)) {
                         if (!empty($subdivisionId)) {
                             $placeholders = implode(',', array_fill(0, count($subdivisionId), '?'));
-                            $query .= " AND r.subdivision_id IN ($placeholders)";
-                            $params = array_merge($params, $subdivisionId);
+                            $query .= " AND (
+                                r.subdivision_id IN ($placeholders)
+                                OR EXISTS (
+                                    SELECT 1
+                                    FROM cfg_user_subdivision cus
+                                    WHERE cus.id_user = r.created_by
+                                      AND cus.id_subdivision IN ($placeholders)
+                                )
+                            )";
+                            $params = array_merge($params, $subdivisionId, $subdivisionId);
                         }
                     } else {
-                        $query .= " AND r.subdivision_id = ?";
+                        $query .= " AND (
+                            r.subdivision_id = ?
+                            OR EXISTS (
+                                SELECT 1
+                                FROM cfg_user_subdivision cus
+                                WHERE cus.id_user = r.created_by
+                                  AND cus.id_subdivision = ?
+                            )
+                        )";
+                        $params[] = $subdivisionId;
                         $params[] = $subdivisionId;
                     }
                 }
@@ -173,18 +212,38 @@ class RequestManager {
                 }
             } catch(Exception $e) {
                 // Tabela pode não existir ou erro de query
-                echo "<!-- Error in table $t: " . htmlspecialchars($e->getMessage()) . " -->";
+                error_log("RequestManager::getRequests {$t}: " . $e->getMessage());
             }
         }
 
-        // Ordenar as requisições por data de criação
+        // Ordenar as requisições por data de prazo (date) conforme solicitação do usuário
         usort($all_requests, function($a, $b) use ($order) {
-            $timeA = strtotime($a['created_at'] ?? 0);
-            $timeB = strtotime($b['created_at'] ?? 0);
+            $rawA = $a['date'] ?? '';
+            $rawB = $b['date'] ?? '';
+            
+            $hasA = (!empty($rawA) && $rawA !== '0000-00-00' && $rawA !== '0000-00-00 00:00:00');
+            $hasB = (!empty($rawB) && $rawB !== '0000-00-00' && $rawB !== '0000-00-00 00:00:00');
+            
+            // Se um deles não tem prazo, colocamos no final
+            if ($hasA && !$hasB) return -1;
+            if (!$hasA && $hasB) return 1;
+            if (!$hasA && !$hasB) {
+                return strtotime($b['created_at'] ?? 0) - strtotime($a['created_at'] ?? 0);
+            }
+            
+            $tsA = strtotime($rawA);
+            $tsB = strtotime($rawB);
+            
+            if ($tsA === $tsB) {
+                return strtotime($b['created_at'] ?? 0) - strtotime($a['created_at'] ?? 0);
+            }
+            
             if ($order === 'ASC') {
-                return $timeA - $timeB;
+                // ASC (Seta para CIMA): Mais atrasadas (datas antigas) -> Mais de boas (datas futuras)
+                return ($tsA < $tsB) ? -1 : 1;
             } else {
-                return $timeB - $timeA;
+                // DESC (Seta para BAIXO): Mais de boas (datas futuras) -> Mais atrasadas (datas antigas)
+                return ($tsA > $tsB) ? -1 : 1;
             }
         });
 
@@ -199,15 +258,17 @@ class RequestManager {
      * Usado para enviar notificações quando uma requisição do setor é aprovada.
      */
     public static function getManagersForSector($pdo, $sectorName) {
+        $aliases = sectorAreaAliases((string)$sectorName);
+        $placeholders = implode(',', array_fill(0, count($aliases), '?'));
         $stmt = $pdo->prepare("
             SELECT u.id, u.name, u.role 
             FROM ctd_users u
             JOIN cfg_user_area cua ON u.id = cua.id_user
             JOIN ctd_area a ON a.id = cua.id_area
-            WHERE LOWER(a.title) = ? 
+            WHERE LOWER(a.title) IN ($placeholders)
             AND u.role IN ('gestor', 'admin', 'adm', 'coord', 'ti', 'xerox', 'service', 'shop', 'mkt', 'marketing')
         ");
-        $stmt->execute([strtolower($sectorName)]);
+        $stmt->execute($aliases);
         return $stmt->fetchAll(PDO::FETCH_ASSOC);
     }
 
@@ -222,6 +283,28 @@ class RequestManager {
             WHERE u.role = 'adm_sub' AND cus.id_subdivision = ?
         ");
         $stmt->execute([$subdivisionId]);
+        return $stmt->fetchAll(PDO::FETCH_ASSOC);
+    }
+
+    /**
+     * Busca administradores das subdivisões vinculadas a um usuário.
+     */
+    public static function getSubdivisionAdminsForUser($pdo, $userId) {
+        $subdivisionIds = getUserSubdivisionIds($pdo, (int)$userId);
+        if (empty($subdivisionIds)) {
+            return [];
+        }
+
+        $placeholders = implode(',', array_fill(0, count($subdivisionIds), '?'));
+        $stmt = $pdo->prepare("
+            SELECT DISTINCT u.id, u.name
+            FROM ctd_users u
+            JOIN cfg_user_subdivision cus ON u.id = cus.id_user
+            WHERE u.role = 'adm_sub'
+              AND cus.id_subdivision IN ($placeholders)
+        ");
+        $stmt->execute($subdivisionIds);
+
         return $stmt->fetchAll(PDO::FETCH_ASSOC);
     }
 
@@ -281,14 +364,18 @@ class RequestManager {
             $notified[] = $createdBy;
         }
 
-        // 2. Notificar adm_sub da subdivisão da requisição
+        // 2. Notificar adm_sub da subdivisão principal e das subdivisões vinculadas ao solicitante.
+        $subAdmins = [];
         if ($subdivisionId) {
             $subAdmins = self::getSubdivisionAdmins($pdo, $subdivisionId);
-            foreach ($subAdmins as $sa) {
-                if (!in_array($sa['id'], $notified)) {
-                    self::notify($pdo, $sa['id'], $title, $message, $link);
-                    $notified[] = $sa['id'];
-                }
+        }
+        if ($createdBy) {
+            $subAdmins = array_merge($subAdmins, self::getSubdivisionAdminsForUser($pdo, $createdBy));
+        }
+        foreach ($subAdmins as $sa) {
+            if (!in_array($sa['id'], $notified)) {
+                self::notify($pdo, $sa['id'], $title, $message, $link);
+                $notified[] = $sa['id'];
             }
         }
 

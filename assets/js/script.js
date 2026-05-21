@@ -1,24 +1,47 @@
+function attachCsrfToken(payload) {
+    const token = window.CSRF_TOKEN || '';
+    if (!token) return payload;
+    if (payload instanceof FormData) {
+        if (!payload.has('csrf_token')) payload.append('csrf_token', token);
+        return payload;
+    }
+    if (payload instanceof URLSearchParams) {
+        if (!payload.has('csrf_token')) payload.append('csrf_token', token);
+        return payload;
+    }
+    return payload;
+}
+
 async function fetchAjax(path, formData) {
+    const overlay = document.querySelector('.loading-overlay');
+    if (overlay) overlay.style.display = "flex";
     try {
         const resp = await fetch(path, {
             method: "POST",
-            body: formData
+            body: attachCsrfToken(formData)
         });
         const data = await resp.json();
 
-        document.querySelector('.loading-overlay').style.display = "flex";
-
         if (data.success) {
-            document.querySelector('.loading-overlay').style.display = "none";
-
             return data;
         } else {
-            console.log(data.message);
+            // Se showToast for preferido globalmente ou showAlert não existir
+            if (typeof showAlert === 'function') {
+                await showAlert({ title: 'Atenção', message: data.message || 'Não foi possível concluir a operação.', type: 'warning' });
+            } else {
+                showToast(data.message || 'Não foi possível concluir a operação.', 'error');
+            }
             return false;
         }
     } catch (e) {
-        alert(e);
+        if (typeof showAlert === 'function') {
+            await showAlert({ title: 'Erro de Comunicação', message: 'Não foi possível completar a requisição. Verifique sua conexão.', type: 'error' });
+        } else {
+            showToast('Erro de comunicação. Verifique sua conexão.', 'error');
+        }
         return false;
+    } finally {
+        if (overlay) overlay.style.display = "none";
     }
 }
 
@@ -85,7 +108,11 @@ async function updateNotifications() {
 
 async function markAllRead() {
     try {
-        const response = await fetch('api/mark_notifications_read.php');
+        const formData = new URLSearchParams();
+        const response = await fetch('api/mark_notifications_read.php', {
+            method: 'POST',
+            body: attachCsrfToken(formData)
+        });
         const data = await response.json();
         if (data.success) {
             updateNotifications();
@@ -98,7 +125,12 @@ async function markAllRead() {
 async function markSingleRead(event, id) {
     event.stopPropagation();
     try {
-        const response = await fetch(`api/mark_notification_read_single.php?id=${id}`);
+        const formData = new URLSearchParams();
+        formData.append('id', id);
+        const response = await fetch('api/mark_notification_read_single.php', {
+            method: 'POST',
+            body: attachCsrfToken(formData)
+        });
         const data = await response.json();
         if (data.success) {
             updateNotifications();
@@ -136,30 +168,62 @@ function showToast(message, type = 'success') {
     }, 3000);
 }
 
-// Sidebar toggle logic for mobile
+// Sidebar toggle logic for mobile (with backdrop)
 const menuBtn = document.getElementById('mobile-menu-btn');
 const sidebar = document.getElementById('main-sidebar');
+const sidebarBackdrop = document.getElementById('sidebar-backdrop');
+
+function openSidebar() {
+    if (sidebar) sidebar.classList.add('open');
+    if (sidebarBackdrop) sidebarBackdrop.classList.add('active');
+    document.body.style.overflow = 'hidden';
+}
+
+function closeSidebar() {
+    if (sidebar) sidebar.classList.remove('open');
+    if (sidebarBackdrop) sidebarBackdrop.classList.remove('active');
+    document.body.style.overflow = '';
+}
 
 if(menuBtn && sidebar) {
     menuBtn.addEventListener('click', () => {
-        sidebar.classList.toggle('open');
-    });
-
-    // Close sidebar when clicking outside on mobile
-    document.addEventListener('click', (e) => {
-        if(window.innerWidth <= 992) {
-            if(!sidebar.contains(e.target) && !menuBtn.contains(e.target)) {
-                sidebar.classList.remove('open');
-            }
+        if (sidebar.classList.contains('open')) {
+            closeSidebar();
+        } else {
+            openSidebar();
         }
+    });
+}
+
+// Fechar sidebar ao clicar no backdrop
+if (sidebarBackdrop) {
+    sidebarBackdrop.addEventListener('click', closeSidebar);
+}
+
+// Fechar sidebar ao clicar em um link da nav (mobile)
+if (sidebar) {
+    sidebar.querySelectorAll('a').forEach(link => {
+        link.addEventListener('click', () => {
+            if (window.innerWidth <= 768) {
+                closeSidebar();
+            }
+        });
     });
 }
 
 let btn_login = document.querySelector('#btn_login');
 
+let isSubmittingLogin = false;
 if (btn_login) {
     btn_login.addEventListener('click', async (e) => {
         e.preventDefault();
+        
+        if (isSubmittingLogin) return;
+        isSubmittingLogin = true;
+        
+        const originalText = btn_login.innerHTML;
+        btn_login.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Entrando...';
+        btn_login.disabled = true;
 
         let formData = new FormData();
         formData.append('action', 'get');
@@ -169,6 +233,10 @@ if (btn_login) {
         const success = await fetchAjax("config/login.php", formData);
         if (success) {
             window.location.href = 'home';
+        } else {
+            isSubmittingLogin = false;
+            btn_login.innerHTML = originalText;
+            btn_login.disabled = false;
         }
     });
 }
@@ -209,17 +277,57 @@ function bindFormRequests() {
     });
 
     // prepara para o envio
+    let isSubmitting = false;
     form_requests.addEventListener('submit', async (e) => {
         e.preventDefault();
+        
+        if (isSubmitting) return;
+
+        // Fallback to customConfirm if showConfirm is not globally defined yet
+        const confirmationFn = typeof showConfirm === 'function' ? showConfirm : customConfirm;
+        const confirm = await confirmationFn({
+            title: 'Enviar Requisição',
+            message: 'Deseja realmente enviar esta requisição agora?',
+            type: 'info',
+            confirmLabel: 'Sim, Enviar'
+        });
+        
+        // customConfirm returns boolean, showConfirm might return boolean
+        if(!confirm) return;
+
+        isSubmitting = true;
+        const submitBtn = form_requests.querySelector('button[type="submit"]');
+        const originalBtnText = submitBtn ? submitBtn.innerHTML : '';
+        if (submitBtn) {
+            submitBtn.disabled = true;
+            submitBtn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Enviando...';
+        }
 
         let formData = new FormData(form_requests);
-        formData.append('action', 'post')
+        formData.append('action', 'post');
 
         const data = await fetchAjax("config/addRequest.php", formData);
-        if (data.success) {
-            showToast(data.message, 'success');
+        if (data && data.success) {
+            // Se showToast não existir, usa showAlert
+            if (typeof showAlert === 'function') {
+                showAlert({ title: 'Sucesso', message: 'Sua requisição foi enviada com sucesso!', type: 'success' });
+            } else {
+                showToast('Sua requisição foi enviada com sucesso!', 'success');
+            }
+            setTimeout(() => location.reload(), 500);
         } else {
-            if(data) showToast(data.message, 'error');
+            isSubmitting = false;
+            if (submitBtn) {
+                submitBtn.disabled = false;
+                submitBtn.innerHTML = originalBtnText;
+            }
+            if (data) {
+                if (typeof showAlert === 'function') {
+                    showAlert({ title: 'Atenção', message: data.message, type: 'warning' });
+                } else {
+                    showToast(data.message, 'error');
+                }
+            }
         }
     });
 }
@@ -309,7 +417,7 @@ async function globalRequestAction(action, id, table, value = '') {
 
         const response = await fetch('api/request_actions.php', {
             method: 'POST',
-            body: formData
+            body: attachCsrfToken(formData)
         });
         
         if (!response.ok) {
