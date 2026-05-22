@@ -497,22 +497,19 @@ function loadComments() {
     });
 }
 
-// ── Ajuste dinâmico de altura do chat (funciona dentro do layout com sidebar) ──
-function setChatHeight() {
-    if (window.innerWidth <= 768) return; // só desktop
+// ── Ajusta top do chat sticky para respeitar a topbar real do sistema ──
+function adjustChatSticky() {
+    if (window.innerWidth <= 768) return;
     const topBar = document.querySelector('header.top-bar');
     const topBarH = topBar ? topBar.offsetHeight : 60;
-    const hero = document.querySelector('.dp-hero');
-    const heroH = hero ? hero.offsetHeight : 80;
-    const availableH = window.innerHeight - topBarH - heroH;
-
     const chatCol = document.querySelector('.dp-chat-col');
-    const body    = document.querySelector('.dp-body');
-    if (chatCol) chatCol.style.height = availableH + 'px';
-    if (body)    body.style.minHeight = availableH + 'px';
+    if (chatCol) {
+        chatCol.style.top = topBarH + 'px';
+        chatCol.style.height = (window.innerHeight - topBarH) + 'px';
+    }
 }
-setChatHeight();
-window.addEventListener('resize', setChatHeight);
+adjustChatSticky();
+window.addEventListener('resize', adjustChatSticky);
 
 // Inicialização
 scrollChat('chatFeedDesktop');
