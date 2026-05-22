@@ -278,10 +278,10 @@ $geradoEm = date('d/m/Y \Ã \s H:i');
     <!-- CABEÃ‡ALHO -->
     <div class="doc-header">
         <div class="doc-header-logo">
-            <img src="assets/img/logoMartin.png" alt="ColÃ©gio Martin Luther">
+            <img src="assets/img/LogoFavConSisreq.png" alt="SisReq">
             <div class="doc-header-title">
                 <h2>RelatÃ³rio de RequisiÃ§Ã£o</h2>
-                <p>ColÃ©gio EvangÃ©lico Martin Luther Â· SisReq</p>
+                <p>Sistema Institucional de RequisiÃ§Ãµes Â· SisReq</p>
             </div>
         </div>
         <div class="doc-header-meta">
@@ -410,7 +410,7 @@ $geradoEm = date('d/m/Y \Ã \s H:i');
 
     <!-- RODAPÃ‰ -->
     <div class="doc-footer">
-        <p>Documento gerado automaticamente pelo <strong>SisReq Â· ColÃ©gio EvangÃ©lico Martin Luther</strong>.<br>
+        <p>Documento gerado automaticamente pelo <strong>SisReq</strong>.<br>
         A autenticidade deste relatÃ³rio Ã© garantida pelo Protocolo #<?= $req_id ?> e pela data de geraÃ§Ã£o registrada.</p>
         <span class="footer-badge">SisReq Â· <?= date('Y') ?></span>
     </div>

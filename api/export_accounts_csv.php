@@ -6,7 +6,7 @@ if (!in_array($_SESSION['role'], ['admin', 'adm'])) {
     die('Acesso negado.');
 }
 
-$filename = "usuarios_martin_luther_" . date('Ymd_His') . ".csv";
+$filename = "usuarios_sisreq_" . date('Ymd_His') . ".csv";
 header('Content-Type: text/csv; charset=utf-8');
 header('Content-Disposition: attachment; filename=' . $filename);
 

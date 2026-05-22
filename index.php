@@ -39,7 +39,7 @@ if ($logged && $force_reset === 1) {
     <link rel="stylesheet" href="assets/css/fase3.css?v=<?php echo $assetVersion; ?>">
     <link rel="stylesheet" href="assets/css/notifications.css?v=<?php echo $assetVersion; ?>">
     <link rel="stylesheet" href="assets/css/mobile.css?v=<?php echo $assetVersion; ?>">
-    <title>SisReq — Colégio Evangélico Martin Luther</title>
+    <title>SisReq — Gestão de Requisições</title>
 </head>
 
 <body>
@@ -149,7 +149,7 @@ if ($logged && $force_reset === 1) {
                 </button>
             </div>
             <div class="top-bar-logo-mobile">
-                <img src="assets/img/logoMartin.png" alt="Martin Luther" class="topbar-logo-img">
+                <img src="assets/img/LogoFavConSisreq.png" alt="SisReq Logo" class="topbar-logo-img">
             </div>
             
             <div class="top-bar-right">

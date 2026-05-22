@@ -107,7 +107,7 @@ if ($canManage || $isAdmSub) {
 ?>
 <aside id="main-sidebar">
     <div class="logo-container">
-        <img src="assets/img/logoMartin.png" alt="Logo Martin Luther" class="logo">
+        <img src="assets/img/LogoFavConSisreq.png" alt="Logo SisReq" class="logo">
     </div>
     <nav>
         <?php if ($canManage): ?>
@@ -176,7 +176,7 @@ if ($canManage || $isAdmSub) {
     </nav>
     <footer>
         <div class="copy">
-            <p>Colégio Evangélico Martin Luther © 2026</p>
+            <p>SisReq © 2026</p>
             <p>Developed by <a href="https://github.com/eduardoerig" rel="noopener" target="_blank">Eduardo F. S. Erig</a></p>
         </div>
     </footer>
