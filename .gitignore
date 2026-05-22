@@ -45,3 +45,6 @@ arquivos/
 *.sqlite
 *.sqlite3
 *.db
+
+# Institucional Assets
+assets/img/logoMartin.png
