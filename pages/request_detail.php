@@ -127,210 +127,79 @@ $forwardChain = $forwardChainResult['data'] ?? [];
 $activeForward = RequestForwardService::getActiveForward($pdo, $req_id, $req_table);
 
 ?>
+<link rel="stylesheet" href="assets/css/detail.css">
 
 <div class="main detail-page">
-    <input type="hidden" class="Rid" value="<?= $req_id ?>">
-    <input type="hidden" class="Rtype" value="<?= $req_table ?>">
+<input type="hidden" class="Rid" value="<?= $req_id ?>">
+<input type="hidden" class="Rtype" value="<?= $req_table ?>">
 
+<?php
+// Helpers de prioridade
+$priL = [1=>'Baixa', 2=>'Média', 3=>'Alta', 4=>'Crítica'];
+$priCls = [1=>'pri-1', 2=>'pri-2', 3=>'pri-3', 4=>'pri-4'];
+$pri = $req['priority'] ?? 2;
+$status_label = ['P'=>'Pendente','Y'=>'Aprovada','N'=>'Recusada','W'=>'Em Andamento','C'=>'Concluída','F'=>'Repassada'];
+$current_status = trim(strtoupper($req['status'] ?? 'P')) ?: 'P';
+$title = htmlspecialchars($req[$cols['title']] ?? 'Sem título');
+$desc  = htmlspecialchars($req[$cols['desc']]  ?? '');
+$user  = htmlspecialchars($req['creator_name'] ?? $req[$cols['user']] ?? '—');
+$date  = isset($req['created_at']) ? date('d/m/Y H:i', strtotime($req['created_at'])) : '—';
+$totalMsgs = count($comments);
+?>
 
-    <style>
-        :root {
-            --ml-primary: #2c2b31;
-            --ml-bg: #f8fafc;
-            --ml-surface: #ffffff;
-            --ml-border: #e2e8f0;
-            --ml-text: #2c2b31;
-            --ml-text-light: #64748b;
-            --radius: 12px;
-            --shadow: 0 1px 3px rgba(0,0,0,0.06);
-        }
-
-
-        /* Hero */
-        .hero-bar { background: linear-gradient(to right, #ffffff, #f8fafc); padding: 24px; border-radius: 16px; border: 1px solid var(--ml-border); margin-bottom: 24px; display: flex; justify-content: space-between; align-items: center; box-shadow: 0 2px 8px rgba(0,0,0,0.03); }
-        .hero-content h1 { font-size: 1.4rem; font-weight: 800; color: var(--ml-text); margin: 8px 0 6px; letter-spacing: -0.02em; }
-        .hero-meta { display: flex; gap: 12px; font-size: 0.85rem; color: var(--ml-text-light); align-items: center; font-weight: 500; }
-        .status-pill { padding: 6px 14px; border-radius: 20px; font-size: 0.75rem; font-weight: 800; text-transform: uppercase; letter-spacing: 0.5px; box-shadow: 0 1px 2px rgba(0,0,0,0.05); }
-        .status-P { background: #eff6ff; color: #2563eb; border: 1px solid #bfdbfe; }
-        .status-Y,.status-A { background: #f0fdf4; color: #15803d; border: 1px solid #bbf7d0; }
-        .status-N { background: #fef2f2; color: #dc2626; border: 1px solid #fecaca; }
-        .status-W { background: #fff7ed; color: #c2410c; border: 1px solid #fed7aa; }
-        .status-C { background: #f0fdf4; color: #15803d; border: 1px solid #bbf7d0; }
-        .status-F { background: #faf5ff; color: #7e22ce; border: 1px solid #e9d5ff; }
-        .protocol-badge { font-family: 'JetBrains Mono', monospace; background: #fff; padding: 8px 16px; border: 1px solid var(--ml-border); border-radius: 10px; font-size: 1.1rem; font-weight: 800; color: var(--ml-primary); box-shadow: 0 1px 3px rgba(0,0,0,0.04); }
-
-        /* Grid */
-        .detail-grid { display: grid; grid-template-columns: 1fr 380px; gap: 24px; align-items: start; }
-
-        /* Cards */
-        .card { background: var(--ml-surface); border-radius: 16px; box-shadow: 0 2px 4px rgba(0,0,0,0.02), 0 1px 2px rgba(0,0,0,0.03); border: 1px solid rgba(226, 232, 240, 0.8); margin-bottom: 20px; overflow: hidden; }
-        .card:hover { transform: none !important; background: var(--ml-surface) !important; border-color: rgba(226, 232, 240, 0.8) !important; }
-        .card-header { padding: 16px 20px; border-bottom: 1px solid var(--ml-border); display: flex; justify-content: space-between; align-items: center; transition: background 0.2s ease; }
-        .card[onclick] .card-header, .card-header[onclick] { cursor: pointer; }
-        .card[onclick] .card-header:hover, .card-header[onclick]:hover { background: #f8fafc; }
-        .card-header h2 { font-size: 0.95rem; font-weight: 700; margin: 0; display: flex; align-items: center; gap: 10px; color: var(--ml-text); }
-        .card-body { padding: 24px; }
-        .card.collapsed .card-body { display: none; }
-        .toggle-icon { font-size: 0.85rem; color: var(--ml-text-light); transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1); }
-        .card.collapsed .toggle-icon { transform: rotate(-90deg); }
-
-        /* Info */
-        .info-grid-simple { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 16px; }
-        .info-box { padding: 12px 14px; background: #f8fafc; border-radius: 10px; border: 1px solid #f1f5f9; }
-        .info-box label { display: block; font-size: 0.68rem; font-weight: 800; color: var(--ml-text-light); text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 4px; }
-        .info-box span { font-weight: 700; font-size: 0.95rem; color: var(--ml-text); }
-
-        /* Timeline */
-        .timeline { position: relative; padding-left: 32px; }
-        .timeline::before { content: ''; position: absolute; left: 13px; top: 0; bottom: 0; width: 2px; background: #e2e8f0; border-radius: 2px; }
-        .timeline-event { position: relative; margin-bottom: 24px; }
-        .timeline-dot { position: absolute; left: -32px; width: 28px; height: 28px; background: #fff; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 0.7rem; z-index: 1; box-shadow: 0 0 0 4px #fff; border: 2px solid #cbd5e1; }
-        .dot-comentario { border-color: #3b82f6; color: #3b82f6; background: #eff6ff; }
-        .dot-reaberto { border-color: #f59e0b; color: #f59e0b; background: #fffbeb; }
-        .dot-concluido { border-color: #10b981; color: #10b981; background: #ecfdf5; }
-        .dot-aberto { border-color: #94a3b8; color: #94a3b8; background: #f8fafc; }
-        .timeline-content { background: #fff; padding: 14px 16px; border-radius: 12px; border: 1px solid var(--ml-border); box-shadow: 0 1px 2px rgba(0,0,0,0.02); }
-        .timeline-time { font-size: 0.75rem; font-weight: 800; color: var(--ml-text-light); margin-bottom: 4px; }
-
-        /* Actions */
-        .actions-group { display: flex; flex-direction: column; gap: 10px; }
-        .btn-action { width: 100%; padding: 14px; border-radius: 12px; border: 1px solid var(--ml-border); background: #fff; font-weight: 700; font-size: 0.9rem; cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 8px; transition: all 0.2s ease; box-shadow: 0 1px 2px rgba(0,0,0,0.02); color: var(--ml-text); }
-        .btn-action:hover { background: #f8fafc; transform: translateY(-1px); box-shadow: 0 4px 6px rgba(0,0,0,0.04); }
-        .btn-primary { background: var(--ml-primary); color: #fff; border: none; box-shadow: 0 4px 12px rgba(44,43,49,0.2); }
-        .btn-primary:hover { background: #3d3c42; color: #fff; box-shadow: 0 6px 16px rgba(44,43,49,0.3); }
-        .ml-label { font-size: 0.75rem; font-weight: 800; color: var(--ml-text-light); margin-bottom: 8px; display: block; text-transform: uppercase; letter-spacing: 0.5px; }
-        .ml-select { width: 100%; padding: 12px; border-radius: 10px; border: 1px solid var(--ml-border); background: #fff; font-weight: 600; color: var(--ml-text); outline: none; transition: border-color 0.2s; cursor: pointer; }
-        .ml-select:focus { border-color: var(--ml-primary); box-shadow: 0 0 0 3px rgba(44,43,49,0.1); }
-        .divider { height: 1px; background: var(--ml-border); margin: 16px 0; }
-
-        /* Chat */
-        .chat-card { display: flex; flex-direction: column; max-height: 560px; }
-        .chat-messages { flex: 1; overflow-y: auto; padding: 20px; background: #f8fafc; display: flex; flex-direction: column; gap: 16px; }
-        .chat-item { display: flex; gap: 12px; max-width: 75%; }
-        .chat-item.mine { align-self: flex-end; flex-direction: row-reverse; }
-        .chat-item.theirs { align-self: flex-start; }
-        .chat-avatar { width: 36px; height: 36px; border-radius: 50%; background: var(--ml-primary); color: #fff; display: flex; align-items: center; justify-content: center; font-size: 0.85rem; font-weight: 800; flex-shrink: 0; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }
-        .chat-item.mine .chat-avatar { background: #3d3c42; }
-        .chat-bubble { padding: 12px 16px; border-radius: 16px; font-size: 0.9rem; line-height: 1.5; box-shadow: 0 1px 2px rgba(0,0,0,0.05); position: relative; }
-        .chat-bubble.mine { background: var(--ml-primary); color: #fff; border-bottom-right-radius: 4px; }
-        .chat-bubble.theirs { background: #fff; color: var(--ml-text); border: 1px solid var(--ml-border); border-bottom-left-radius: 4px; }
-        .chat-user-name { font-size: 0.65rem; font-weight: 800; margin-bottom: 4px; color: var(--ml-text-light); }
-        .chat-item.mine .chat-user-name { text-align: right; color: #94a3b8; }
-        .chat-date-header { text-align: center; font-size: 0.7rem; font-weight: 800; color: var(--ml-text-light); text-transform: uppercase; margin: 8px 0; letter-spacing: 0.5px; }
-        .chat-footer { padding: 16px 20px; border-top: 1px solid var(--ml-border); background: #fff; border-bottom-left-radius: 16px; border-bottom-right-radius: 16px; }
-        .chat-input-area { display: flex; gap: 10px; align-items: flex-end; }
-        .chat-input { flex: 1; border: 1px solid var(--ml-border); border-radius: 24px; padding: 12px 18px; font-size: 0.95rem; resize: none; max-height: 120px; outline: none; background: #f8fafc; transition: all 0.2s; font-family: inherit; }
-        .chat-input:focus { background: #fff; border-color: var(--ml-primary); box-shadow: 0 0 0 3px rgba(44,43,49,0.1); }
-        .btn-send { width: 44px; height: 44px; border-radius: 50%; background: linear-gradient(135deg, var(--ml-primary), #3d3c42); color: #fff; border: none; cursor: pointer; display: flex; align-items: center; justify-content: center; flex-shrink: 0; box-shadow: 0 4px 10px rgba(44,43,49,0.3); transition: transform 0.2s, box-shadow 0.2s; }
-        .btn-send:hover { transform: scale(1.05); box-shadow: 0 6px 14px rgba(44,43,49,0.4); }
-
-        .btn-back { display: flex; align-items: center; justify-content: center; gap: 8px; margin-top: 16px; color: var(--ml-text-light); text-decoration: none; font-size: 0.9rem; font-weight: 700; padding: 12px; border-radius: 12px; transition: all 0.2s; }
-        .btn-back:hover { color: var(--ml-primary); background: #f1f0f2; }
-
-        /* FAB */
-        .fab-chat { position: fixed; right: 24px; bottom: 96px; width: 56px; height: 56px; border-radius: 50%; background: linear-gradient(135deg, var(--ml-primary), #3d3c42); color: #fff; display: flex; align-items: center; justify-content: center; font-size: 1.4rem; box-shadow: 0 6px 16px rgba(44,43,49,0.4); z-index: 99; border: none; cursor: pointer; opacity: 0; transform: scale(0); transition: all 0.3s cubic-bezier(0.4,0,0.2,1); }
-        .fab-chat.visible { opacity: 1; transform: scale(1); }
-        .fab-chat:hover { transform: scale(1.05); box-shadow: 0 8px 20px rgba(44,43,49,0.5); }
-
-        /* ===== MOBILE UX PERFECTED ===== */
-        @media (max-width: 768px) {
-            /* Desfazemos o grid e usamos display contents para reordenar cards individualmente */
-            /* Ajustes Finos Mobile - CONTEÚDO À ESQUERDA */
-            .detail-grid { display: flex; flex-direction: column; gap: 16px; width: 100%; box-sizing: border-box; }
-            .main-column, .sidebar-column { display: contents; }
-
-            /* Nova Ordem de Leitura no Mobile */
-            .card { order: 10; margin-bottom: 0 !important; border-radius: 14px; width: 100%; box-sizing: border-box; } /* Padrão */
-            .card-description { order: 1; }
-            .chat-card { order: 2; max-height: 480px !important; }
-            .card-actions { order: 3; }
-            .card-details { order: 4; }
-            .card-forward { order: 5; }
-            .card-history { order: 6; }
-
-            /* Containers alinhados e consistentes */
-            .hero-bar { flex-direction: column; align-items: flex-start; text-align: left; gap: 12px; padding: 18px 16px; margin-bottom: 0; border-radius: 14px; width: 100%; box-sizing: border-box; }
-            .hero-content { display: flex; flex-direction: column; align-items: flex-start; width: 100%; }
-            .hero-content > div:first-child { justify-content: flex-start; }
-            .hero-content h1 { font-size: 1.3rem; margin: 6px 0; text-align: left; }
-            .protocol-badge { align-self: flex-start; font-size: 0.95rem; padding: 6px 12px; margin-top: 4px; }
-            .hero-meta { flex-wrap: wrap; gap: 8px; justify-content: flex-start; }
-
-            .card-header { padding: 14px 16px; }
-            .card-body { padding: 16px; }
-            .chat-messages { min-height: 250px; padding: 16px; }
-            .chat-footer { padding: 12px 14px; }
-            .chat-input { font-size: 16px !important; padding: 10px 16px; } /* Prevents iOS Zoom */
-            .btn-send { width: 42px; height: 42px; min-width: 42px; }
-
-            .btn-back { order: 10; margin: 16px 0 24px; padding: 14px; background: #fff; border: 1px solid var(--ml-border); justify-content: flex-start; width: 100%; box-sizing: border-box; }
-
-        }
-    </style>
-
-
-
-    <!-- 1. HERO BAR COMPACTO -->
-    <div class="hero-bar">
-        <div class="hero-content">
-            <div style="display: flex; gap: 8px; align-items: center; margin-bottom: 4px;">
-                <span class="status-pill status-<?= $current_status ?>"><?= $status_label[$current_status] ?></span>
-            </div>
-            <h1><?= $title ?></h1>
-            <div class="hero-meta">
-                <span><strong><?= $user ?></strong></span>
-                <span style="color:#cbd5e1;">•</span>
-                <span><?= $date ?></span>
-            </div>
+<!-- ════════ HERO BAR ════════ -->
+<div class="dp-hero">
+    <div class="dp-hero-left">
+        <div class="dp-hero-row1">
+            <span class="dp-badge <?= $current_status ?>"><?= $status_label[$current_status] ?></span>
         </div>
-        <div class="protocol-badge">#<?= $req_id ?></div>
+        <p class="dp-hero-title"><?= $title ?></p>
+        <div class="dp-hero-meta">
+            <span><i class="fa-regular fa-user"></i> <?= $user ?></span>
+            <span>·</span>
+            <span><?= $date ?></span>
+        </div>
     </div>
+    <div class="dp-protocol">#<?= str_pad($req_id, 4, '0', STR_PAD_LEFT) ?></div>
+</div>
 
-    <!-- 2. GRID DE DUAS COLUNAS -->
-    <div class="detail-grid">
-        <!-- Coluna Esquerda (65%) -->
-        <div class="main-column">
+<!-- ════════ BODY (Desktop: 2 colunas | Mobile: abas) ════════ -->
+<div class="dp-body">
+
+    <!-- COLUNA PRINCIPAL -->
+    <div class="dp-main">
+
+        <!-- ABA DETALHES -->
+        <div class="dp-tab-section active" id="tab-detalhes">
+
             <!-- Card Descrição -->
-            <div class="card card-description">
-                <div class="card-header">
-                    <h2><i class="fa-solid fa-align-left" style="color: var(--ml-primary);"></i> Descrição</h2>
-                </div>
-                <div class="card-body">
-                    <div style="line-height: 1.7; color: var(--ml-text); font-size: 1.05rem;">
-                        <?= nl2br($desc) ?: '<em style="color:var(--ml-text-light)">Nenhuma descrição fornecida.</em>' ?>
-                    </div>
+            <div class="dp-card" style="margin-bottom:12px">
+                <div class="dp-card-header"><h2><i class="fa-solid fa-align-left"></i> Descrição</h2></div>
+                <div class="dp-card-body">
+                    <div class="dp-desc"><?= nl2br($desc) ?: '<em style="color:#9ca3af">Nenhuma descrição fornecida.</em>' ?></div>
                 </div>
             </div>
 
-            <!-- Card Informações (Grid Limpo) -->
-            <div class="card card-details">
-                <div class="card-header" onclick="toggleCard(this)">
-                    <h2><i class="fa-solid fa-circle-info" style="color: var(--ml-primary);"></i> Detalhes Técnicos</h2>
-                    <i class="fa-solid fa-chevron-down toggle-icon"></i>
-                </div>
-                <div class="card-body">
-                    <div class="info-grid-simple">
-                        <div class="info-box">
+            <!-- Card Detalhes Técnicos -->
+            <div class="dp-card" style="margin-bottom:12px">
+                <div class="dp-card-header"><h2><i class="fa-solid fa-circle-info"></i> Detalhes Técnicos</h2></div>
+                <div class="dp-card-body">
+                    <div class="dp-info-grid">
+                        <div class="dp-info-item">
                             <label>Prioridade</label>
-                            <span style="color: <?php
-                                $pri_colors = [1=>'#10b981', 2=>'#f59e0b', 3=>'#ef4444', 4=>'#7f1d1d'];
-                                $pri_labels = [1=>'Baixa', 2=>'Média', 3=>'Alta', 4=>'Crítica'];
-                                echo $pri_colors[$req['priority'] ?? 2] ?? '#64748b';
-                            ?>;">
-                                <?= $pri_labels[$req['priority'] ?? 2] ?? 'Normal' ?>
-                            </span>
+                            <span class="<?= $priCls[$pri] ?>"><?= $priL[$pri] ?></span>
                         </div>
-                        <div class="info-box">
+                        <div class="dp-info-item">
                             <label>Subdivisão</label>
                             <span><?= htmlspecialchars($subName) ?></span>
                         </div>
-                        <div class="info-box">
+                        <div class="dp-info-item">
                             <label>Local / Sala</label>
                             <span><?= htmlspecialchars($req['sala'] ?? 'N/A') ?></span>
                         </div>
                         <?php if ($approverName): ?>
-                        <div class="info-box">
-                            <label><?= ($current_status === 'N') ? 'Recusada por' : 'Aprovada por' ?></label>
+                        <div class="dp-info-item">
+                            <label><?= $current_status === 'N' ? 'Recusada por' : 'Aprovada por' ?></label>
                             <span><?= htmlspecialchars($approverName) ?></span>
                         </div>
                         <?php endif; ?>
@@ -338,313 +207,297 @@ $activeForward = RequestForwardService::getActiveForward($pdo, $req_id, $req_tab
                 </div>
             </div>
 
+            <!-- Card Repasses (condicional) -->
             <?php if (!empty($forwardChain)): ?>
-            <!-- Card Cadeia de Repasses (Fase 5) - COLAPSÁVEL -->
-            <div class="card card-forward collapsed">
-                <div class="card-header" onclick="toggleCard(this)">
-                    <h2><i class="fa-solid fa-share-from-square" style="color: #d97706;"></i> Cadeia de Repasses</h2>
-                    <i class="fa-solid fa-chevron-down toggle-icon"></i>
-                </div>
-                <div class="card-body">
-                    <?php if ($activeForward && ($isGestor || $isGlobalAdmin)): ?>
-                        <?php
-                            // Verifica se o gestor logado tem permissão sobre o setor de destino
-                            $canActOnForward = false;
-                            if ($isGlobalAdmin) {
-                                $canActOnForward = true;
-                            } else {
-                                $checkStmt = $pdo->prepare("SELECT COUNT(*) FROM cfg_user_area WHERE id_user = ? AND id_area = ?");
-                                $checkStmt->execute([$_SESSION['id'], $activeForward['to_area_id']]);
-                                $canActOnForward = (int)$checkStmt->fetchColumn() > 0;
-                            }
-                        ?>
-                        <?php if ($canActOnForward && $activeForward['status'] === 'pending'): ?>
-                            <div class="forward-pending-indicator">
-                                <i class="fa-solid fa-clock"></i>
-                                <span>Este repasse aguarda sua aceitação. Deseja assumir o atendimento?</span>
+            <div class="dp-card" style="margin-bottom:12px">
+                <div class="dp-card-header"><h2><i class="fa-solid fa-share-from-square"></i> Cadeia de Repasses</h2></div>
+                <div class="dp-card-body">
+                    <?php if ($activeForward && ($isGestor || $isGlobalAdmin)):
+                        $canActOnFwd = $isGlobalAdmin;
+                        if (!$isGlobalAdmin) {
+                            $chk = $pdo->prepare("SELECT COUNT(*) FROM cfg_user_area WHERE id_user=? AND id_area=?");
+                            $chk->execute([$_SESSION['id'], $activeForward['to_area_id']]);
+                            $canActOnFwd = (int)$chk->fetchColumn() > 0;
+                        }
+                        if ($canActOnFwd && $activeForward['status'] === 'pending'): ?>
+                        <div style="padding:12px;background:#eff6ff;border:1px solid #bfdbfe;border-radius:6px;margin-bottom:12px">
+                            <p style="margin:0 0 10px;font-size:.88rem;font-weight:600;color:#1d4ed8">Este repasse aguarda sua aceitação.</p>
+                            <div style="display:flex;gap:8px">
+                                <button class="dp-btn dp-btn-finish" style="padding:8px 14px" onclick="handleForwardAction('accept',<?= $activeForward['id'] ?>)">Aceitar</button>
+                                <button class="dp-btn dp-btn-reopen" style="padding:8px 14px" onclick="handleForwardAction('refuse',<?= $activeForward['id'] ?>)">Recusar</button>
                             </div>
-                            <div style="display: flex; gap: 10px; margin-bottom: 20px;">
-                                <button class="btn-accept-forward" onclick="handleForwardAction('accept', <?= $activeForward['id'] ?>)">
-                                    <i class="fa-solid fa-check"></i> Aceitar Repasse
-                                </button>
-                                <button class="btn-refuse-forward" onclick="handleForwardAction('refuse', <?= $activeForward['id'] ?>)">
-                                    <i class="fa-solid fa-xmark"></i> Recusar
-                                </button>
-                            </div>
-                        <?php elseif ($canActOnForward && $activeForward['status'] === 'accepted'): ?>
-                            <div class="forward-pending-indicator" style="background: linear-gradient(135deg, #eff6ff, #dbeafe); border-color: #93c5fd;">
-                                <i class="fa-solid fa-hand-holding" style="color: #2563eb;"></i>
-                                <span>Repasse aceito. Você pode concluir a requisição quando o atendimento for finalizado.</span>
-                            </div>
-                            <div style="display: flex; gap: 10px; margin-bottom: 20px;">
-                                <button class="btn-accept-forward" style="background: #10b981;" onclick="handleForwardAction('complete', <?= $activeForward['id'] ?>)">
-                                    <i class="fa-solid fa-check-double"></i> Concluir via Repasse
-                                </button>
-                            </div>
+                        </div>
+                        <?php elseif ($canActOnFwd && $activeForward['status'] === 'accepted'): ?>
+                        <div style="padding:12px;background:#ecfdf5;border:1px solid #a7f3d0;border-radius:6px;margin-bottom:12px">
+                            <p style="margin:0 0 10px;font-size:.88rem;font-weight:600;color:#065f46">Repasse aceito. Conclua ao finalizar o atendimento.</p>
+                            <button class="dp-btn dp-btn-finish" style="padding:8px 14px" onclick="handleForwardAction('complete',<?= $activeForward['id'] ?>)">Concluir via Repasse</button>
+                        </div>
                         <?php endif; ?>
                     <?php endif; ?>
-
-                    <ul class="forward-chain">
-                        <?php foreach ($forwardChain as $fwd):
-                            $fwdIcon = 'fa-clock';
-                            if ($fwd['status'] === 'accepted') $fwdIcon = 'fa-handshake';
-                            elseif ($fwd['status'] === 'refused') $fwdIcon = 'fa-ban';
-                            elseif ($fwd['status'] === 'completed') $fwdIcon = 'fa-circle-check';
-                        ?>
-                        <li class="forward-chain-item">
-                            <div class="forward-chain-icon <?= $fwd['status'] ?>"><i class="fa-solid <?= $fwdIcon ?>"></i></div>
-                            <div class="forward-chain-content">
-                                <strong><?= htmlspecialchars($fwd['from_area_label']) ?> → <?= htmlspecialchars($fwd['to_area_label']) ?></strong>
-                                <div class="forward-meta">
-                                    <span><i class="fa-regular fa-user"></i> <?= htmlspecialchars($fwd['forwarded_by_name'] ?? '—') ?></span>
-                                    <span><i class="fa-regular fa-calendar"></i> <?= date('d/m/Y H:i', strtotime($fwd['created_at'])) ?></span>
-                                    <span class="forward-chain-status <?= $fwd['status'] ?>"><?= $fwd['status_label'] ?></span>
-                                </div>
-                                <?php if (!empty($fwd['observation'])): ?>
-                                    <div class="forward-obs">"<?= htmlspecialchars($fwd['observation']) ?>"</div>
-                                <?php endif; ?>
-                                <?php if ($fwd['received_by_name']): ?>
-                                    <div class="forward-meta" style="margin-top: 8px;">
-                                        <span><i class="fa-solid fa-user-check"></i> Recebido por: <?= htmlspecialchars($fwd['received_by_name']) ?></span>
-                                    </div>
-                                <?php endif; ?>
+                    <div class="dp-fwd-list">
+                        <?php foreach ($forwardChain as $fwd): ?>
+                        <div class="dp-fwd-item">
+                            <div class="dp-fwd-route"><?= htmlspecialchars($fwd['from_area_label']) ?> → <?= htmlspecialchars($fwd['to_area_label']) ?></div>
+                            <div class="dp-fwd-meta">
+                                Encaminhado por <?= htmlspecialchars($fwd['forwarded_by_name'] ?? '—') ?> · <?= date('d/m/Y H:i', strtotime($fwd['created_at'])) ?>
+                                <?php if ($fwd['received_by_name']): ?> · Recebido por <?= htmlspecialchars($fwd['received_by_name']) ?><?php endif; ?>
                             </div>
-                        </li>
-                        <?php endforeach; ?>
-                    </ul>
-                </div>
-            </div>
-            <?php endif; ?>
-
-            <!-- Card Histórico (Timeline) - COLAPSÁVEL -->
-            <div class="card card-history collapsed">
-                <div class="card-header" onclick="toggleCard(this)">
-                    <h2><i class="fa-solid fa-clock-rotate-left" style="color: var(--ml-primary);"></i> Histórico de Atividade</h2>
-                    <i class="fa-solid fa-chevron-down toggle-icon"></i>
-                </div>
-                <div class="card-body">
-                    <div class="timeline">
-                        <?php foreach ($history as $h):
-                            $type = 'aberto';
-                            $icon = 'fa-plus';
-                            if(strpos($h['action'], 'Comentário') !== false) { $type = 'comentario'; $icon = 'fa-comment'; }
-                            elseif(strpos($h['action'], 'reaberto') !== false || strpos($h['action'], 'reaberta') !== false) { $type = 'reaberto'; $icon = 'fa-rotate-left'; }
-                            elseif(strpos($h['action'], 'concluí') !== false) { $type = 'concluido'; $icon = 'fa-check'; }
-                            elseif(strpos($h['action'], 'Prioridade') !== false) { $type = 'aberto'; $icon = 'fa-bolt'; }
-                            elseif(strpos($h['action'], 'repassada') !== false || strpos($h['action'], 'Repasse') !== false || strpos($h['action'], 'repasse') !== false) { $type = 'reaberto'; $icon = 'fa-share-from-square'; }
-                        ?>
-                        <div class="timeline-event">
-                            <div class="timeline-dot dot-<?= $type ?>"><i class="fa-solid <?= $icon ?>"></i></div>
-                            <div class="timeline-content">
-                                <div class="timeline-time"><?= date('d M, Y - H:i', strtotime($h['created_at'])) ?></div>
-                                <div style="font-size: 0.95rem;">
-                                    <strong><?= htmlspecialchars($h['user_name']) ?></strong> <?= htmlspecialchars($h['action']) ?>
-                                </div>
-                            </div>
+                            <?php if (!empty($fwd['observation'])): ?>
+                            <div class="dp-fwd-obs">"<?= htmlspecialchars($fwd['observation']) ?>"</div>
+                            <?php endif; ?>
                         </div>
                         <?php endforeach; ?>
                     </div>
                 </div>
             </div>
-        </div>
+            <?php endif; ?>
 
-        <!-- Coluna Direita (35%) -->
-        <div class="sidebar-column">
+            <!-- Painel de Controle (admin) — visível na coluna principal no mobile -->
             <?php if ($role !== 'solicitante'): ?>
-            <!-- Card Ações -->
-            <div class="card card-actions">
-                <div class="card-header">
-                    <h2><i class="fa-solid fa-gear" style="color: var(--ml-primary);"></i> Gerenciar Requisição</h2>
-                </div>
-                <div class="card-body">
-                    <div class="actions-group">
-                        <?php if ($isGestor && $canManageThisRequest && $current_status == 'W'): ?>
-                            <button onclick="globalRequestAction('finish', '<?= $req_id ?>', 'ctd_<?= $req_table ?>_frm')" class="btn-action btn-primary">
-                                <i class="fa-solid fa-check-circle"></i> CONCLUIR
-                            </button>
-                        <?php elseif ($isGestor && $canManageThisRequest && in_array($current_status, ['Y', 'A'])): ?>
-                            <button onclick="globalRequestAction('start_progress', '<?= $req_id ?>', 'ctd_<?= $req_table ?>_frm')" class="btn-action btn-primary">
-                                <i class="fa-solid fa-play"></i> INICIAR ATENDIMENTO
-                            </button>
+            <div class="dp-card dp-desktop-only" style="margin-bottom:12px">
+                <div class="dp-card-header"><h2><i class="fa-solid fa-sliders"></i> Painel de Controle</h2></div>
+                <div class="dp-card-body">
+                    <?php if ($canManageThisRequest): ?>
+                    <label class="dp-ctrl-label">PRIORIDADE</label>
+                    <select class="dp-ctrl-select" onchange="globalRequestAction('set_priority','<?= $req_id ?>','ctd_<?= $req_table ?>_frm',this.value)">
+                        <option value="1" <?= $pri==1?'selected':'' ?>>Baixa</option>
+                        <option value="2" <?= $pri==2?'selected':'' ?>>Média</option>
+                        <option value="3" <?= $pri==3?'selected':'' ?>>Alta</option>
+                        <option value="4" <?= $pri==4?'selected':'' ?>>Crítica</option>
+                    </select>
+                    <?php endif; ?>
+                    <div class="dp-btns">
+                        <?php if ($isGestor && $canManageThisRequest && $current_status==='W'): ?>
+                        <button class="dp-btn dp-btn-finish" onclick="globalRequestAction('finish','<?= $req_id ?>','ctd_<?= $req_table ?>_frm')"><i class="fa-solid fa-check"></i> Concluir</button>
+                        <?php elseif ($isGestor && $canManageThisRequest && in_array($current_status,['Y','A'])): ?>
+                        <button class="dp-btn dp-btn-start" onclick="globalRequestAction('start_progress','<?= $req_id ?>','ctd_<?= $req_table ?>_frm')"><i class="fa-solid fa-play"></i> Iniciar Atendimento</button>
                         <?php endif; ?>
-
-                        <?php if (in_array($current_status, ['C', 'N']) && $canManageThisRequest): ?>
-                            <button onclick="globalRequestAction('reset_status', '<?= $req_id ?>', 'ctd_<?= $req_table ?>_frm')" class="btn-action" style="background:#fff7ed; color:#c2410c;">
-                                <i class="fa-solid fa-rotate-left"></i> REABRIR
-                            </button>
+                        <?php if (in_array($current_status,['C','N']) && $canManageThisRequest): ?>
+                        <button class="dp-btn dp-btn-reopen" onclick="globalRequestAction('reset_status','<?= $req_id ?>','ctd_<?= $req_table ?>_frm')"><i class="fa-solid fa-rotate-left"></i> Reabrir</button>
                         <?php endif; ?>
-
-                        <?php if (in_array($current_status, ['W', 'F']) && $canManageThisRequest): ?>
-                            <button type="button" onclick="openForwardModal()" class="btn-action" style="background:#fff7ed; color:#c2410c;">
-                                <i class="fa-solid fa-share-from-square"></i> REPASSAR
-                            </button>
+                        <?php if (in_array($current_status,['W','F']) && $canManageThisRequest): ?>
+                        <button class="dp-btn dp-btn-fwd" onclick="openForwardModal()"><i class="fa-solid fa-arrow-up-right-from-square"></i> Repassar</button>
                         <?php endif; ?>
-
-                        <?php if($canManageThisRequest): ?>
-                            <div style="margin-top: 10px;">
-                                <label class="ml-label">MUDAR PRIORIDADE</label>
-                                <select class="ml-select" style="margin-bottom:0" onchange="globalRequestAction('set_priority', '<?= $req_id ?>', 'ctd_<?= $req_table ?>_frm', this.value)">
-                                    <option value="1" <?= ($req['priority'] ?? 2) == 1 ? 'selected' : '' ?>>Baixa</option>
-                                    <option value="2" <?= ($req['priority'] ?? 2) == 2 ? 'selected' : '' ?>>Média</option>
-                                    <option value="3" <?= ($req['priority'] ?? 2) == 3 ? 'selected' : '' ?>>Alta</option>
-                                    <option value="4" <?= ($req['priority'] ?? 2) == 4 ? 'selected' : '' ?>>Crítica</option>
-                                </select>
-                            </div>
-                        <?php endif; ?>
-
-                        <?php if($isAdmin || $isGestor): ?>
-                            <div class="divider"></div>
-                            <a href="print_request.php?id=<?= $req_id ?>&table=<?= $req_table ?>" target="_blank" class="btn-action" style="text-decoration: none; justify-content: center;">
-                                <i class="fa-solid fa-file-pdf" style="color: #ef4444;"></i> Gerar Relatório PDF
-                            </a>
+                        <?php if ($isAdmin || $isGestor): ?>
+                        <a href="print_request.php?id=<?= $req_id ?>&table=<?= $req_table ?>" target="_blank" class="dp-btn dp-btn-pdf"><i class="fa-solid fa-file-pdf"></i> Gerar Relatório PDF</a>
                         <?php endif; ?>
                     </div>
                 </div>
             </div>
             <?php endif; ?>
 
-            <!-- Card Mensagens Internas -->
-            <div class="card chat-card">
-                <div class="card-header">
-                    <h2>Mensagens Internas</h2>
-                </div>
-                <div class="chat-messages" id="comments-feed">
-                    <?php
-                        if (count($comments) > 0):
-                            $last_chat_date = '';
-                            foreach ($comments as $c):
-                                $this_date = date('d/m/Y', strtotime($c['created_at']));
-                                if($this_date != $last_chat_date):
-                                    echo '<div class="chat-date-header">'.$this_date.'</div>';
-                                    $last_chat_date = $this_date;
-                                endif;
-                                $is_mine = ($c['user_id'] == ($_SESSION['id'] ?? -1));
-                                $initials = strtoupper(substr($c['user_name'], 0, 1));
-                    ?>
-                    <div class="chat-item <?= $is_mine ? 'mine' : 'theirs' ?>">
-                        <div class="chat-avatar"><?= $initials ?></div>
-                        <div class="chat-bubble <?= $is_mine ? 'mine' : 'theirs' ?>">
-                            <div class="chat-user-name"><?= htmlspecialchars($c['user_name']) ?></div>
-                            <?= nl2br(htmlspecialchars($c['comment'])) ?>
-                            <div style="text-align: right; font-size: 0.6rem; margin-top: 5px; opacity: 0.7;">
-                                <?= date('H:i', strtotime($c['created_at'])) ?>
-                            </div>
+            <!-- Timeline Histórico -->
+            <div class="dp-card" style="margin-bottom:12px">
+                <div class="dp-card-header"><h2><i class="fa-solid fa-clock-rotate-left"></i> Histórico de Atividade</h2></div>
+                <div class="dp-card-body">
+                    <div class="dp-timeline">
+                        <?php
+                        $histCount = count($history);
+                        foreach ($history as $i => $h):
+                            $hiddenCls = ($i >= 3) ? 'dp-tl-extra' : '';
+                            $dotCls = 'action';
+                            if (stripos($h['action'],'Criou')!==false) $dotCls='create';
+                            if (stripos($h['action'],'conclu')!==false) $dotCls='finish';
+                        ?>
+                        <div class="dp-tl-item <?= $hiddenCls ?>" <?= $i>=3 ? 'style="display:none"' : '' ?>>
+                            <div class="dp-tl-dot <?= $dotCls ?>"></div>
+                            <div class="dp-tl-time"><?= date('d/m/Y H:i', strtotime($h['created_at'])) ?></div>
+                            <div class="dp-tl-text"><strong><?= htmlspecialchars($h['user_name']) ?></strong> <?= htmlspecialchars($h['action']) ?></div>
                         </div>
+                        <?php endforeach; ?>
+                        <?php if ($histCount > 3): ?>
+                        <button class="dp-tl-more" id="btnVerMais" onclick="showAllHistory()">Ver mais <?= $histCount-3 ?> eventos</button>
+                        <?php endif; ?>
                     </div>
-                    <?php endforeach; ?>
-                    <?php else: ?>
-                        <div style="display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100%; color: #94a3b8; text-align: center; padding: 40px 20px;">
-                            <i class="fa-solid fa-comments-slash" style="font-size: 2.5rem; margin-bottom: 12px; opacity: 0.3;"></i>
-                            <p style="font-size: 0.9rem; font-weight: 600; margin: 0;">Nenhuma mensagem ainda.</p>
-                            <p style="font-size: 0.75rem; margin-top: 4px;">Inicie a conversa usando o campo abaixo.</p>
-                        </div>
-                    <?php endif; ?>
-                </div>
-                <div class="chat-footer">
-                    <form id="commentForm">
-                        <input type="hidden" name="csrf_token" value="<?= htmlspecialchars(getCsrfToken(), ENT_QUOTES, 'UTF-8') ?>">
-                        <div class="chat-input-area">
-                            <textarea name="new_comment_ajax_text" class="chat-input" placeholder="Escreva aqui..." rows="1" required
-                                oninput="this.style.height = ''; this.style.height = this.scrollHeight + 'px'"></textarea>
-                            <button type="submit" class="btn-send">
-                                <i class="fa-solid fa-paper-plane"></i>
-                            </button>
-                        </div>
-                    </form>
                 </div>
             </div>
 
-            <a href="home" class="btn-back">
-                <i class="fa-solid fa-arrow-left"></i> Voltar para o painel
-            </a>
+        </div><!-- /tab-detalhes -->
+
+        <!-- ABA CHAT MOBILE -->
+        <div class="dp-chat-mobile" id="tab-chat">
+            <div class="dp-chat-feed" id="chatFeedMobile">
+                <?php include_once __DIR__ . '/../partials/_chat_feed.php'; ?>
+            </div>
         </div>
-    </div>
+
+    </div><!-- /dp-main -->
+
+    <!-- COLUNA CHAT (desktop) -->
+    <div class="dp-chat-col">
+        <div class="dp-chat-col-header">
+            <h2><i class="fa-regular fa-comments"></i> Comunicação</h2>
+            <span class="dp-unread-badge" id="unreadBadge"><?= $totalMsgs ?></span>
+        </div>
+        <div class="dp-chat-feed" id="chatFeedDesktop">
+            <?php
+            if ($totalMsgs > 0):
+                $lastDate = '';
+                foreach ($comments as $c):
+                    $cd = date('d/m/Y', strtotime($c['created_at']));
+                    if ($cd !== $lastDate): $lastDate = $cd;
+                        echo '<div class="dp-chat-date-sep">'.$cd.'</div>';
+                    endif;
+                    $mine = ($c['user_id'] == ($_SESSION['id'] ?? -1));
+                    $init = strtoupper(substr($c['user_name'],0,1));
+            ?>
+            <div class="dp-msg <?= $mine?'mine':'theirs' ?>">
+                <div class="dp-avatar" style="background:<?= avatarColor($c['user_name']) ?>;color:#fff"><?= $init ?></div>
+                <div class="dp-bubble">
+                    <div class="dp-bubble-name"><?= htmlspecialchars($c['user_name']) ?></div>
+                    <?= nl2br(htmlspecialchars($c['comment'])) ?>
+                    <div class="dp-bubble-time"><?= date('H:i',strtotime($c['created_at'])) ?></div>
+                </div>
+            </div>
+            <?php endforeach; else: ?>
+            <div class="dp-chat-empty"><i class="fa-regular fa-comments"></i>Nenhuma mensagem ainda.</div>
+            <?php endif; ?>
+        </div>
+        <div class="dp-chat-input-area">
+            <form id="commentFormDesktop" style="display:flex;width:100%;gap:10px;align-items:flex-end;margin:0">
+                <input type="hidden" name="csrf_token" value="<?= htmlspecialchars(getCsrfToken(),ENT_QUOTES,'UTF-8') ?>">
+                <textarea name="new_comment_ajax_text" class="dp-chat-input" placeholder="Escreva aqui..." rows="1" required oninput="this.style.height='';this.style.height=this.scrollHeight+'px'"></textarea>
+                <button type="submit" class="dp-btn-send"><i class="fa-solid fa-paper-plane"></i></button>
+            </form>
+        </div>
+    </div><!-- /dp-chat-col -->
+
+</div><!-- /dp-body -->
+
+</div><!-- /detail-page -->
+
+<!-- ════════ MOBILE: BOTTOM NAV ════════ -->
+<div class="dp-bottom-nav">
+    <button class="dp-nav-btn active" id="navDetalhes" onclick="switchTab('detalhes')">
+        <i class="fa-solid fa-list"></i> Detalhes
+    </button>
+    <button class="dp-nav-btn" id="navChat" onclick="switchTab('chat')">
+        <i class="fa-regular fa-comments"></i> Chat
+        <span class="dp-nav-badge <?= $totalMsgs>0?'visible':'' ?>" id="mobileBadge"><?= $totalMsgs ?></span>
+    </button>
 </div>
 
-<!-- Floating Chat Button (Mobile) -->
-<button class="fab-chat" id="fabChat" onclick="scrollToChat()">
-    <i class="fa-solid fa-comments"></i>
+<!-- ════════ MOBILE: INPUT FIXO (chat ativo) ════════ -->
+<div class="dp-chat-sticky-input" id="stickyInput">
+    <form id="commentFormMobile" style="display:flex;width:100%;gap:10px;align-items:flex-end;margin:0">
+        <input type="hidden" name="csrf_token" value="<?= htmlspecialchars(getCsrfToken(),ENT_QUOTES,'UTF-8') ?>">
+        <textarea name="new_comment_ajax_text" class="dp-chat-input" placeholder="Escreva aqui..." rows="1" required oninput="this.style.height='';this.style.height=this.scrollHeight+'px'"></textarea>
+        <button type="submit" class="dp-btn-send"><i class="fa-solid fa-paper-plane"></i></button>
+    </form>
+</div>
+
+<!-- ════════ MOBILE: FAB AÇÕES ADMIN ════════ -->
+<?php if ($role !== 'solicitante'): ?>
+<button class="dp-fab" id="fabAcoes" onclick="openSheet()" title="Ações">
+    <i class="fa-solid fa-bolt"></i>
 </button>
 
+<!-- Bottom Sheet Admin -->
+<div class="dp-sheet-overlay" id="sheetOverlay" onclick="closeSheet()"></div>
+<div class="dp-sheet" id="actionSheet">
+    <div class="dp-sheet-handle"></div>
+    <h3>Painel de Controle</h3>
+    <?php if ($canManageThisRequest): ?>
+    <label class="dp-ctrl-label">PRIORIDADE</label>
+    <select class="dp-ctrl-select" onchange="globalRequestAction('set_priority','<?= $req_id ?>','ctd_<?= $req_table ?>_frm',this.value);closeSheet()">
+        <option value="1" <?= $pri==1?'selected':'' ?>>Baixa</option>
+        <option value="2" <?= $pri==2?'selected':'' ?>>Média</option>
+        <option value="3" <?= $pri==3?'selected':'' ?>>Alta</option>
+        <option value="4" <?= $pri==4?'selected':'' ?>>Crítica</option>
+    </select>
+    <?php endif; ?>
+    <div class="dp-btns">
+        <?php if ($isGestor && $canManageThisRequest && $current_status==='W'): ?>
+        <button class="dp-btn dp-btn-finish" onclick="globalRequestAction('finish','<?= $req_id ?>','ctd_<?= $req_table ?>_frm');closeSheet()"><i class="fa-solid fa-check"></i> Concluir</button>
+        <?php elseif ($isGestor && $canManageThisRequest && in_array($current_status,['Y','A'])): ?>
+        <button class="dp-btn dp-btn-start" onclick="globalRequestAction('start_progress','<?= $req_id ?>','ctd_<?= $req_table ?>_frm');closeSheet()"><i class="fa-solid fa-play"></i> Iniciar Atendimento</button>
+        <?php endif; ?>
+        <?php if (in_array($current_status,['C','N']) && $canManageThisRequest): ?>
+        <button class="dp-btn dp-btn-reopen" onclick="globalRequestAction('reset_status','<?= $req_id ?>','ctd_<?= $req_table ?>_frm');closeSheet()"><i class="fa-solid fa-rotate-left"></i> Reabrir</button>
+        <?php endif; ?>
+        <?php if (in_array($current_status,['W','F']) && $canManageThisRequest): ?>
+        <button class="dp-btn dp-btn-fwd" onclick="openForwardModal();closeSheet()"><i class="fa-solid fa-arrow-up-right-from-square"></i> Repassar</button>
+        <?php endif; ?>
+        <?php if ($isAdmin || $isGestor): ?>
+        <a href="print_request.php?id=<?= $req_id ?>&table=<?= $req_table ?>" target="_blank" class="dp-btn dp-btn-pdf"><i class="fa-solid fa-file-pdf"></i> Gerar PDF</a>
+        <?php endif; ?>
+    </div>
+</div>
+<?php endif; ?>
+
 <script>
-function toggleCard(header) {
-    const card = header.closest('.card');
-    card.classList.toggle('collapsed');
+<?php
+// Função PHP de cor de avatar (hash do nome)
+function avatarColor($name) {
+    $colors = ['#2c2b31','#3b82f6','#10b981','#8b5cf6','#f59e0b','#ef4444','#06b6d4','#ec4899'];
+    return $colors[crc32($name) % count($colors)];
 }
+?>
 
-function scrollToBottom() {
-    const feed = document.getElementById('comments-feed');
-    if(feed) feed.scrollTop = feed.scrollHeight;
-}
-
-function scrollToChat() {
-    const chatCard = document.querySelector('.chat-card');
-    if(chatCard) {
-        chatCard.scrollIntoView({ behavior: 'smooth', block: 'center' });
+// ── Tab switching (mobile) ──
+function switchTab(tab) {
+    const isMobile = window.innerWidth <= 768;
+    if (!isMobile) return;
+    document.getElementById('tab-detalhes').classList.toggle('active', tab === 'detalhes');
+    document.getElementById('tab-chat').classList.toggle('active', tab === 'chat');
+    document.getElementById('navDetalhes').classList.toggle('active', tab === 'detalhes');
+    document.getElementById('navChat').classList.toggle('active', tab === 'chat');
+    const sticky = document.getElementById('stickyInput');
+    sticky.classList.toggle('visible', tab === 'chat');
+    if (tab === 'chat') {
+        scrollChat('chatFeedMobile');
+        setTimeout(() => sticky.querySelector('textarea').focus(), 100);
     }
 }
 
-// Controle de visibilidade do FAB
-window.addEventListener('scroll', () => {
-    const fab = document.getElementById('fabChat');
-    const chatCard = document.querySelector('.chat-card');
-    if (!fab || !chatCard) return;
+// ── Bottom sheet (FAB admin) ──
+function openSheet()  { document.getElementById('actionSheet').classList.add('open'); document.getElementById('sheetOverlay').classList.add('open'); }
+function closeSheet() { document.getElementById('actionSheet').classList.remove('open'); document.getElementById('sheetOverlay').classList.remove('open'); }
 
-    const chatRect = chatCard.getBoundingClientRect();
-    // Se o chat sair da visão (para cima ou para baixo), mostra o FAB
-    if (chatRect.bottom < 0 || chatRect.top > window.innerHeight) {
-        fab.classList.add('visible');
-    } else {
-        fab.classList.remove('visible');
-    }
-});
+// ── Scroll chat ──
+function scrollChat(id) { const el = document.getElementById(id); if (el) el.scrollTop = el.scrollHeight; }
 
-function loadComments() {
-    const id = "<?= $req_id ?>";
-    const table = "<?= $req_table ?>";
-
-    fetch(`api/get_comments.php?id=${id}&table=${table}`)
-        .then(response => response.text())
-        .then(html => {
-            const feed = document.getElementById('comments-feed');
-            if(!feed) return;
-            // Só scrolla se o usuário estiver próximo do fundo ou se o HTML mudou significativamente
-            const isAtBottom = feed.scrollHeight - feed.scrollTop <= feed.clientHeight + 150;
-            const oldHtml = feed.innerHTML;
-
-            if (oldHtml !== html) {
-                feed.innerHTML = html;
-                if(isAtBottom) scrollToBottom();
-            }
-        });
+// ── Expandir timeline ──
+function showAllHistory() {
+    document.querySelectorAll('.dp-tl-extra').forEach(el => el.style.display = '');
+    document.getElementById('btnVerMais').style.display = 'none';
 }
 
-document.getElementById('commentForm')?.addEventListener('submit', function(e) {
-    e.preventDefault();
-    const formData = new FormData(this);
-    formData.append('new_comment_ajax', '1');
-    const btn = this.querySelector('button');
-    btn.disabled = true;
-
-    fetch(window.location.href, {
-        method: 'POST',
-        body: formData
-    })
-    .then(() => {
-        this.reset();
-        this.querySelector('textarea').style.height = '';
-        btn.disabled = false;
-        loadComments();
-    });
-});
-
-document.querySelector('textarea[name="new_comment_ajax_text"]')?.addEventListener('keydown', function(e) {
-    if (e.key === 'Enter' && !e.shiftKey) {
+// ── AJAX comentários ──
+function sendComment(formId, feedId) {
+    const form = document.getElementById(formId);
+    if (!form) return;
+    form.addEventListener('submit', function(e) {
         e.preventDefault();
-        document.getElementById('commentForm').dispatchEvent(new Event('submit', {cancelable: true, bubbles: true}));
-    }
-});
+        const fd = new FormData(this);
+        fd.append('new_comment_ajax','1');
+        const btn = this.querySelector('button[type=submit]');
+        btn.disabled = true;
+        fetch(window.location.href, {method:'POST', body:fd})
+        .then(() => { this.reset(); this.querySelector('textarea').style.height=''; btn.disabled=false; loadComments(); });
+    });
+    form.querySelector('textarea').addEventListener('keydown', function(e) {
+        if (e.key==='Enter' && !e.shiftKey) { e.preventDefault(); form.dispatchEvent(new Event('submit',{cancelable:true,bubbles:true})); }
+    });
+}
+sendComment('commentFormDesktop','chatFeedDesktop');
+sendComment('commentFormMobile','chatFeedMobile');
 
-scrollToBottom();
+// ── Polling de comentários ──
+function loadComments() {
+    fetch(`api/get_comments.php?id=<?= $req_id ?>&table=<?= $req_table ?>`)
+    .then(r => r.text())
+    .then(html => {
+        ['chatFeedDesktop','chatFeedMobile'].forEach(id => {
+            const el = document.getElementById(id);
+            if (!el) return;
+            const atBottom = el.scrollHeight - el.scrollTop <= el.clientHeight + 80;
+            if (el.innerHTML !== html) { el.innerHTML = html; if(atBottom) scrollChat(id); }
+        });
+    });
+}
+
+// Inicialização
+scrollChat('chatFeedDesktop');
 setInterval(loadComments, 3000);
 </script>
