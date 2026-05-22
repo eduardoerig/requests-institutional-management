@@ -94,29 +94,27 @@
 ══════════════════════════════════════════ */
 .dp-body {
     display: flex;
-    height: calc(100vh - 130px); /* desconta hero + topbar do sistema */
-    overflow: hidden;
+    align-items: stretch;
     background: var(--dp-bg);
+    /* altura definida via JS ao carregar */
 }
 
-/* Coluna principal (58%) — scroll próprio */
+/* Coluna principal (58%) — scroll natural da página */
 .dp-main {
     flex: 0 0 58%;
-    overflow-y: auto;
     padding: 20px;
     display: flex;
     flex-direction: column;
     gap: 12px;
 }
 
-/* Coluna chat (42%) — altura fixa, scroll interno */
+/* Coluna chat (42%) — scroll interno próprio */
 .dp-chat-col {
     flex: 0 0 42%;
     border-left: 1px solid var(--dp-border);
     display: flex;
     flex-direction: column;
     background: var(--dp-surface);
-    height: 100%;
     overflow: hidden;
 }
 .dp-chat-col-header {

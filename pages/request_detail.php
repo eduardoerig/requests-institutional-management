@@ -497,6 +497,23 @@ function loadComments() {
     });
 }
 
+// ── Ajuste dinâmico de altura do chat (funciona dentro do layout com sidebar) ──
+function setChatHeight() {
+    if (window.innerWidth <= 768) return; // só desktop
+    const topBar = document.querySelector('header.top-bar');
+    const topBarH = topBar ? topBar.offsetHeight : 60;
+    const hero = document.querySelector('.dp-hero');
+    const heroH = hero ? hero.offsetHeight : 80;
+    const availableH = window.innerHeight - topBarH - heroH;
+
+    const chatCol = document.querySelector('.dp-chat-col');
+    const body    = document.querySelector('.dp-body');
+    if (chatCol) chatCol.style.height = availableH + 'px';
+    if (body)    body.style.minHeight = availableH + 'px';
+}
+setChatHeight();
+window.addEventListener('resize', setChatHeight);
+
 // Inicialização
 scrollChat('chatFeedDesktop');
 setInterval(loadComments, 3000);
