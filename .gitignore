@@ -48,3 +48,6 @@ arquivos/
 
 # Institucional Assets
 assets/img/logoMartin.png
+
+# Agent Rules/Config
+.agents/
