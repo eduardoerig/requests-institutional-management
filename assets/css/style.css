@@ -2219,17 +2219,13 @@ select:focus {
     flex-direction: column;
     align-items: center;
     gap: 8px;
-    flex: 1;           /* preenche o espaço igualmente */
-    min-width: 0;      /* permite encolher se necessário */
+    flex: 1;
+    min-width: 0;
     text-decoration: none;
-    transition: all 0.2s;
     padding: 10px;
     border-radius: var(--radius-md);
 }
 
-.flow-step:hover {
-    background: rgba(0, 0, 0, 0.02);
-}
 
 .flow-step.active {
     background: rgba(0, 0, 0, 0.04);
@@ -2246,12 +2242,8 @@ select:focus {
     display: grid;
     place-items: center;
     font-size: 1.1rem;
-    transition: transform 0.2s;
 }
 
-.flow-step:hover .flow-icon {
-    transform: scale(1.1);
-}
 
 .flow-icon.pending-bg {
     background: #fefce8;
