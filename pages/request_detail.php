@@ -148,31 +148,54 @@ $activeForward = RequestForwardService::getActiveForward($pdo, $req_id, $req_tab
         }
 
 
-        /* Hero */
-        .hero-bar {
-            background: #ffffff;
-            padding: 20px 24px;
-            border-radius: 12px;
-            border: 1px solid var(--ml-border);
+        /* Cabeçalho da página */
+        .page-header {
             margin-bottom: 20px;
+        }
+        .page-breadcrumb {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            margin-bottom: 14px;
+        }
+        .breadcrumb-back {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            color: var(--ml-text-light);
+            text-decoration: none;
+            font-size: 0.82rem;
+            font-weight: 600;
+            padding: 5px 10px 5px 6px;
+            border-radius: 8px;
+            transition: background 0.15s, color 0.15s;
+        }
+        .breadcrumb-back:hover { background: #f1f5f9; color: var(--ml-text); }
+        .breadcrumb-sep { color: #cbd5e1; font-size: 0.75rem; }
+        .breadcrumb-current { font-size: 0.82rem; color: var(--ml-text-light); font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 240px; }
+        .hero-card {
+            background: #fff;
+            border: 1px solid var(--ml-border);
+            border-radius: 12px;
+            padding: 18px 22px;
             display: flex;
             justify-content: space-between;
-            align-items: center;
-            box-shadow: 0 1px 3px rgba(0,0,0,0.04);
-            position: sticky;
-            top: 0;
-            z-index: 50;
+            align-items: flex-start;
+            gap: 16px;
         }
-        .hero-content h1 { font-size: 1.4rem; font-weight: 800; color: var(--ml-text); margin: 8px 0 6px; letter-spacing: -0.02em; }
-        .hero-meta { display: flex; gap: 12px; font-size: 0.85rem; color: var(--ml-text-light); align-items: center; font-weight: 500; }
-        .status-pill { padding: 6px 14px; border-radius: 20px; font-size: 0.75rem; font-weight: 800; text-transform: uppercase; letter-spacing: 0.5px; box-shadow: 0 1px 2px rgba(0,0,0,0.05); }
+        .hero-card-left { flex: 1; min-width: 0; }
+        .hero-card-left h1 { font-size: 1.25rem; font-weight: 800; color: var(--ml-text); margin: 0 0 8px 0; letter-spacing: -0.02em; line-height: 1.3; }
+        .hero-meta { display: flex; flex-wrap: wrap; gap: 10px; font-size: 0.82rem; color: var(--ml-text-light); align-items: center; font-weight: 500; }
+        .hero-meta-item { display: flex; align-items: center; gap: 5px; }
+        .hero-card-right { display: flex; flex-direction: column; align-items: flex-end; gap: 8px; flex-shrink: 0; }
+        .status-pill { padding: 5px 12px; border-radius: 20px; font-size: 0.72rem; font-weight: 800; text-transform: uppercase; letter-spacing: 0.5px; }
         .status-P { background: #eff6ff; color: #2563eb; border: 1px solid #bfdbfe; }
         .status-Y,.status-A { background: #f0fdf4; color: #15803d; border: 1px solid #bbf7d0; }
         .status-N { background: #fef2f2; color: #dc2626; border: 1px solid #fecaca; }
         .status-W { background: #fff7ed; color: #c2410c; border: 1px solid #fed7aa; }
         .status-C { background: #f0fdf4; color: #15803d; border: 1px solid #bbf7d0; }
         .status-F { background: #faf5ff; color: #7e22ce; border: 1px solid #e9d5ff; }
-        .protocol-badge { font-family: 'JetBrains Mono', monospace; background: #fff; padding: 8px 16px; border: 1px solid var(--ml-border); border-radius: 10px; font-size: 1.1rem; font-weight: 800; color: var(--ml-primary); box-shadow: 0 1px 3px rgba(0,0,0,0.04); }
+        .protocol-badge { font-family: 'JetBrains Mono', monospace; background: #f8fafc; padding: 5px 10px; border: 1px solid var(--ml-border); border-radius: 8px; font-size: 0.9rem; font-weight: 700; color: var(--ml-text-light); }
 
         /* Grid */
         .detail-grid { display: grid; grid-template-columns: 1fr 380px; gap: 24px; align-items: start; }
@@ -236,69 +259,94 @@ $activeForward = RequestForwardService::getActiveForward($pdo, $req_id, $req_tab
         .chat-input-area { display: flex; gap: 10px; align-items: flex-end; }
         .chat-input { flex: 1; border: 1px solid var(--ml-border); border-radius: 24px; padding: 12px 18px; font-size: 0.95rem; resize: none; max-height: 120px; outline: none; background: #f8fafc; transition: all 0.2s; font-family: inherit; }
         .chat-input:focus { background: #fff; border-color: var(--ml-primary); box-shadow: 0 0 0 3px rgba(44,43,49,0.1); }
-        .btn-send { width: 44px; height: 44px; border-radius: 50%; background: linear-gradient(135deg, var(--ml-primary), #3d3c42); color: #fff; border: none; cursor: pointer; display: flex; align-items: center; justify-content: center; flex-shrink: 0; box-shadow: 0 4px 10px rgba(44,43,49,0.3); transition: transform 0.2s, box-shadow 0.2s; }
-        .btn-send:hover { transform: scale(1.05); box-shadow: 0 6px 14px rgba(44,43,49,0.4); }
+        .btn-send { width: 44px; height: 44px; border-radius: 50%; background: var(--ml-primary); color: #fff; border: none; cursor: pointer; display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
 
         .btn-back { display: flex; align-items: center; justify-content: center; gap: 8px; margin-top: 16px; color: var(--ml-text-light); text-decoration: none; font-size: 0.9rem; font-weight: 700; padding: 12px; border-radius: 12px; transition: all 0.2s; }
         .btn-back:hover { color: var(--ml-primary); background: #f1f0f2; }
 
         /* FAB */
-        .fab-chat { position: fixed; right: 24px; bottom: 96px; width: 56px; height: 56px; border-radius: 50%; background: linear-gradient(135deg, var(--ml-primary), #3d3c42); color: #fff; display: flex; align-items: center; justify-content: center; font-size: 1.4rem; box-shadow: 0 6px 16px rgba(44,43,49,0.4); z-index: 99; border: none; cursor: pointer; opacity: 0; transform: scale(0); transition: all 0.3s cubic-bezier(0.4,0,0.2,1); }
-        .fab-chat.visible { opacity: 1; transform: scale(1); }
-        .fab-chat:hover { transform: scale(1.05); box-shadow: 0 8px 20px rgba(44,43,49,0.5); }
+        .fab-chat { position: fixed; right: 20px; bottom: 88px; width: 52px; height: 52px; border-radius: 50%; background: var(--ml-primary); color: #fff; display: flex; align-items: center; justify-content: center; font-size: 1.3rem; box-shadow: 0 2px 8px rgba(44,43,49,0.25); z-index: 99; border: none; cursor: pointer; opacity: 0; pointer-events: none; }
+        .fab-chat.visible { opacity: 1; pointer-events: auto; }
 
-        /* ===== MOBILE UX PERFECTED ===== */
+        /* ===== MOBILE ===== */
         @media (max-width: 768px) {
-            /* Desfazemos o grid e usamos display contents para reordenar cards individualmente */
-            /* Ajustes Finos Mobile - CONTEÚDO À ESQUERDA */
-            .detail-grid { display: flex; flex-direction: column; gap: 16px; width: 100%; box-sizing: border-box; }
+            .detail-grid { display: flex; flex-direction: column; gap: 12px; width: 100%; box-sizing: border-box; }
             .main-column, .sidebar-column { display: contents; }
 
-            /* Nova Ordem de Leitura no Mobile */
-            .card { order: 10; margin-bottom: 0 !important; border-radius: 14px; width: 100%; box-sizing: border-box; } /* Padrão */
+            /* Ordem de leitura no mobile */
+            .card { order: 10; margin-bottom: 0 !important; border-radius: 12px; width: 100%; box-sizing: border-box; }
             .card-description { order: 1; }
-            .chat-card { order: 2; max-height: 480px !important; }
+            .chat-card { order: 2; max-height: 420px !important; }
             .card-actions { order: 3; }
             .card-details { order: 4; }
             .card-forward { order: 5; }
             .card-history { order: 6; }
 
-            /* Containers alinhados e consistentes */
-            .hero-bar { flex-direction: column; align-items: flex-start; text-align: left; gap: 12px; padding: 18px 16px; margin-bottom: 0; border-radius: 14px; width: 100%; box-sizing: border-box; }
-            .hero-content { display: flex; flex-direction: column; align-items: flex-start; width: 100%; }
-            .hero-content > div:first-child { justify-content: flex-start; }
-            .hero-content h1 { font-size: 1.3rem; margin: 6px 0; text-align: left; }
-            .protocol-badge { align-self: flex-start; font-size: 0.95rem; padding: 6px 12px; margin-top: 4px; }
-            .hero-meta { flex-wrap: wrap; gap: 8px; justify-content: flex-start; }
+            /* Cabeçalho mobile */
+            .hero-card { flex-direction: column; gap: 12px; padding: 14px 16px; }
+            .hero-card-right { flex-direction: row; align-items: center; justify-content: flex-start; width: 100%; }
+            .hero-card-left h1 { font-size: 1.1rem; }
+            .breadcrumb-current { max-width: 160px; }
 
-            .card-header { padding: 14px 16px; }
-            .card-body { padding: 16px; }
-            .chat-messages { min-height: 250px; padding: 16px; }
-            .chat-footer { padding: 12px 14px; }
-            .chat-input { font-size: 16px !important; padding: 10px 16px; } /* Prevents iOS Zoom */
-            .btn-send { width: 42px; height: 42px; min-width: 42px; }
+            /* Cards */
+            .card-header { padding: 13px 16px; }
+            .card-body { padding: 14px 16px; }
 
-            .btn-back { order: 10; margin: 16px 0 24px; padding: 14px; background: #fff; border: 1px solid var(--ml-border); justify-content: flex-start; width: 100%; box-sizing: border-box; }
+            /* Info: 2 colunas no mobile */
+            .info-grid-simple { grid-template-columns: repeat(2, 1fr); gap: 10px; }
 
+            /* Chat */
+            .chat-messages { min-height: 200px; padding: 14px; gap: 12px; }
+            .chat-footer { padding: 10px 14px; }
+            .chat-input { font-size: 16px !important; padding: 10px 14px; }
+            .btn-send { width: 40px; height: 40px; min-width: 40px; font-size: 0.9rem; }
+            .chat-item { max-width: 85%; }
+
+            /* Botão voltar */
+            .btn-back { order: 10; margin: 8px 0 20px; padding: 12px 16px; background: #fff; border: 1px solid var(--ml-border); justify-content: flex-start; width: 100%; box-sizing: border-box; }
         }
     </style>
 
 
 
-    <!-- 1. HERO BAR COMPACTO -->
-    <div class="hero-bar">
-        <div class="hero-content">
-            <div style="display: flex; gap: 8px; align-items: center; margin-bottom: 4px;">
-                <span class="status-pill status-<?= $current_status ?>"><?= $status_label[$current_status] ?></span>
+    <!-- CABEÇALHO CLEAN -->
+    <div class="page-header">
+        <!-- Breadcrumb / Navegação de volta -->
+        <div class="page-breadcrumb">
+            <a href="home" class="breadcrumb-back">
+                <i class="fa-solid fa-chevron-left" style="font-size:0.7rem;"></i>
+                Requisições
+            </a>
+            <span class="breadcrumb-sep"><i class="fa-solid fa-chevron-right" style="font-size:0.65rem;"></i></span>
+            <span class="breadcrumb-current"><?= $title ?></span>
+        </div>
+
+        <!-- Hero card compacto -->
+        <div class="hero-card">
+            <div class="hero-card-left">
+                <h1><?= $title ?></h1>
+                <div class="hero-meta">
+                    <span class="hero-meta-item">
+                        <i class="fa-regular fa-user" style="font-size:0.75rem;"></i>
+                        <strong><?= $user ?></strong>
+                    </span>
+                    <span class="breadcrumb-sep">·</span>
+                    <span class="hero-meta-item">
+                        <i class="fa-regular fa-calendar" style="font-size:0.75rem;"></i>
+                        <?= $date ?>
+                    </span>
+                    <span class="breadcrumb-sep">·</span>
+                    <span class="hero-meta-item">
+                        <i class="fa-solid fa-tag" style="font-size:0.7rem;"></i>
+                        <?= $cat ?>
+                    </span>
+                </div>
             </div>
-            <h1><?= $title ?></h1>
-            <div class="hero-meta">
-                <span><strong><?= $user ?></strong></span>
-                <span style="color:#cbd5e1;">•</span>
-                <span><?= $date ?></span>
+            <div class="hero-card-right">
+                <span class="status-pill status-<?= $current_status ?>"><?= $status_label[$current_status] ?></span>
+                <span class="protocol-badge">#<?= $req_id ?></span>
             </div>
         </div>
-        <div class="protocol-badge">#<?= $req_id ?></div>
     </div>
 
     <!-- 2. GRID DE DUAS COLUNAS -->
@@ -569,9 +617,7 @@ $activeForward = RequestForwardService::getActiveForward($pdo, $req_id, $req_tab
                 </div>
             </div>
 
-            <a href="home" class="btn-back">
-                <i class="fa-solid fa-arrow-left"></i> Voltar para o painel
-            </a>
+
         </div>
     </div>
 </div>
