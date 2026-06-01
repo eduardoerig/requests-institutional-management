@@ -245,7 +245,6 @@ if (isset($_POST['action']) && $_POST['action'] === 'post') {
     if (count($requests) > 0) {
         foreach ($requests as $row) {
             $st = trim(strtoupper($row['status'] ?? 'P'));
-            $urgentMark = !empty($row['urgent']) ? '<span class="req_alert">!</span>' : '';
             $cardClass = isset($map[$row['table']]) ? $map[$row['table']] : 'gray';
             
             // Priority Badges
@@ -299,7 +298,7 @@ if (isset($_POST['action']) && $_POST['action'] === 'post') {
                 <div class="card_req ' . $cardClass . ($st === 'F' ? ' forwarded' : '') . '" data-id="' . $row['id'] . '" data-table="' . $row['table'] . '">
                     <div class="card_header">
                         <span class="req_nome">' . $reqNome . ($st === 'F' ? ' <i class="fa-solid fa-share" style="font-size: 0.8rem; color: #f59e0b;"></i>' : '') . '</span>
-                        <div style="display:flex; gap:6px; align-items:center;">' . $timerHtml . $statusIcon . $priBadge . $urgentMark . '</div>
+                        <div style="display:flex; gap:6px; align-items:center;">' . $timerHtml . $statusIcon . $priBadge . '</div>
                     </div>
                     <div class="card_title">' . htmlspecialchars($row['title']) . '</div>
                     <div style="display:flex; justify-content:space-between; align-items:center; margin-top:8px; flex-wrap:wrap; gap:6px;">

@@ -149,7 +149,8 @@ $activeForward = RequestForwardService::getActiveForward($pdo, $req_id, $req_tab
 
 
         /* Cabeçalho da página */
-        .page-header {
+        .req-detail-header {
+            display: block;
             margin-bottom: 20px;
         }
         .page-breadcrumb {
@@ -283,6 +284,8 @@ $activeForward = RequestForwardService::getActiveForward($pdo, $req_id, $req_tab
             .card-history { order: 6; }
 
             /* Cabeçalho mobile */
+            .req-detail-header { margin-bottom: 16px; }
+            .page-breadcrumb { margin-top: 12px; margin-bottom: 10px; margin-left: 12px; }
             .hero-card { flex-direction: column; gap: 12px; padding: 14px 16px; }
             .hero-card-right { flex-direction: row; align-items: center; justify-content: flex-start; width: 100%; }
             .hero-card-left h1 { font-size: 1.1rem; }
@@ -310,15 +313,13 @@ $activeForward = RequestForwardService::getActiveForward($pdo, $req_id, $req_tab
 
 
     <!-- CABEÇALHO CLEAN -->
-    <div class="page-header">
+    <div class="req-detail-header">
         <!-- Breadcrumb / Navegação de volta -->
         <div class="page-breadcrumb">
-            <a href="home" class="breadcrumb-back">
-                <i class="fa-solid fa-chevron-left" style="font-size:0.7rem;"></i>
-                Requisições
+            <a href="javascript:history.back()" class="breadcrumb-back">
+                <i class="fa-solid fa-arrow-left" style="font-size:0.8rem;"></i>
+                Voltar
             </a>
-            <span class="breadcrumb-sep"><i class="fa-solid fa-chevron-right" style="font-size:0.65rem;"></i></span>
-            <span class="breadcrumb-current"><?= $title ?></span>
         </div>
 
         <!-- Hero card compacto -->

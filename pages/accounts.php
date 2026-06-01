@@ -1,4 +1,13 @@
 <?php
+if (session_status() === PHP_SESSION_NONE) {
+    session_start();
+}
+
+if (!isset($_SESSION['id']) || !isset($_SESSION['role'])) { 
+    header("Location: ../index.php"); 
+    exit; 
+}
+
 // Buscar dados completos do usuário logado (Apenas admins acessam esta página)
 if (!in_array($_SESSION['role'], ['admin', 'adm'])) {
     echo '<div class="main"><p>Acesso negado.</p></div>';

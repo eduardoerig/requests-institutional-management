@@ -4,16 +4,16 @@ require_once __DIR__ . '/../classes/RequestManager.php';
 $role = $_SESSION['role'] ?? 'solicitante';
 $user_id = $_SESSION['id'] ?? 0;
 
-$adminRoles = ['admin', 'adm', 'coord'];
+$adminRoles = ['admin', 'adm'];
 $gestorRoles = ['gestor', 'ti', 'xerox', 'service', 'shop', 'mkt', 'marketing'];
 
 $isAdmin = in_array($role, $adminRoles);
 $isAdmSub = ($role === 'adm_sub');
 $isGestor = in_array($role, $gestorRoles);
-$canApprove = $isAdmin || $isAdmSub;
+$canApprove = $isAdmin; // Apenas admin e adm aprovam agora
 
 if (!$canApprove) {
-    echo '<div class="main"><div class="empty-state"><i class="fa-solid fa-lock"></i><p>Você não tem permissão para acessar esta página.<br>Apenas administradores e coordenadores podem aprovar requisições.</p></div></div>';
+    echo '<div class="main"><div class="empty-state"><i class="fa-solid fa-lock"></i><p>Você não tem permissão para acessar esta página.<br>Apenas administradores podem aprovar requisições.</p></div></div>';
     exit;
 }
 

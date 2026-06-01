@@ -7,7 +7,7 @@ $sidebar_user_id = $_SESSION['id'] ?? 0;
 
 $adminRoles = ['admin', 'adm', 'coord'];
 $gestorRoles = ['gestor', 'ti', 'xerox', 'service', 'shop', 'mkt', 'marketing'];
-$approverRoles = array_merge($adminRoles, ['adm_sub']); // Quem pode aprovar
+$approverRoles = ['admin', 'adm']; // Quem pode aprovar
 
 $isAdmin = in_array($role, $adminRoles);
 $isAdmSub = ($role === 'adm_sub');

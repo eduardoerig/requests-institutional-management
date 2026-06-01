@@ -9,9 +9,9 @@ if (!isset($_SESSION['id'])) {
     exit();
 }
 
-// Apenas admin/adm/coord/adm_sub podem aprovar
+// Apenas admin/adm podem aprovar
 $role = $_SESSION['role'] ?? 'solicitante';
-$approverRoles = ['admin', 'adm', 'coord', 'adm_sub'];
+$approverRoles = ['admin', 'adm'];
 if (!in_array($role, $approverRoles)) {
     echo json_encode(['success' => false, 'message' => 'Sem permissão para aprovar requisições.']);
     exit();

@@ -114,32 +114,67 @@ $sectorNames = [
                     <?php
                     if (count($requests) > 0) {
                         foreach ($requests as $row) {
-                            echo '<div class="card_req ';
-                            echo $map[$row['table']];
-                            echo '" data-id="' . $row['id'] . '" data-table="' . $row['table'] . '">
-                                    <div class="card_header">';
-                            if ($row['status'] === 'P') {
-                                echo '<span class="req_alert" style="color:#d9534f;"><i class="fas fa-hourglass-half"></i></span>';
-                            } elseif ($row['status'] === 'N') {
-                                echo '<span class="req_alert" style="color:red;">X</span>';
-                            } elseif ($row['status'] === 'Y') {
-                                echo '<span class="req_confirmed">✔</span>';
-                            } elseif ($row['status'] === 'F') {
-                                echo '<span class="req_alert" style="color:#d97706;"><i class="fa-solid fa-share-from-square"></i></span>';
+                            $st = trim(strtoupper($row['status'] ?? 'P'));
+                            $cardClass = isset($map[$row['table']]) ? $map[$row['table']] : 'gray';
+
+                            // Priority Badges
+                            $pri = $row['priority'] ?? 2;
+                            $priBadge = '';
+                            if ($pri == 4) $priBadge = '<span class="card-priority critical"><i class="fa-solid fa-fire-extinguisher"></i></span>';
+                            elseif ($pri == 3) $priBadge = '<span class="card-priority high"><i class="fa-solid fa-angles-up"></i></span>';
+
+                            $sectorBadge = '<span class="card-sector-tag">' . ($sectorNames[$row['table']] ?? ucfirst($row['table'])) . '</span>';
+                            
+                            // Subdivision Badge
+                            $subBadge = '';
+                            if (!empty($row['subdivision_name'])) {
+                                $subBadge = '<span class="badge-subdivision badge-sub-' . ($row['subdivision_slug'] ?? 'default') . '">' . htmlspecialchars($row['subdivision_name']) . '</span>';
                             }
-                            echo '<span class="req_nome">Requisição ' . strtoupper($sectorNames[$row['table']] ?? $row['table'] ?? '') . ' #' . $row['id'] . '</span>';
-                            echo !empty($row['urgent']) ? '<span class="req_alert">!</span>' : '';
-                            echo '</div>
-                                    <div class="card_title">' . htmlspecialchars($row['title']) . '</div>
-                                    <div style="display:flex; justify-content:space-between; align-items:center; margin-top:4px; flex-wrap:wrap; gap:6px;">';
-                            $rawDate = $row['date'] ?? '';
-                            $prazoBadge = getPrazoBadge($rawDate, $row['status'] ?? 'P');
-                            echo '<div class="card_date" style="display:flex; align-items:center;">' . $prazoBadge . '</div>';
-                            if ($row['status'] === 'F') {
-                                echo '<span class="badge-forwarded"><i class="fa-solid fa-share-from-square"></i> Repassada</span>';
+
+                            // Timer visual
+                            $timerHtml = '';
+                            if ($st === 'W' || $st === 'F') {
+                                $createdAt = strtotime($row['created_at'] ?? 'now');
+                                $elapsed = time() - $createdAt;
+                                $days = floor($elapsed / 86400);
+                                $hours = floor(($elapsed % 86400) / 3600);
+                                $timeLabel = $days > 0 ? $days . 'd ' . $hours . 'h' : $hours . 'h';
+                                $timeClass = ($elapsed > (3 * 86400)) ? 'timer-late' : 'timer-ok';
+                                $timerHtml = '<span class="card-timer ' . $timeClass . '"><i class="fa-solid fa-stopwatch"></i> ' . $timeLabel . '</span>';
                             }
-                            echo '</div>
-                                </div>';
+
+                            // Status Icons
+                            $statusIcon = '';
+                            if ($st === 'Y' || $st === 'A') {
+                                $statusIcon = '<span class="req_confirmed"><i class="fa-solid fa-check-circle"></i></span>';
+                            } elseif ($st === 'P') {
+                                $statusIcon = '<span class="req_alert" style="color:#d9534f;"><i class="fas fa-hourglass-half"></i></span>';
+                            } elseif ($st === 'N') {
+                                $statusIcon = '<span class="req_alert" style="color:red;"><i class="fa-solid fa-xmark"></i></span>';
+                            }
+
+                            $forwardedBadge = '';
+                            if ($st === 'F') {
+                                $forwardedBadge = '<span class="badge-forwarded"><i class="fa-solid fa-share-from-square"></i> Repassada</span>';
+                                $statusIcon = '<span class="req_alert" style="color:#d97706;"><i class="fa-solid fa-share-from-square"></i></span>';
+                            }
+
+                            $reqNome = 'Requisição ' . strtoupper($sectorNames[$row['table']] ?? $row['table'] ?? '') . ' #' . $row['id'];
+                            $rd = $row['date'] ?? '';
+                            $prazoBadge = getPrazoBadge($rd, $st);
+
+                            echo '
+                            <div class="card_req ' . $cardClass . ($st === 'F' ? ' forwarded' : '') . '" data-id="' . $row['id'] . '" data-table="' . $row['table'] . '">
+                                <div class="card_header">
+                                    <span class="req_nome">' . $reqNome . ($st === 'F' ? ' <i class="fa-solid fa-share" style="font-size: 0.8rem; color: #f59e0b;"></i>' : '') . '</span>
+                                    <div style="display:flex; gap:6px; align-items:center;">' . $timerHtml . $statusIcon . $priBadge . '</div>
+                                </div>
+                                <div class="card_title">' . htmlspecialchars($row['title']) . '</div>
+                                <div style="display:flex; justify-content:space-between; align-items:center; margin-top:8px; flex-wrap:wrap; gap:6px;">
+                                    <div class="card_date" style="display:flex; align-items:center;">' . $prazoBadge . '</div>
+                                    <div style="display:flex; gap:6px; align-items:center;">' . $forwardedBadge . $subBadge . $sectorBadge . '</div>
+                                </div>
+                            </div>';
                         }
                     } else {
                         echo '<div class="empty-state"><i class="fa-solid fa-inbox"></i><p>Nenhuma requisição encontrada.</p></div>';
@@ -182,16 +217,19 @@ $sectorNames = [
                 </div>
 <script>
 document.addEventListener('DOMContentLoaded', function() {
-    const cards = document.querySelectorAll('.card_req');
+    const container = document.querySelector('.request_list_container');
     const modal = document.getElementById('modalReqCard');
     const emptyState = document.getElementById('modalEmptyState');
     const btnViewDetail = document.getElementById('btnViewDetail');
     const isMobile = () => window.innerWidth <= 768;
 
-    cards.forEach(card => {
-        card.addEventListener('click', function() {
-            const id = this.getAttribute('data-id');
-            const table = this.getAttribute('data-table');
+    if (container) {
+        container.addEventListener('click', function(e) {
+            const card = e.target.closest('.card_req');
+            if (!card) return;
+
+            const id = card.getAttribute('data-id');
+            const table = card.getAttribute('data-table');
 
             // MOBILE: Navegar direto para a página de detalhes
             if (isMobile()) {
@@ -200,8 +238,8 @@ document.addEventListener('DOMContentLoaded', function() {
             }
 
             // DESKTOP: Manter comportamento split-layout
-            cards.forEach(c => c.classList.remove('selected'));
-            this.classList.add('selected');
+            document.querySelectorAll('.card_req').forEach(c => c.classList.remove('selected'));
+            card.classList.add('selected');
 
             if (modal && modal.style.display === 'flex') {
                 modal.style.opacity = '0.5';
@@ -229,7 +267,7 @@ document.addEventListener('DOMContentLoaded', function() {
                     }
                 });
         });
-    });
+    }
 });
 </script>
             </div>
