@@ -39,10 +39,10 @@ function bindPopUpRequests() {
                     // Preencher todos os campos ANTES de mostrar ou fazer o fade in
                     document.getElementById("modalNome").innerText = data.data.user.name + ' - #' + data.data.id;
                     document.getElementById("modalTitle").innerText = data.data.title;
-                    document.getElementById("modalDescp").innerHTML = data.data.descp || '';
-                    document.getElementById("modalDate").innerText = 'Data de entrega: ' + data.data.date;
-                    document.getElementById("modalDate1").innerText = 'Data solicitada: ' + data.data.created_at;
-                    document.getElementById("modalObs").innerText = 'Obs: ' + data.data.obs;
+                    document.getElementById("modalDescp").innerHTML = data.data.descp || 'Sem descrição';
+                    document.getElementById("modalDate").innerText = 'Precisa para: ' + (data.data.date || 'sem prazo');
+                    document.getElementById("modalDate1").innerText = 'Pedido em: ' + data.data.created_at;
+                    document.getElementById("modalObs").innerText = data.data.obs ? 'Observações: ' + data.data.obs : '';
                     
                     let alertEl = document.querySelector(".modal_alert");
                     if(alertEl) alertEl.style.display = data.data.urgent ? 'block' : 'none';
@@ -66,13 +66,29 @@ function bindPopUpRequests() {
                     if (emptyState) emptyState.style.display = "none";
 
                     // Atualizar link de detalhes
-                    let btnDetail = document.getElementById("btnViewDetail");
-                    if (btnDetail) {
-                        btnDetail.href = 'request_detail?id=' + data.data.id + '&table=' + data.data.table;
+                    const detailHref = 'request_detail?id=' + data.data.id + '&table=' + data.data.table;
+                    ['btnViewDetail', 'btnViewDetailForward'].forEach(btnId => {
+                        const btn = document.getElementById(btnId);
+                        if (btn) btn.href = detailHref;
+                    });
+
+                    // Pedido encaminhado por outro setor: mostra Aceitar/Recusar no lugar de "Começar"
+                    const standardActions = document.getElementById('standardActions');
+                    const forwardActions = document.getElementById('forwardActions');
+                    const isForwarded = card.dataset.forwarded === 'true' && card.dataset.forwardId;
+                    if (standardActions && forwardActions) {
+                        standardActions.style.display = isForwarded ? 'none' : 'flex';
+                        forwardActions.style.display = isForwarded ? 'flex' : 'none';
+                        forwardActions.dataset.forwardId = isForwarded ? card.dataset.forwardId : '';
+                    }
+
+                    // Celular: leva o usuário até o painel com os botões
+                    if (window.innerWidth <= 900 && modalReq) {
+                        modalReq.scrollIntoView({ behavior: 'smooth', block: 'start' });
                     }
                 }
             } catch (err) {
-                console.error("Erro ao carregar requisição:", err);
+                if (typeof showToast === 'function') showToast('Não foi possível abrir o pedido. Tente de novo.', 'error');
             }
         });
     });

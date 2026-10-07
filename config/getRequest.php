@@ -4,14 +4,9 @@ require_once __DIR__ . '/conn.php';
 require_once __DIR__ . '/security.php';
 requireLoginJson($pdo);
 
-if (!isset($_SESSION['id'])) {
-    header('home');
-    exit();
-}
-
-if ($_POST['action'] == 'get') {
-    $id = $_POST['id'];
-    $table = $_POST['table'];
+if (($_POST['action'] ?? '') === 'get') {
+    $id = (int)($_POST['id'] ?? 0);
+    $table = (string)($_POST['table'] ?? '');
     $normalizedTable = normalizeRequestTable((string)$table);
 
     if ($id && $normalizedTable) {
@@ -35,19 +30,14 @@ if ($_POST['action'] == 'get') {
 
             $labels = [
                 'descp' => 'Descrição',
-                'type' => 'Categoria/Modelo',
+                'type' => 'Tipo / formato',
                 'arquive' => 'Arquivo',
-                'qtd' => 'Quantidade',
-                'priority' => 'Prioridade',
+                'qtd' => 'Cópias',
+                'priority' => 'Urgência',
                 'subdivision_id' => 'Subdivisão'
             ];
             
-            $priorityLabels = [
-                1 => 'Baixa',
-                2 => 'Média',
-                3 => 'Alta',
-                4 => 'Crítica'
-            ];
+            $priorityLabels = priorityLabels();
 
             // Buscar nome da subdivisão considerando o contexto do usuário logado
             $subName = '';
@@ -82,16 +72,17 @@ if ($_POST['action'] == 'get') {
 
             // Buscar quem aprovou/recusou no histórico
             $approverName = null;
-            $histStmt = $pdo->prepare("SELECT user_name FROM request_history WHERE request_id = ? AND request_table = ? AND action LIKE 'Requisição %' AND (new_value = 'Aprovada' OR new_value = 'Rejeitada') ORDER BY id DESC LIMIT 1");
+            $histStmt = $pdo->prepare("SELECT user_name FROM request_history WHERE request_id = ? AND request_table = ? AND action LIKE 'Requisição %' AND new_value IN ('Aprovada', 'Recusada', 'Rejeitada') ORDER BY id DESC LIMIT 1");
             $histStmt->execute([$id, $normalizedTable]);
             $approverName = $histStmt->fetchColumn();
             
             $exclude = ['id', 'created_by', 'status', 'created_at', 'date', 'title', 'table', 'obs', 'urgent'];
+            $allowedKeys = array_keys($labels);
             
             $details_html = '';
             foreach ($row as $key => $value) {
-                if (!in_array($key, $exclude) && $value !== null && $value !== '') {
-                    $labelName = isset($labels[$key]) ? $labels[$key] : ucfirst($key);
+                if (!in_array($key, $exclude) && in_array($key, $allowedKeys, true) && $value !== null && $value !== '') {
+                    $labelName = $labels[$key];
                     $displayValue = htmlspecialchars($value);
 
                     if ($key === 'priority' && isset($priorityLabels[$value])) {
@@ -111,11 +102,24 @@ if ($_POST['action'] == 'get') {
 
             $descp = $details_html;
 
-            $stmt = $pdo->prepare("SELECT * FROM ctd_users WHERE id = ?");
+            // Somente o nome do solicitante (nunca enviar a linha inteira: contém o hash da senha)
+            $stmt = $pdo->prepare("SELECT name FROM ctd_users WHERE id = ?");
             $stmt->execute([(int)$row['created_by']]);
-            $user = $stmt->fetch(PDO::FETCH_ASSOC);
+            $user = ['name' => (string)($stmt->fetchColumn() ?: 'Usuário removido')];
 
-            $return = ['id' => $row['id'], 'user' => $user, 'title' => $row['title'], 'descp' => $descp, 'date' => $row['date'], 'created_at' => $row['created_at'], 'obs' => $row['obs'], 'urgent' => $row['urgent'] ?? '', 'color' => $map[$normalizedTable], 'table' => $normalizedTable];
+            $fmtDate = fn($v, $f) => (!empty($v) && strpos((string)$v, '0000-00-00') !== 0) ? date($f, strtotime((string)$v)) : '';
+            $return = [
+                'id' => (int)$row['id'],
+                'user' => $user,
+                'title' => $row['title'],
+                'descp' => $descp,
+                'date' => $fmtDate($row['date'] ?? '', 'd/m/Y'),
+                'created_at' => $fmtDate($row['created_at'] ?? '', 'd/m/Y H:i'),
+                'obs' => $row['obs'] ?? '',
+                'urgent' => (int)($row['urgent'] ?? 0),
+                'color' => $map[$normalizedTable],
+                'table' => $normalizedTable,
+            ];
 
             echo json_encode(['success' => true, 'message' => 'ok!', 'data' => $return]);
             exit();

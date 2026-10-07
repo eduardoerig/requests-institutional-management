@@ -246,7 +246,7 @@ if (!is_array($allowedSectors)) $allowedSectors = [];
                     <div class="modal_actions" id="standardActions">
                         <?php if ($isGestor): ?>
                             <button type="submit" name="action_value" value="start_progress" class="btn_ok" style="flex:1;">
-                                <i class="fa-solid fa-play" style="margin-right:6px;"></i> Iniciar Atendimento
+                                <i class="fa-solid fa-play" style="margin-right:6px;"></i> Começar atendimento
                             </button>
                         <?php endif; ?>
                         <a id="btnViewDetail" href="#" class="btn-primary" style="padding: 10px 20px; font-size: 0.9rem; text-decoration: none;">
@@ -256,10 +256,10 @@ if (!is_array($allowedSectors)) $allowedSectors = [];
                     
                     <div class="modal_actions" id="forwardActions" style="display:none; gap: 10px;">
                         <?php if ($isGestor): ?>
-                            <button type="button" class="btn_ok" onclick="handleForwardAction('accept')" style="flex:1; background: #3b82f6;">
-                                <i class="fa-solid fa-check" style="margin-right:6px;"></i> Aceitar Repasse
+                            <button type="button" class="btn_ok" onclick="handleForwardAction('accept', document.getElementById('forwardActions').dataset.forwardId)" style="flex:1; background: #3b82f6;">
+                                <i class="fa-solid fa-check" style="margin-right:6px;"></i> Aceitar e atender
                             </button>
-                            <button type="button" class="btn_recusar" onclick="handleForwardAction('refuse')" style="flex:1;">
+                            <button type="button" class="btn_recusar" onclick="handleForwardAction('refuse', document.getElementById('forwardActions').dataset.forwardId)" style="flex:1;">
                                 <i class="fa-solid fa-xmark" style="margin-right:6px;"></i> Recusar
                             </button>
                         <?php endif; ?>
@@ -271,68 +271,10 @@ if (!is_array($allowedSectors)) $allowedSectors = [];
 
                 <div class="empty-state" id="modalEmptyState">
                     <i class="fa-solid fa-hand-pointer"></i>
-                    <p>Selecione uma requisição aprovada para iniciar o atendimento.</p>
+                    <p>Clique em um pedido ao lado para ver os detalhes e começar o atendimento.</p>
                 </div>
             </div>
         </div>
     </div>
     
-<script>
-async function handleForwardAction(action) {
-    const fwdActions = document.getElementById("forwardActions");
-    const forwardId = fwdActions.getAttribute('data-forward-id');
-    
-    if (!forwardId) {
-        showToast("Erro: ID do repasse não encontrado.", "error");
-        return;
-    }
 
-    if (action === 'refuse') {
-        const confirmed = await showConfirm({
-            title: 'Recusar Repasse',
-            message: 'Tem certeza que deseja RECUSAR este repasse? A requisição voltará ao setor de origem.',
-            type: 'error',
-            isDanger: true,
-            confirmLabel: 'Sim, Recusar'
-        });
-        if (!confirmed) return;
-    }
-
-    if (action === 'accept') {
-        const confirmed = await showConfirm({
-            title: 'Aceitar Repasse',
-            message: 'Deseja ACEITAR este repasse e assumir o atendimento desta requisição?',
-            type: 'info',
-            confirmLabel: 'Sim, Aceitar'
-        });
-        if (!confirmed) return;
-    }
-
-    const overlay = document.querySelector('.loading-overlay');
-    if (overlay) overlay.style.display = 'flex';
-
-    fetch("api/request_forwards.php", {
-        method: "POST",
-        headers: {
-            "Content-Type": "application/json",
-            "X-CSRF-Token": document.querySelector('meta[name="csrf-token"]')?.content || ''
-        },
-        body: JSON.stringify({ action: action, forward_id: forwardId })
-    })
-    .then(res => res.json())
-    .then(res => {
-        if (res.success) {
-            showToast(res.message, 'success');
-            setTimeout(() => window.location.reload(), 800);
-        } else {
-            if (overlay) overlay.style.display = 'none';
-            showToast(res.message || "Erro ao processar repasse.", 'error');
-        }
-    })
-    .catch(err => {
-        if (overlay) overlay.style.display = 'none';
-        console.error("Erro:", err);
-        showToast("Erro de comunicação com o servidor.", "error");
-    });
-}
-</script>
