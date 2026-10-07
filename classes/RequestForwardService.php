@@ -192,8 +192,12 @@ class RequestForwardService {
             // Atualizar o repasse
             $pdo->beginTransaction();
 
-            $stmt = $pdo->prepare("UPDATE request_forwards SET status = 'accepted', received_by = ? WHERE id = ?");
+            $stmt = $pdo->prepare("UPDATE request_forwards SET status = 'accepted', received_by = ? WHERE id = ? AND status = 'pending'");
             $stmt->execute([$userId, $forwardId]);
+            if ($stmt->rowCount() === 0) {
+                $pdo->rollBack();
+                return ['success' => false, 'message' => 'Este repasse já foi processado por outra pessoa. Atualize a página.'];
+            }
 
             // Ao aceitar o repasse, colocar a requisição Em Andamento (W) no setor de destino
             $fullTable = "ctd_{$forward['request_table']}_frm";
@@ -258,19 +262,40 @@ class RequestForwardService {
             // Atualizar o repasse para recusado
             $pdo->beginTransaction();
 
-            $stmt = $pdo->prepare("UPDATE request_forwards SET status = 'refused', received_by = ? WHERE id = ?");
+            $stmt = $pdo->prepare("UPDATE request_forwards SET status = 'refused', received_by = ? WHERE id = ? AND status = 'pending'");
             $stmt->execute([$userId, $forwardId]);
+            if ($stmt->rowCount() === 0) {
+                $pdo->rollBack();
+                return ['success' => false, 'message' => 'Este repasse já foi processado por outra pessoa.'];
+            }
 
-            // Voltar o status da requisição para o status anterior (previous_status)
             $prevStatus = $forward['previous_status'] ?? 'Y';
             $fullTable = "ctd_{$forward['request_table']}_frm";
+
+            if ($prevStatus === 'F') {
+                // Repasse em cadeia (A→B→C): a recusa devolve a responsabilidade ao setor que repassou (B)
+                $stmtPrev = $pdo->prepare("
+                    SELECT id FROM request_forwards
+                    WHERE request_id = ? AND request_table = ? AND id < ? AND to_area_id = ?
+                    ORDER BY id DESC LIMIT 1
+                ");
+                $stmtPrev->execute([$forward['request_id'], $forward['request_table'], $forwardId, $forward['from_area_id']]);
+                $previousForwardId = $stmtPrev->fetchColumn();
+                if ($previousForwardId) {
+                    $pdo->prepare("UPDATE request_forwards SET status = 'accepted' WHERE id = ?")->execute([(int)$previousForwardId]);
+                } else {
+                    // Sem repasse anterior localizável: volta para atendimento no setor original
+                    $prevStatus = 'W';
+                }
+            }
+
             $stmt = $pdo->prepare("UPDATE `$fullTable` SET status = ? WHERE id = ?");
             $stmt->execute([$prevStatus, $forward['request_id']]);
 
             // Gravar no histórico
             $toArea = self::getAreaById($pdo, $forward['to_area_id']);
             $toAreaLabel = self::$sectorLabels[strtolower($toArea['title'] ?? '')] ?? ($toArea['title'] ?? 'Setor');
-            $prevLabel = ($prevStatus === 'W') ? 'Em Andamento' : 'Aprovada';
+            $prevLabel = $prevStatus === 'F' ? 'em atendimento no setor que repassou' : statusLabel($prevStatus);
 
             RequestManager::addHistory(
                 $pdo, $forward['request_id'], $forward['request_table'], $userId, $userName,
@@ -322,8 +347,12 @@ class RequestForwardService {
             // Atualizar o repasse
             $pdo->beginTransaction();
 
-            $stmt = $pdo->prepare("UPDATE request_forwards SET status = 'completed' WHERE id = ?");
+            $stmt = $pdo->prepare("UPDATE request_forwards SET status = 'completed' WHERE id = ? AND status = 'accepted'");
             $stmt->execute([$forwardId]);
+            if ($stmt->rowCount() === 0) {
+                $pdo->rollBack();
+                return ['success' => false, 'message' => 'Este repasse já foi processado por outra pessoa. Atualize a página.'];
+            }
 
             // Concluir a requisição original
             $fullTable = "ctd_{$forward['request_table']}_frm";

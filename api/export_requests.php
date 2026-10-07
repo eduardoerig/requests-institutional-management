@@ -12,8 +12,8 @@ require_once dirname(__DIR__) . '/classes/RequestManager.php';
 if (!isset($_SESSION['id'])) die("Acesso negado.");
 
 $role     = $_SESSION['role'] ?? 'solicitante';
-$isAdmin  = in_array($role, ['admin', 'adm', 'coord', 'adm_sub']);
-$isGestor = in_array($role, ['gestor', 'ti', 'xerox', 'service', 'shop', 'mkt', 'marketing']);
+$isAdmin  = isAdminRole($role);
+$isGestor = isGestorRole($role);
 if (!$isAdmin && !$isGestor) die("Sem permissão.");
 
 // --- Filtros ---
@@ -24,6 +24,13 @@ $filter_date   = $_GET['date']   ?? '';
 $filter_start  = $_GET['start']  ?? '';
 $filter_end    = $_GET['end']    ?? '';
 
+// Datas só no formato AAAA-MM-DD; "date" (dia único do painel) vira início e fim
+$validDate = fn($d) => preg_match('/^\d{4}-\d{2}-\d{2}$/', (string)$d) ? $d : '';
+$filter_date  = $validDate($filter_date);
+$filter_start = $validDate($filter_start) ?: $filter_date;
+$filter_end   = $validDate($filter_end) ?: $filter_date;
+$filter_status = in_array($filter_status, ['P', 'Y', 'N', 'W', 'C', 'F'], true) ? $filter_status : '';
+
 $map = [
     'mkt' => 'Marketing', 
     'shop' => 'Compras', 
@@ -33,7 +40,7 @@ $map = [
 ];
 
 $isAdmSub          = ($role === 'adm_sub');
-$managingId        = (in_array($role, ['admin', 'adm', 'coord']) || $isAdmSub) ? null : $_SESSION['id'];
+$managingId        = (isGlobalAdminRole($role) || $isAdmSub) ? null : $_SESSION['id'];
 $subdivisionFilter = $isAdmSub ? ($_SESSION['subdivision_ids'] ?? null) : null;
 
 $reqData = RequestManager::getRequests(

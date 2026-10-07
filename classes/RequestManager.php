@@ -40,18 +40,13 @@ class RequestManager {
             }
             $tables[] = "ctd_" . $normalizedSector . "_frm";
         } else {
-            $stmtTables = $pdo->query("SHOW TABLES LIKE 'ctd_%_frm'");
-            while($row = $stmtTables->fetch(PDO::FETCH_NUM)) {
-                $tableName = $row[0];
-                $sectorName = str_replace(['ctd_', '_frm'], '', $tableName);
-                $sectorName = strtolower($sectorName);
-                
+            foreach (allowedRequestTables() as $sectorName) {
                 // Se estiver filtrando por gestor, ignora tabelas que não são da sua área
                 if ($managingUserId && !in_array($sectorName, $allowedSectors)) {
                     continue;
                 }
-                
-                $tables[] = $tableName;
+
+                $tables[] = 'ctd_' . $sectorName . '_frm';
             }
         }
 
@@ -78,15 +73,15 @@ class RequestManager {
                 $params = [];
                 
                 if ($userId !== null) {
-                    $query .= " AND created_by = ?";
+                    $query .= " AND r.created_by = ?";
                     $params[] = $userId;
                 }
 
                 if ($status === 'P') {
-                    $query .= " AND (TRIM(UPPER(r.status)) = 'P' OR r.status IS NULL OR r.status = '')";
+                    $query .= " AND r.status = 'P'";
                 } elseif ($status !== null) {
-                    $query .= " AND TRIM(UPPER(r.status)) = UPPER(?)";
-                    $params[] = $status;
+                    $query .= " AND r.status = ?";
+                    $params[] = strtoupper(trim((string)$status));
                 }
 
                 // Excluir status específicos (r.status)
@@ -103,17 +98,17 @@ class RequestManager {
                 }
 
                 if ($searchText !== null && trim($searchText) !== '') {
-                    $query .= " AND title LIKE ?";
+                    $query .= " AND r.title LIKE ?";
                     $params[] = "%$searchText%";
                 }
 
                 if ($dateStart) {
-                    $query .= " AND created_at >= ?";
+                    $query .= " AND r.created_at >= ?";
                     $params[] = $dateStart . " 00:00:00";
                 }
 
                 if ($dateEnd) {
-                    $query .= " AND created_at <= ?";
+                    $query .= " AND r.created_at <= ?";
                     $params[] = $dateEnd . " 23:59:59";
                 }
 
@@ -156,9 +151,11 @@ class RequestManager {
                 
                 foreach ($res as $r) {
                     $st = trim(strtoupper($r['status'] ?? 'P'));
-                    $createdAtStr = $r['created_at'] ?? '0';
-                    $createdAt = strtotime($createdAtStr);
-                    $isAtrasada = ($st !== 'C' && $st !== 'N' && $st !== 'R' && (time() - $createdAt) > (3 * 24 * 3600)); 
+                    // Atrasada = prazo pedido já passou e a requisição ainda não foi encerrada
+                    $deadline = $r['date'] ?? null;
+                    $isAtrasada = !in_array($st, ['C', 'N'], true)
+                        && !empty($deadline) && $deadline !== '0000-00-00'
+                        && $deadline < date('Y-m-d');
                     
                     // Padronização
                     $r['sector'] = $sectorName;

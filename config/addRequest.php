@@ -2,131 +2,157 @@
 require_once __DIR__ . '/session.php';
 require_once __DIR__ . '/conn.php';
 require_once __DIR__ . '/security.php';
+require_once __DIR__ . '/../classes/RequestManager.php';
 requireLoginJson($pdo);
-
-if (!isset($_SESSION['id'])) {
-    header('home');
-    exit();
-}
-
-if ($_SERVER['REQUEST_METHOD'] === 'POST') {
-    requireCsrfTokenFromRequest();
-}
+requirePostJson();
 
 $subdivision_id = $_SESSION['subdivision_id'] ?? null;
 $role = $_SESSION['role'] ?? 'solicitante';
 if (in_array($role, ['solicitante', 'adm_sub'], true) && empty($subdivision_id)) {
-    echo json_encode(['success' => false, 'message' => 'Seu usuário precisa estar vinculado a uma subdivisão antes de abrir requisições.']);
-    exit();
+    jsonResponse(['success' => false, 'message' => 'Seu usuário ainda não está ligado a uma subdivisão. Fale com o administrador.']);
 }
 
-if (isset($_POST['type']) && $_POST['type'] === 'service') {
-    $title = $_POST['title'];
-    $end = $_POST['end'];
-    $details = $_POST['details'];
-    $urgent = $_POST['urgent'] ?? '';
-    $obs = $_POST['obs'];
-    $priority = $_POST['priority'] ?? 2;
-
-    if ($title && $end && $details) {
-        $stmt = $pdo->prepare('INSERT INTO ctd_service_frm (created_by, created_at, title, `date`, descp, urgent, obs, priority, subdivision_id) VALUES (?, NOW(), ?, ?, ?, ?, ?, ?, ?)');
-        if ($stmt->execute([$_SESSION['id'], $title, $end, $details, $urgent, $obs, $priority, $subdivision_id])) {
-            echo json_encode(['success' => true, 'message' => 'Requisição de serviço enviada com sucesso!']);
-            exit();
-        } else {
-            echo json_encode(['success' => false, 'message' => 'Requisição nao encontrada ou invalida!']);
-            exit();
-        }
-    } else {
-        echo json_encode(['success' => false, 'message' => 'Informações invalida!']);
-        exit();
-    }
-} else if (isset($_POST['type']) && $_POST['type'] === 'shopping') {
-    $title = $_POST['title'];
-    $end = $_POST['end'];
-    $details = $_POST['details'];
-    $obs = $_POST['obs'];
-    $priority = $_POST['priority'] ?? 2;
-
-    if ($title && $end && $details) {
-        $stmt = $pdo->prepare('INSERT INTO ctd_shop_frm (created_by, created_at, title, `date`, descp, obs, priority, subdivision_id) VALUES (?, NOW(), ?, ?, ?, ?, ?, ?)');
-        if ($stmt->execute([$_SESSION['id'], $title, $end, $details, $obs, $priority, $subdivision_id])) {
-            echo json_encode(['success' => true, 'message' => 'Requisição de compra enviada com sucesso!']);
-            exit();
-        } else {
-            echo json_encode(['success' => false, 'message' => 'Requisição nao encontrada ou invalida!']);
-            exit();
-        }
-    } else {
-        echo json_encode(['success' => false, 'message' => 'Informações invalida!']);
-        exit();
-    }
-} else if (isset($_POST['type']) && $_POST['type'] === 'colorPrint') {
-    $title = $_POST['title'];
-    $end = $_POST['end'];
-    $file = $_POST['file'];
-    $qtd = $_POST['qtd'];
-    $type = $_POST['model'];
-    $obs = $_POST['obs'];
-    $priority = $_POST['priority'] ?? 2;
-
-    if ($title && $end) {
-        $stmt = $pdo->prepare('INSERT INTO ctd_xerox_frm (created_by, created_at, title, `date`, arquive, qtd, `type`, obs, priority, subdivision_id) VALUES (?, NOW(), ?, ?, ?, ?, ?, ?, ?, ?)');
-        if ($stmt->execute([$_SESSION['id'], $title, $end, $file, $qtd, $type, $obs, $priority, $subdivision_id])) {
-            echo json_encode(['success' => true, 'message' => 'Requisição de xerox enviada com sucesso!']);
-            exit();
-        } else {
-            echo json_encode(['success' => false, 'message' => 'Requisição nao encontrada ou invalida!']);
-            exit();
-        }
-    } else {
-        echo json_encode(['success' => false, 'message' => 'Informações invalida!']);
-        exit();
-    }
-} else if (isset($_POST['type']) && $_POST['type'] === 'mkt') {
-    $title = $_POST['title'];
-    $end = $_POST['end'];
-    $descp = $_POST['descp'];
-    $type = $_POST['model'] ? $_POST['model'] : $_POST['outros_texto'];
-    $obs = $_POST['obs'];
-    $priority = $_POST['priority'] ?? 2;
-
-    if ($title && $end) {
-        $stmt = $pdo->prepare('INSERT INTO ctd_mkt_frm (created_by, created_at, title, `date`, descp, `type`, obs, priority, subdivision_id) VALUES (?, NOW(), ?, ?, ?, ?, ?, ?, ?)');
-        if ($stmt->execute([$_SESSION['id'], $title, $end, $descp, $type, $obs, $priority, $subdivision_id])) {
-            echo json_encode(['success' => true, 'message' => 'Requisição de MKT enviada com sucesso!']);
-            exit();
-        } else {
-            echo json_encode(['success' => false, 'message' => 'Requisição nao encontrada ou invalida!']);
-            exit();
-        }
-    } else {
-        echo json_encode(['success' => false, 'message' => 'Informações invalida!']);
-        exit();
-    }
-} else if (isset($_POST['type']) && $_POST['type'] === 'ti') {
-    $title = $_POST['title'];
-    $end = $_POST['end'];
-    $details = $_POST['details'];
-    $urgent = $_POST['urgent'] ?? '';
-    $obs = $_POST['obs'];
-    $priority = $_POST['priority'] ?? 2;
-
-    if ($title && $end && $details) {
-        $stmt = $pdo->prepare('INSERT INTO ctd_ti_frm (created_by, created_at, title, `date`, descp, urgent, obs, priority, subdivision_id) VALUES (?, NOW(), ?, ?, ?, ?, ?, ?, ?)');
-        if ($stmt->execute([$_SESSION['id'], $title, $end, $details, $urgent, $obs, $priority, $subdivision_id])) {
-            echo json_encode(['success' => true, 'message' => 'Requisição de TI enviada com sucesso!']);
-            exit();
-        } else {
-            echo json_encode(['success' => false, 'message' => 'Requisição nao encontrada ou invalida!']);
-            exit();
-        }
-    } else {
-        echo json_encode(['success' => false, 'message' => 'Informações invalida!']);
-        exit();
-    }
-} else {
-    echo json_encode(['success' => false, 'message' => 'Requisição invalida!']);
-    exit();
+/**
+ * Lê um campo de texto do POST, aparando espaços e limitando o tamanho.
+ */
+function postText(string $key, int $maxLength = 5000): string
+{
+    return mb_substr(trim((string)($_POST[$key] ?? '')), 0, $maxLength);
 }
 
+function fail(string $message): void
+{
+    jsonResponse(['success' => false, 'message' => $message]);
+}
+
+// Tipo do formulário => setor (tabela) e rótulo amigável
+$types = [
+    'service'    => ['table' => 'service', 'label' => 'Manutenção'],
+    'shopping'   => ['table' => 'shop',    'label' => 'Compras'],
+    'colorPrint' => ['table' => 'xerox',   'label' => 'Reprografia'],
+    'mkt'        => ['table' => 'mkt',     'label' => 'Marketing'],
+    'ti'         => ['table' => 'ti',      'label' => 'TI'],
+];
+
+$typeKey = (string)($_POST['type'] ?? '');
+if (!isset($types[$typeKey])) {
+    fail('Tipo de requisição inválido. Volte e escolha o setor novamente.');
+}
+$sector = $types[$typeKey]['table'];
+$sectorLabel = $types[$typeKey]['label'];
+
+// ---- Campos comuns ----
+$title = postText('title', 255);
+$end = postText('end', 10);
+$obs = postText('obs', 2000);
+$priority = (int)($_POST['priority'] ?? 2);
+
+if ($title === '') {
+    fail('Escreva um título curto para a sua requisição.');
+}
+if (!in_array($priority, [1, 2, 3, 4], true)) {
+    $priority = 2;
+}
+// Marcação legada de "urgente" vira prioridade alta
+if (!empty($_POST['urgent']) && $priority < 3) {
+    $priority = 3;
+}
+$urgent = $priority >= 3 ? 1 : 0;
+
+$endDate = DateTime::createFromFormat('!Y-m-d', $end);
+if ($end === '' || !$endDate || $endDate->format('Y-m-d') !== $end) {
+    fail('Informe a data em que você precisa receber.');
+}
+if ($endDate < new DateTime('today')) {
+    fail('A data de entrega não pode ser no passado.');
+}
+
+// ---- Campos específicos por setor ----
+switch ($sector) {
+    case 'service':
+    case 'ti':
+    case 'shop':
+        $details = postText('details');
+        if ($details === '') {
+            fail('Descreva o que você precisa.');
+        }
+        if ($sector === 'shop') {
+            $sql = 'INSERT INTO ctd_shop_frm (created_by, created_at, title, `date`, descp, obs, priority, urgent, subdivision_id) VALUES (?, NOW(), ?, ?, ?, ?, ?, ?, ?)';
+        } else {
+            $sql = "INSERT INTO ctd_{$sector}_frm (created_by, created_at, title, `date`, descp, obs, priority, urgent, subdivision_id) VALUES (?, NOW(), ?, ?, ?, ?, ?, ?, ?)";
+        }
+        $params = [$_SESSION['id'], $title, $end, $details, $obs, $priority, $urgent, $subdivision_id];
+        break;
+
+    case 'xerox':
+        $file = postText('file', 255);
+        $qtdRaw = trim((string)($_POST['qtd'] ?? ''));
+        $model = postText('model', 50);
+        if ($qtdRaw === '' || !ctype_digit($qtdRaw) || (int)$qtdRaw < 1 || (int)$qtdRaw > 100000) {
+            fail('Informe quantas cópias você precisa (número maior que zero).');
+        }
+        if ($model === '') {
+            fail('Escolha o formato da impressão.');
+        }
+        $sql = 'INSERT INTO ctd_xerox_frm (created_by, created_at, title, `date`, arquive, qtd, `type`, obs, priority, urgent, subdivision_id) VALUES (?, NOW(), ?, ?, ?, ?, ?, ?, ?, ?, ?)';
+        $params = [$_SESSION['id'], $title, $end, $file, (int)$qtdRaw, $model, $obs, $priority, $urgent, $subdivision_id];
+        break;
+
+    case 'mkt':
+        // Aceita 'details' (padrão) e 'descp' (nome antigo do campo)
+        $details = postText('details') ?: postText('descp');
+        $model = postText('model', 255);
+        if ($model === '' || $model === 'outros') {
+            $model = postText('outros_texto', 255);
+        }
+        if ($model === '') {
+            fail('Escolha onde a peça será usada (ou descreva em "Outros").');
+        }
+        $sql = 'INSERT INTO ctd_mkt_frm (created_by, created_at, title, `date`, descp, `type`, obs, priority, urgent, subdivision_id) VALUES (?, NOW(), ?, ?, ?, ?, ?, ?, ?, ?)';
+        $params = [$_SESSION['id'], $title, $end, $details, $model, $obs, $priority, $urgent, $subdivision_id];
+        break;
+
+    default:
+        fail('Tipo de requisição inválido.');
+}
+
+try {
+    $pdo->beginTransaction();
+    $stmt = $pdo->prepare($sql);
+    $stmt->execute($params);
+    $newId = (int)$pdo->lastInsertId();
+
+    $userId = (int)$_SESSION['id'];
+    $userName = $_SESSION['name'] ?? 'Usuário';
+    RequestManager::addHistory($pdo, $newId, $sector, $userId, $userName, 'Requisição criada', null, 'Pendente');
+    $pdo->commit();
+} catch (Throwable $e) {
+    if ($pdo->inTransaction()) {
+        $pdo->rollBack();
+    }
+    error_log('addRequest.php: ' . $e->getMessage());
+    jsonResponse(['success' => false, 'message' => 'Não foi possível enviar agora. Tente de novo em instantes.'], 500);
+}
+
+// ---- Avisar quem aprova: administradores gerais + administradores da subdivisão ----
+$link = "request_detail?id=$newId&table=$sector";
+$approverIds = array_column(RequestManager::getAdmins($pdo), 'id');
+if ($subdivision_id) {
+    $approverIds = array_merge($approverIds, array_column(RequestManager::getSubdivisionAdmins($pdo, (int)$subdivision_id), 'id'));
+}
+RequestManager::notifyMany(
+    $pdo,
+    array_values(array_unique(array_map('intval', $approverIds))),
+    'Nova requisição para aprovar',
+    "📥 $userName abriu a requisição #$newId ($sectorLabel) — \"$title\".",
+    $link,
+    $userId
+);
+
+jsonResponse([
+    'success' => true,
+    'message' => "Requisição #$newId enviada! Agora ela aguarda aprovação.",
+    'id' => $newId,
+    'table' => $sector,
+    'link' => $link,
+]);

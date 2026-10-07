@@ -3,11 +3,49 @@
 require_once __DIR__ . '/session.php';
 
 /**
+ * Erro com mensagem pensada para o usuário final (pode ser exibida como está).
+ */
+class UserMessage extends Exception
+{
+}
+
+/**
  * Escapa texto para saída HTML.
  */
 function e($value): string
 {
     return htmlspecialchars((string)($value ?? ''), ENT_QUOTES, 'UTF-8');
+}
+
+/**
+ * Vocabulário único de situação da requisição (usar em TODAS as telas).
+ */
+function statusLabels(): array
+{
+    return [
+        'P' => 'Aguardando aprovação',
+        'Y' => 'Aprovada',
+        'W' => 'Em atendimento',
+        'C' => 'Concluída',
+        'N' => 'Recusada',
+        'F' => 'Encaminhada a outro setor',
+    ];
+}
+
+function statusLabel(?string $status): string
+{
+    $status = strtoupper(trim((string)$status));
+    return statusLabels()[$status === '' ? 'P' : $status] ?? 'Desconhecida';
+}
+
+function priorityLabels(): array
+{
+    return [1 => 'Baixa', 2 => 'Normal', 3 => 'Alta', 4 => 'Crítica'];
+}
+
+function priorityLabel(int $priority): string
+{
+    return priorityLabels()[$priority] ?? 'Normal';
 }
 
 function jsonResponse(array $payload, int $status = 200): void

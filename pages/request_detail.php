@@ -526,13 +526,13 @@ $activeForward = RequestForwardService::getActiveForward($pdo, $req_id, $req_tab
                             <button onclick="globalRequestAction('finish', '<?= $req_id ?>', 'ctd_<?= $req_table ?>_frm')" class="btn-action btn-primary">
                                 <i class="fa-solid fa-check-circle"></i> CONCLUIR
                             </button>
-                        <?php elseif ($isGestor && $canManageThisRequest && in_array($current_status, ['Y', 'A'])): ?>
+                        <?php elseif ($isGestor && $canManageThisRequest && $current_status === 'Y'): ?>
                             <button onclick="globalRequestAction('start_progress', '<?= $req_id ?>', 'ctd_<?= $req_table ?>_frm')" class="btn-action btn-primary">
                                 <i class="fa-solid fa-play"></i> INICIAR ATENDIMENTO
                             </button>
                         <?php endif; ?>
 
-                        <?php if (in_array($current_status, ['C', 'N']) && $canManageThisRequest): ?>
+                        <?php if ($current_status === 'C' && $canManageThisRequest): ?>
                             <button onclick="globalRequestAction('reset_status', '<?= $req_id ?>', 'ctd_<?= $req_table ?>_frm')" class="btn-action" style="background:#fff7ed; color:#c2410c;">
                                 <i class="fa-solid fa-rotate-left"></i> REABRIR
                             </button>

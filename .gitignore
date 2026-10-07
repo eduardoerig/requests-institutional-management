@@ -10,7 +10,6 @@ Thumbs.db
 desktop.ini
 
 # Environment/Config
-config/conn.php
 config/conn.local.php
 .env
 
