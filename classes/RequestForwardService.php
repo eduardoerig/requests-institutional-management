@@ -272,7 +272,7 @@ class RequestForwardService
                 self::setRequestStatus($pdo, $sector, $reqId, 'F', $back);
             }
             RequestManager::addHistory($pdo, $reqId, $sector, $userId, $userName,
-                $fwd['mode'] === 'transfer' ? "Setor $toLabel assumiu o pedido" : "Setor $toLabel aceitou ajudar",
+                $fwd['mode'] === 'transfer' ? "Assumiu o pedido ($toLabel)" : "Aceitou ajudar ($toLabel)",
                 null, $toLabel);
             $pdo->commit();
         } catch (Throwable $e) {
@@ -318,7 +318,7 @@ class RequestForwardService
                 $back = in_array($fwd['previous_status'], ['Y', 'W'], true) ? $fwd['previous_status'] : 'Y';
                 self::setRequestStatus($pdo, $sector, $reqId, 'F', $back);
             }
-            RequestManager::addHistory($pdo, $reqId, $sector, $userId, $userName, "Setor $toLabel recusou o encaminhamento", null, null);
+            RequestManager::addHistory($pdo, $reqId, $sector, $userId, $userName, "Recusou o encaminhamento ($toLabel)", null, null);
             $pdo->commit();
         } catch (Throwable $e) {
             return self::rollback($pdo, $e, 'refuse');
@@ -383,7 +383,7 @@ class RequestForwardService
         try {
             $pdo->beginTransaction();
             self::changeForward($pdo, $forwardId, $fwd['status'], 'returned', $userId, $note);
-            RequestManager::addHistory($pdo, $reqId, $sector, $userId, $userName, "Setor $toLabel devolveu a ajuda", null, null);
+            RequestManager::addHistory($pdo, $reqId, $sector, $userId, $userName, "Devolveu a ajuda ($toLabel)", null, null);
             $pdo->commit();
         } catch (Throwable $e) {
             return self::rollback($pdo, $e, 'return');

@@ -14,6 +14,11 @@ $basePath = rtrim(str_replace(chr(92), '/', dirname($_SERVER['SCRIPT_NAME'])), '
 
 // Solicitante não tem painel: vai direto para as próprias requisições
 $requestedPage = (isset($url[0]) && $url[0] !== '') ? $url[0] : 'home';
+// Já entrou: a tela de login leva para o início
+if ($logged && $requestedPage === 'login' && $force_reset !== 1) {
+    header('Location: ./');
+    exit;
+}
 // Filas antigas viraram abas da Caixa do setor
 $legacyQueues = ['approved' => 'novos', 'inWork' => 'andamento'];
 if ($logged && isset($legacyQueues[$requestedPage]) && $force_reset !== 1) {
@@ -145,13 +150,20 @@ $pageClass = preg_replace('/[^a-zA-Z_]/', '', (string)$page);
                     resolve(false);
                 };
 
+                const handleKey = (e) => { if (e.key === 'Escape') handleCancel(); };
+                const handleBackdrop = (e) => { if (e.target === globalModal) handleCancel(); };
+
                 const cleanup = () => {
                     modalBtnConfirm.removeEventListener('click', handleConfirm);
                     modalBtnCancel.removeEventListener('click', handleCancel);
+                    document.removeEventListener('keydown', handleKey);
+                    globalModal.removeEventListener('click', handleBackdrop);
                 };
 
                 modalBtnConfirm.addEventListener('click', handleConfirm);
                 modalBtnCancel.addEventListener('click', handleCancel);
+                document.addEventListener('keydown', handleKey);
+                globalModal.addEventListener('click', handleBackdrop);
             });
         };
 
@@ -226,7 +238,7 @@ $pageClass = preg_replace('/[^a-zA-Z_]/', '', (string)$page);
                             <button type="button" onclick="markAllRead()">Marcar todos como lidos</button>
                         </div>
                         <div class="notif-body" id="notif-body">
-                            <div class="notif-empty">Nenhum aviso novo</div>
+                            <div class="notif-empty">Carregando avisos...</div>
                         </div>
                     </div>
                 </div>
@@ -279,7 +291,7 @@ $pageClass = preg_replace('/[^a-zA-Z_]/', '', (string)$page);
             ];
         }
         ?>
-        <nav class="bottom-nav" aria-label="Navegação principal">
+        <nav class="bottom-nav" aria-label="Navegação principal" data-sync="bottom-nav">
             <?php foreach ($bottomItems as [$href, $icon, $label]):
                 $isNew = $href === 'new_request';
                 $active = $page === $href;

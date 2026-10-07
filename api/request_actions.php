@@ -129,8 +129,8 @@ try {
             $pdo->commit();
 
             RequestManager::notifyStakeholders($pdo, $reqData, $sector,
-                "Atendimento Iniciado",
-                "⚙️ Atendimento iniciado para a requisição #$id ($sectorLabel) por $user_name.",
+                "Pedido em atendimento",
+                "O setor de $sectorLabel começou a atender o pedido nº $id. Responsável: $user_name.",
                 $link, $user_id
             );
 
@@ -194,8 +194,8 @@ try {
             $pdo->commit();
 
             RequestManager::notifyStakeholders($pdo, $reqData, $sector,
-                "Prioridade Alterada",
-                "🔔 Prioridade da requisição #$id ($sectorLabel) alterada para $newVal por $user_name.",
+                "Urgência alterada",
+                "A urgência do pedido nº $id ($sectorLabel) mudou para $newVal. Alterado por $user_name.",
                 $link, $user_id
             );
 

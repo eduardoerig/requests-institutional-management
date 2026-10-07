@@ -90,11 +90,10 @@ $link = "request_detail?id=$id&table=$table";
 
 // ---- Notificar o Solicitante ----
 if ($createdBy) {
-    $icon = $value === 'Y' ? '✅' : '❌';
     RequestManager::notify(
         $pdo, $createdBy,
-        "Requisição $response",
-        "$icon Sua requisição #$id ($sectorLabel) — \"$reqTitle\" — foi " . mb_strtolower($response) . " por $user_name." . ($reason !== '' ? " Motivo: $reason" : ''),
+        $value === 'Y' ? "Pedido nº $id aprovado" : "Pedido nº $id recusado",
+        "Seu pedido \"$reqTitle\" ($sectorLabel) foi " . mb_strtolower($response) . " por $user_name." . ($reason !== '' ? " Motivo: $reason" : ''),
         $link
     );
 }
@@ -107,8 +106,8 @@ if ($value === 'Y') {
         if ($manager['id'] == $createdBy) continue; // Já notificado acima
         RequestManager::notify(
             $pdo, $manager['id'],
-            "Nova Requisição Aprovada",
-            "📋 Requisição #$id ($sectorLabel) — \"$reqTitle\" — foi aprovada e aguarda atendimento.",
+            "Pedido novo para atender",
+            "O pedido nº $id, \"$reqTitle\", foi aprovado e está na Caixa do setor.",
             $link
         );
     }
@@ -128,8 +127,8 @@ foreach ($admins as $admin) {
     if (!$alreadyNotified) {
         RequestManager::notify(
             $pdo, $admin['id'],
-            "Requisição $response",
-            "📝 Requisição #$id ($sectorLabel) foi $response por $user_name.",
+            "Pedido nº $id " . mb_strtolower($response),
+            "O pedido nº $id ($sectorLabel) foi " . mb_strtolower($response) . " por $user_name.",
             $link
         );
     }

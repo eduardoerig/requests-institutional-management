@@ -49,7 +49,7 @@ $menuItem = function (string $href, string $icon, string $label, int $badge = 0,
         <img src="assets/img/LogoFavConSisreq.png" alt="">
         <span>SisReq</span>
     </a>
-    <nav aria-label="Menu principal">
+    <nav aria-label="Menu principal" data-sync="menu">
         <a href="new_request" class="menu-link menu-link--new<?= $currentPage === 'new_request' ? ' is-active' : '' ?>"><i class="fa-solid fa-plus" aria-hidden="true"></i><span>Nova requisição</span></a>
         <?= $menuItem('myRequests', 'fa-folder-open', 'Minhas requisições', 0, '', $currentPage === 'myRequests') ?>
 

@@ -111,8 +111,8 @@ $pipeline = [
     'P' => ['Aguardando aprovação', $pendentes ?? 0],
     'Y' => [$isGestor ? 'Para atender' : 'Aprovadas', $aprovadas ?? 0],
     'W' => ['Em atendimento', $emAndamento ?? 0],
-    'C' => ['Concluídas', $concluidas ?? 0],
     'F' => ['Encaminhadas', $repassadas ?? 0],
+    'C' => ['Concluídas', $concluidas ?? 0],
     'N' => ['Recusadas', $recusadas ?? 0],
 ];
 if ($isGestor) {

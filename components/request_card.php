@@ -82,6 +82,19 @@ if (!function_exists('renderRequestCard')) {
             . '</a>';
     }
 
+    /** Aviso de prazo só quando importa: atrasada, vence hoje ou amanhã */
+    function requestDeadlineFlag(string $date): string
+    {
+        if ($date === '' || strpos($date, '0000') === 0) {
+            return '';
+        }
+        $days = (int)round((strtotime(date('Y-m-d', strtotime($date))) - strtotime(date('Y-m-d'))) / 86400);
+        if ($days < 0) return '<span class="flag flag--bad">Atrasada</span>';
+        if ($days === 0) return '<span class="flag flag--warn">Vence hoje</span>';
+        if ($days === 1) return '<span class="flag flag--warn">Vence amanhã</span>';
+        return '';
+    }
+
     /**
      * Linha compacta das filas de trabalho: número, título, quem pediu, prazo e no máximo um aviso.
      * $note: frase curta sobre encaminhamento (opcional).
@@ -95,16 +108,11 @@ if (!function_exists('renderRequestCard')) {
         $link = 'request_detail?id=' . $id . '&table=' . urlencode($sector);
 
         // Um aviso só, o mais importante
-        $flag = '';
         $date = (string)($row['date'] ?? '');
-        if (!in_array($status, ['C', 'N'], true) && $date !== '' && strpos($date, '0000') !== 0) {
-            $days = (int)round((strtotime(date('Y-m-d', strtotime($date))) - strtotime(date('Y-m-d'))) / 86400);
-            if ($days < 0) $flag = '<span class="flag flag--bad">Atrasada</span>';
-            elseif ($days === 0) $flag = '<span class="flag flag--warn">Vence hoje</span>';
-            elseif ($days === 1) $flag = '<span class="flag flag--warn">Vence amanhã</span>';
-        }
-        if ($flag === '' && $priority === 4) $flag = '<span class="flag flag--bad">Crítica</span>';
-        elseif ($flag === '' && $priority === 3) $flag = '<span class="flag flag--warn">Urgente</span>';
+        $done = in_array($status, ['C', 'N'], true);
+        $flag = $done ? '' : requestDeadlineFlag($date);
+        if (!$done && $flag === '' && $priority === 4) $flag = '<span class="flag flag--bad">Crítica</span>';
+        elseif (!$done && $flag === '' && $priority === 3) $flag = '<span class="flag flag--warn">Urgente</span>';
 
         $who = $row['solicitor_name_formatted'] ?? $row['solicitor_name'] ?? '';
         $deadline = ($date !== '' && strpos($date, '0000') !== 0) ? 'até ' . date('d/m', strtotime($date)) : 'sem prazo';

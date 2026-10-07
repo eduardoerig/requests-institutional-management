@@ -435,8 +435,6 @@ async function globalRequestAction(action, id, table, value = '') {
     const confirmations = {
         'reset_status': 'Reabrir esta requisição? Ela volta para "Em atendimento".',
         'finish': 'Marcar como concluída? O solicitante será avisado que o pedido foi atendido.',
-        'start_progress': 'Começar o atendimento agora? O solicitante será avisado.',
-        'set_priority': 'Mudar a urgência desta requisição?',
         'approve': 'Deseja APROVAR esta requisição?',
         'reject': 'Deseja RECUSAR esta requisição?',
         'delete': 'Deseja cancelar esta requisição? Ela será apagada e não poderá ser recuperada.'
@@ -608,22 +606,40 @@ async function refreshAfterChange() {
         setTimeout(() => location.reload(), 700);
         return;
     }
-    const selected = queue.querySelector('.row-item.selected');
-    const key = selected ? selected.dataset.table + ':' + selected.dataset.id : null;
+    const panel = document.getElementById('requestPanel');
+    const key = panel ? panel.dataset.key : null;
+    const advance = queue.hasAttribute('data-advance');
+    const rows = [...queue.querySelectorAll('.row-item')];
+    const oldIndex = key ? rows.findIndex(r => r.dataset.table + ':' + r.dataset.id === key) : -1;
     try {
-        const html = await (await fetch(location.href, { headers: { 'X-Requested-With': 'fetch' } })).text();
+        const html = await (await fetch(queue.dataset.url || location.href, { headers: { 'X-Requested-With': 'fetch' } })).text();
         const doc = new DOMParser().parseFromString(html, 'text/html');
         const fresh = doc.querySelector('[data-queue]');
-        if (fresh) queue.replaceWith(fresh);
+        if (fresh) {
+            // o painel continua o mesmo elemento (evita piscar)
+            const freshPanel = fresh.querySelector('#requestPanel');
+            if (freshPanel && panel) freshPanel.replaceWith(panel);
+            queue.replaceWith(fresh);
+        }
         document.querySelectorAll('[data-sync]').forEach(el => {
             const twin = doc.querySelector(`[data-sync="${el.dataset.sync}"]`);
             if (twin) el.replaceWith(twin);
         });
         bindQueue();
-        if (key) {
-            const [table, id] = key.split(':');
-            const row = document.querySelector(`[data-queue] .row-item[data-table="${table}"][data-id="${id}"]`);
+        if (!key) return;
+        const [table, id] = key.split(':');
+        const row = document.querySelector(`[data-queue] .row-item[data-table="${table}"][data-id="${id}"]`);
+        if (row || !advance) {
             openInPanel(table, id, row);
+            return;
+        }
+        // Aprovar pedidos: o pedido decidido sai da lista, abre o próximo
+        const next = document.querySelectorAll('[data-queue] .row-item')[Math.max(0, oldIndex)] || document.querySelector('[data-queue] .row-item');
+        if (next) {
+            openInPanel(next.dataset.table, next.dataset.id, next);
+        } else if (panel) {
+            panel.innerHTML = '<div class="empty-state"><i class="fa-regular fa-circle-check" aria-hidden="true"></i><p>Tudo em dia: nenhum pedido aguardando.</p></div>';
+            delete panel.dataset.key;
         }
     } catch (err) {
         location.reload();
@@ -753,6 +769,7 @@ async function openInPanel(table, id, row) {
     try {
         const response = await fetch(`api/request_view.php?id=${encodeURIComponent(id)}&table=${encodeURIComponent(table)}`);
         panel.innerHTML = await response.text();
+        panel.dataset.key = table + ':' + id;
         initRequestView(panel);
         const url = new URL(location.href);
         url.searchParams.set('sel', table + ':' + id);

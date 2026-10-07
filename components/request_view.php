@@ -46,6 +46,19 @@ if (!function_exists('renderRequestView')) {
         $openIsForMe = $open && ($isGlobalAdmin || in_array((int)$open['to_area_id'], $viewerAreas, true));
         $openIsFromMe = $open && ($isGlobalAdmin || (int)$open['forwarded_by'] === $viewerId || in_array((int)$open['from_area_id'], $viewerAreas, true));
 
+        // Sem encaminhamento aberto: mostra o último respondido (por que veio, o que voltou, por que recusaram)
+        $lastDone = null;
+        if (!$open && $isStaff && !in_array($status, ['C', 'N'], true)) {
+            foreach (array_reverse($forwards) as $f) {
+                if (in_array($f['status'], ['accepted', 'returned', 'refused'], true)) {
+                    $lastDone = $f;
+                }
+                if ($f['status'] !== 'cancelled') {
+                    break;
+                }
+            }
+        }
+
         // Frase "Agora": o que falta e de quem depende
         if ($status === 'P') {
             $now = 'Aguardando a aprovação da coordenação.';
@@ -91,12 +104,18 @@ if (!function_exists('renderRequestView')) {
         $st = $pdo->prepare('SELECT user_name, action, created_at FROM request_history WHERE request_id = ? AND request_table = ? ORDER BY created_at ASC, id ASC');
         $st->execute([$reqId, $sector]);
         $events = [];
-        $forwardActionPattern = '/^(Encaminhou|Pediu ajuda|Setor .* (assumiu|aceitou|recusou|devolveu)|Cancelou o encaminhamento)/u';
+        $forwardActionPattern = '/^(Encaminhou|Pediu ajuda|Setor .* (assumiu|aceitou|recusou|devolveu)|Cancelou o encaminhamento|Assumiu o pedido|Aceitou ajudar|Recusou o encaminhamento|Devolveu a ajuda)/u';
         foreach ($st->fetchAll(PDO::FETCH_ASSOC) as $h) {
             if ($isStaff && preg_match($forwardActionPattern, $h['action'])) {
                 continue; // contado abaixo, com a mensagem
             }
-            $events[] = ['at' => $h['created_at'], 'who' => $h['user_name'], 'text' => $h['action'], 'note' => null];
+            $text = (string)$h['action'];
+            if (preg_match('/^Setor (.+?) (assumiu o pedido|aceitou ajudar|recusou o encaminhamento|devolveu a ajuda)$/u', $text, $m)) {
+                $text = $m[2] . ' (' . $m[1] . ')';
+            } elseif (preg_match('/^Requisição /u', $text)) {
+                $text = mb_strtolower($text);
+            }
+            $events[] = ['at' => $h['created_at'], 'who' => $h['user_name'], 'text' => $text, 'note' => null];
         }
         if ($isStaff) {
             $responses = ['accepted' => 'aceitou', 'refused' => 'recusou', 'returned' => 'devolveu a ajuda', 'cancelled' => 'cancelou o envio', 'completed' => 'concluiu'];
@@ -156,7 +175,7 @@ if (!function_exists('renderRequestView')) {
             <?php endif; ?>
             <?php if ($canWork && $status === 'Y' && !($open && $open['mode'] === 'transfer')): ?>
                 <button type="button" class="btn btn--primary" onclick="requestAct('start_progress', <?= $reqId ?>, '<?= e($fullTable) ?>')"><i class="fa-solid fa-play" aria-hidden="true"></i> Começar atendimento</button>
-            <?php elseif ($canWork && $status === 'W'): ?>
+            <?php elseif ($canWork && $status === 'W' && !$open): ?>
                 <button type="button" class="btn btn--success" onclick="requestAct('finish', <?= $reqId ?>, '<?= e($fullTable) ?>')"><i class="fa-solid fa-check-double" aria-hidden="true"></i> Concluir</button>
             <?php endif; ?>
             <?php if ($canForward): ?>
@@ -197,14 +216,18 @@ if (!function_exists('renderRequestView')) {
                     <i class="fa-solid fa-handshake-angle" aria-hidden="true"></i> <?= e($open['from_label']) ?> pediu ajuda a <?= e($open['to_label']) ?>
                 <?php endif; ?>
             </p>
-            <blockquote class="forward-box__msg"><?= nl2br(e($open['observation'])) ?></blockquote>
+            <?php if (trim((string)$open['observation']) !== ''): ?>
+                <blockquote class="forward-box__msg"><?= nl2br(e($open['observation'])) ?></blockquote>
+            <?php else: ?>
+                <p class="forward-box__meta">Enviado sem mensagem.</p>
+            <?php endif; ?>
             <p class="forward-box__meta"><?= e($open['forwarded_by_name'] ?? '') ?>, <?= e(date('d/m \à\s H:i', strtotime($open['created_at']))) ?><?= $open['status'] === 'accepted' ? ' · aceito' : '' ?></p>
             <div class="rv-actions">
                 <?php if ($openIsForMe && $open['status'] === 'pending'): ?>
                     <button type="button" class="btn btn--success" onclick="forwardAct('accept', <?= (int)$open['id'] ?>)"><i class="fa-solid fa-check" aria-hidden="true"></i> <?= $open['mode'] === 'transfer' ? 'Aceitar e assumir' : 'Aceitar ajudar' ?></button>
                     <button type="button" class="btn btn--danger" onclick="forwardAct('refuse', <?= (int)$open['id'] ?>)">Recusar</button>
                 <?php endif; ?>
-                <?php if ($openIsForMe && $open['mode'] === 'help'): ?>
+                <?php if ($openIsForMe && $open['mode'] === 'help' && $open['status'] === 'accepted'): ?>
                     <button type="button" class="btn btn--primary" onclick="forwardAct('return', <?= (int)$open['id'] ?>)"><i class="fa-solid fa-reply" aria-hidden="true"></i> Devolver com retorno</button>
                 <?php endif; ?>
                 <?php if ($openIsFromMe && $open['status'] === 'pending' && !$openIsForMe): ?>
@@ -214,10 +237,28 @@ if (!function_exists('renderRequestView')) {
         </section>
     <?php endif; ?>
 
+    <?php if ($lastDone):
+        $doneText = [
+            'accepted' => $lastDone['mode'] === 'transfer'
+                ? 'Veio de ' . $lastDone['from_label'] . ' por transferência'
+                : $lastDone['to_label'] . ' está ajudando',
+            'returned' => $lastDone['to_label'] . ' devolveu a ajuda',
+            'refused' => $lastDone['to_label'] . ' recusou o encaminhamento',
+        ][$lastDone['status']];
+        $doneNote = $lastDone['status'] === 'accepted' ? (string)$lastDone['observation'] : (string)$lastDone['response_note'];
+        if ($lastDone['status'] === 'accepted' && $lastDone['mode'] === 'help') { $doneNote = ''; }
+    ?>
+        <section class="forward-box forward-box--done<?= $lastDone['status'] === 'refused' ? ' forward-box--bad' : '' ?>" aria-label="Último encaminhamento">
+            <p class="forward-box__title"><?= e($doneText) ?></p>
+            <?php if (trim($doneNote) !== ''): ?><blockquote class="forward-box__msg"><?= nl2br(e($doneNote)) ?></blockquote><?php endif; ?>
+            <p class="forward-box__meta"><?= e(($lastDone['status'] === 'accepted' ? ($lastDone['forwarded_by_name'] ?? '') : ($lastDone['responded_by_name'] ?? '')) ?: '') ?><?= !empty($lastDone['responded_at']) ? ', ' . e(date('d/m \à\s H:i', strtotime((string)$lastDone['responded_at']))) : '' ?></p>
+        </section>
+    <?php endif; ?>
+
     <section class="rv-section" aria-label="O que foi pedido">
         <dl class="rv-facts">
             <div><dt>Quem pediu</dt><dd><?= e($req['creator_name'] ?? '—') ?><?= $subdivision ? ', ' . e($subdivision) : '' ?></dd></div>
-            <div><dt>Para quando</dt><dd><?= e($deadline) ?> <?= in_array($status, ['C', 'N'], true) ? '' : getPrazoBadge($req['date'] ?? '', $status) ?></dd></div>
+            <div><dt>Para quando</dt><dd><?= e($deadline) ?> <?= in_array($status, ['C', 'N'], true) ? '' : requestDeadlineFlag((string)($req['date'] ?? '')) ?></dd></div>
             <div><dt>Urgência</dt><dd class="<?= $priority >= 3 ? 'prio-tag prio-tag--' . $priority : '' ?>"><?= e(priorityLabel($priority)) ?></dd></div>
             <div><dt>Pedido em</dt><dd><?= e(date('d/m/Y \à\s H:i', strtotime((string)$req['created_at']))) ?></dd></div>
         </dl>

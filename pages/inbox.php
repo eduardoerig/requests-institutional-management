@@ -43,12 +43,13 @@ $noteFor = function (array $row) use ($tab): array {
     if (!$f) {
         return ['', ''];
     }
-    $preview = mb_strlen((string)$f['observation']) > 70 ? mb_substr((string)$f['observation'], 0, 67) . '...' : (string)$f['observation'];
+    $text = trim((string)$f['observation']);
+    $preview = $text === '' ? '' : ': ' . (mb_strlen($text) > 70 ? mb_substr($text, 0, 67) . '...' : $text);
     if ($tab === 'chegaram') {
-        return [($f['mode'] === 'help' ? $f['from_label'] . ' pede ajuda: ' : $f['from_label'] . ' quer transferir: ') . $preview, 'in'];
+        return [($f['mode'] === 'help' ? $f['from_label'] . ' pede ajuda' : $f['from_label'] . ' quer transferir') . $preview, 'in'];
     }
     if ($tab === 'ajudando') {
-        return ['Ajudando ' . $f['from_label'] . ': ' . $preview, 'in'];
+        return ['Ajudando ' . $f['from_label'] . $preview, 'in'];
     }
     if ($tab === 'enviados') {
         $state = [
@@ -108,7 +109,7 @@ $emptyText = [
     <?php endforeach; ?>
 </nav>
 
-<div class="workbench" data-queue>
+<div class="workbench" data-queue data-url="<?= e($tabLink($tab)) ?>">
     <div class="workbench__list" aria-label="Pedidos">
         <?php if ($q !== ''): ?>
             <p class="result-count"><?= count($rows) ?> resultado(s) para "<?= e($q) ?>" <a href="<?= e($tabLink($tab)) ?>">limpar</a></p>

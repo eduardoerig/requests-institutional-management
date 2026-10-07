@@ -42,7 +42,7 @@ $total = count($requests);
 <div class="page-head">
     <div class="page-head--hide-mobile">
         <h1>Aprovar pedidos</h1>
-        <p><?= $total === 0 ? 'Nenhum pedido esperando sua decisão.' : ($total === 1 ? '1 pedido esperando sua decisão.' : $total . ' pedidos esperando sua decisão, do mais antigo para o mais novo.') ?></p>
+        <p data-sync="approve-sub"><?= $total === 0 ? 'Nenhum pedido esperando sua decisão.' : ($total === 1 ? '1 pedido esperando sua decisão.' : $total . ' pedidos esperando sua decisão, do prazo mais próximo para o mais distante.') ?></p>
     </div>
     <?php if ($total > 0): ?>
     <form method="get" action="approve" class="row" role="search" style="flex:1 1 320px; justify-content:flex-end;">
@@ -62,7 +62,7 @@ $total = count($requests);
     <?php endif; ?>
 </div>
 
-<div class="workbench" data-queue>
+<div class="workbench" data-queue data-advance>
     <div class="workbench__list" aria-label="Pedidos aguardando aprovação">
         <?php if ($q !== '' || $sector !== ''): ?>
             <p class="result-count"><?= count($rows) ?> de <?= $total ?> <a href="approve">limpar filtros</a></p>
