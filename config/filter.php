@@ -38,7 +38,7 @@ if (isset($_POST['action']) && $_POST['action'] === 'post') {
 
     $role = $_SESSION['role'] ?? 'solicitante';
     $current_user_id = $_SESSION['id'] ?? 0;
-    $isAdmin = in_array($role, ['admin', 'adm', 'coord']);
+    $isAdmin = isGlobalAdminRole($role);
     $isAdmSub = ($role === 'adm_sub');
     
     $subdivisionFilter = $isAdmSub ? ($_SESSION['subdivision_ids'] ?? null) : null;
@@ -243,75 +243,15 @@ if (isset($_POST['action']) && $_POST['action'] === 'post') {
         'shop' => 'Compras', 'service' => 'Manutenção', 'ti' => 'TI',
     ];
 
+    // Mesma ficha usada nas páginas (components/request_card.php)
+    require_once __DIR__ . '/../components/request_card.php';
+    $context = strpos($path, 'myRequests') !== false ? 'mine' : 'queue';
     $html = '';
-    if (count($requests) > 0) {
-        foreach ($requests as $row) {
-            $st = trim(strtoupper($row['status'] ?? 'P'));
-            $cardClass = isset($map[$row['table']]) ? $map[$row['table']] : 'gray';
-            
-            // Priority Badges
-            $pri = $row['priority'] ?? 2;
-            $priBadge = '';
-            if ($pri == 4) $priBadge = '<span class="card-priority critical"><i class="fa-solid fa-fire-extinguisher"></i></span>';
-            elseif ($pri == 3) $priBadge = '<span class="card-priority high"><i class="fa-solid fa-angles-up"></i></span>';
-
-            $sectorBadge = '<span class="card-sector-tag">' . ($sectorNames[$row['table']] ?? ucfirst($row['table'])) . '</span>';
-            
-            // Subdivision Badge
-            $subBadge = '';
-            if (!empty($row['subdivision_name'])) {
-                $subBadge = '<span class="badge-subdivision badge-sub-' . ($row['subdivision_slug'] ?? 'default') . '">' . htmlspecialchars($row['subdivision_name']) . '</span>';
-            }
-
-            // Timer visual para "Em Andamento" (W) ou "Repassada" (F)
-            $timerHtml = '';
-            if ($st === 'W' || $st === 'F') {
-                $createdAt = strtotime($row['created_at'] ?? 'now');
-                $elapsed = time() - $createdAt;
-                $days = floor($elapsed / 86400);
-                $hours = floor(($elapsed % 86400) / 3600);
-                $timeLabel = $days > 0 ? $days . 'd ' . $hours . 'h' : $hours . 'h';
-                $timeClass = ($elapsed > (3 * 86400)) ? 'timer-late' : 'timer-ok';
-                $timerHtml = '<span class="card-timer ' . $timeClass . '"><i class="fa-solid fa-stopwatch"></i> ' . $timeLabel . '</span>';
-            }
-
-            // Indicador de status para aprovadas
-            $statusIcon = '';
-            if ($st === 'Y' || $st === 'A') {
-                $statusIcon = '<span class="req_confirmed"><i class="fa-solid fa-check-circle"></i></span>';
-            }
-
-            // Badge de Repasse
-            $forwardedBadge = '';
-            if ($st === 'F') {
-                $forwardedBadge = '<span class="badge-forwarded"><i class="fa-solid fa-share-from-square"></i> Repassada</span>';
-            }
-            
-            // Nome da requisição (Padronizado como approve.php para consistência)
-            $reqNome = 'Requisição ' . strtoupper($sectorNames[$row['table']] ?? $row['table'] ?? '') . ' #' . $row['id'];
-            if (strpos($path, 'approve') !== false && strpos($path, 'approved') === false) {
-                // Em approve.php o estilo é um pouco diferente
-            }
-
-            $rd = $row['date'] ?? '';
-            $prazoBadge = getPrazoBadge($rd, $st);
-
-            $html .= '
-                <div class="card_req ' . $cardClass . ($st === 'F' ? ' forwarded' : '') . '" data-id="' . $row['id'] . '" data-table="' . $row['table'] . '">
-                    <div class="card_header">
-                        <span class="req_nome">' . $reqNome . ($st === 'F' ? ' <i class="fa-solid fa-share" style="font-size: 0.8rem; color: #f59e0b;"></i>' : '') . '</span>
-                        <div style="display:flex; gap:6px; align-items:center;">' . $timerHtml . $statusIcon . $priBadge . '</div>
-                    </div>
-                    <div class="card_title">' . htmlspecialchars($row['title']) . '</div>
-                    <div style="display:flex; justify-content:space-between; align-items:center; margin-top:8px; flex-wrap:wrap; gap:6px;">
-                        <div class="card_date" style="display:flex; align-items:center;">' . $prazoBadge . '</div>
-                        <div style="display:flex; gap:6px; align-items:center;">' . $forwardedBadge . $sectorBadge . '</div>
-                    </div>
-                </div>
-            ';
-        }
-    } else {
-        $html = '<div class="empty-state"><i class="fa-solid fa-inbox"></i><p>Nenhuma requisição encontrada.</p></div>';
+    foreach ($requests as $row) {
+        $html .= renderRequestCard($row, $context);
+    }
+    if ($html === '') {
+        $html = '<div class="empty-state"><i class="fa-solid fa-magnifying-glass" aria-hidden="true"></i><p>Nenhum pedido encontrado com esses filtros.</p></div>';
     }
 
     echo json_encode(['success' => true, 'message' => 'Filtro aplicado!', 'data' => $html]);

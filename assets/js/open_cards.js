@@ -36,7 +36,7 @@ function bindPopUpRequests() {
 
                 if (data && data.success) {
                     // Preencher todos os campos ANTES de mostrar ou fazer o fade in
-                    document.getElementById("modalNome").innerText = data.data.user.name + ' - #' + data.data.id;
+                    document.getElementById("modalNome").innerText = 'Nº ' + data.data.id + ', pedido de ' + data.data.user.name;
                     document.getElementById("modalTitle").innerText = data.data.title;
                     document.getElementById("modalDescp").innerHTML = data.data.descp || 'Sem descrição';
                     document.getElementById("modalDate").innerText = 'Precisa para: ' + (data.data.date || 'sem prazo');
