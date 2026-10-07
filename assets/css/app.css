@@ -918,8 +918,8 @@ details.panel[open] > summary::after { transform: rotate(180deg); }
 .request_models .card.blue { --setor: var(--setor-xerox); }
 .request_models .card.gray { --setor: var(--setor-mkt); }
 .request_models .card-text { min-width: 0; flex: 1; }
-.request_models .card h3 { font-size: 1rem; margin-bottom: 2px; }
-.request_models .card p { font-size: 0.86rem; color: var(--texto-2); }
+.request_models .card-title { display: block; font-size: 1.02rem; font-weight: 800; margin-bottom: 2px; }
+.request_models .card-desc { display: block; font-size: 0.88rem; color: var(--texto-2); line-height: 1.35; }
 .request_models .card-arrow { display: none; color: var(--texto-3); }
 @media (min-width: 900px) { .request_models .card-arrow { display: inline; } }
 
@@ -947,9 +947,20 @@ details.panel[open] > summary::after { transform: rotate(180deg); }
         position: sticky;
         bottom: calc(var(--bottomnav-h) + env(safe-area-inset-bottom) + 8px);
         z-index: 5;
-        padding-top: 8px;
-        background: linear-gradient(transparent, var(--superficie) 30%);
+        margin: 0 -16px -16px;
+        padding: 10px 16px 12px;
+        background: var(--superficie);
+        border-top: 1px solid var(--linha);
+        border-radius: 0 0 var(--r-ficha) var(--r-ficha);
     }
+    .form_request .form-submit-bar .form-required-hint { margin-bottom: 8px; }
+
+    /* Depois de escolher o tipo, mostra só o escolhido (toque nele para trocar) */
+    .new-request.has-choice .request_models { grid-template-columns: 1fr; }
+    .new-request.has-choice .request_models .card:not(.active) { display: none; }
+    .new-request.has-choice .request_models .card.active { flex-direction: row; align-items: center; min-height: 64px; }
+    .new-request.has-choice .request_models .card.active .card-desc { display: none; }
+    .new-request.has-choice .request_models .card.active::after { content: "Trocar"; margin-left: auto; font-weight: 700; color: var(--laranja); }
 }
 
 .request-success { display: flex; flex-direction: column; gap: 16px; padding: 8px 0; }
@@ -960,8 +971,16 @@ details.panel[open] > summary::after { transform: rotate(180deg); }
 
 /* ---------- 15. Detalhe ---------- */
 .detail { display: grid; gap: 16px; }
-@media (min-width: 1100px) { .detail__cols { display: grid; grid-template-columns: minmax(0, 1fr) 400px; gap: 16px; align-items: start; } }
-.detail__col { display: grid; gap: 16px; align-content: start; }
+.detail__cols { display: flex; flex-direction: column; gap: 16px; }
+.detail__col { display: contents; }
+.detail__cols .panel + .panel { margin-top: 0; }
+/* Celular: conversa antes do histórico */
+#historyPanel { order: 10; }
+#conversa { order: 5; }
+@media (min-width: 1100px) {
+    .detail__cols { display: grid; grid-template-columns: minmax(0, 1fr) 400px; align-items: start; }
+    .detail__col { display: grid; gap: 16px; align-content: start; }
+}
 .back-link { display: inline-flex; align-items: center; gap: 8px; min-height: 44px; color: var(--texto-2); font-weight: 700; text-decoration: none; }
 .back-link:hover { color: var(--texto); }
 
@@ -1177,3 +1196,11 @@ details.panel[open] > summary::after { transform: rotate(180deg); }
 .result-count { margin: -4px 0 12px; color: var(--texto-2); font-size: 0.92rem; }
 .only-desktop { display: none; }
 @media (min-width: 900px) { .only-desktop { display: initial; } .only-mobile { display: none !important; } }
+
+/* Painel do formulário assume a cor do setor escolhido */
+.form-panel[data-sector] .form-intro { border-left-color: var(--setor); }
+.form-panel[data-sector="ti"] { --setor: var(--setor-ti); }
+.form-panel[data-sector="service"] { --setor: var(--setor-service); }
+.form-panel[data-sector="shop"] { --setor: var(--setor-shop); }
+.form-panel[data-sector="xerox"] { --setor: var(--setor-xerox); }
+.form-panel[data-sector="mkt"] { --setor: var(--setor-mkt); }

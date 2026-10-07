@@ -1,7 +1,7 @@
 <form class="form_request" novalidate>
     <input type="hidden" name="type" value="ti">
 
-    <p class="form-intro" style="border-left-color: #ef4444; color: #b91c1c; background: #fef2f2;">Use para pedir <strong>ajuda com computador, internet, impressora, sistemas e acessos</strong>.</p>
+    <p class="form-intro">Use para pedir <strong>ajuda com computador, internet, impressora, sistemas e acessos</strong>.</p>
 
     <div class="form-group">
         <label for="title">Título <span class="req">*</span></label>
@@ -23,6 +23,8 @@
 
 <!--PRIORIDADE-->
 
-    <p class="form-required-hint"><span class="req">*</span> Campos obrigatórios</p>
-    <button type="submit"><i class="fa-solid fa-paper-plane"></i> Enviar requisição</button>
+    <div class="form-submit-bar">
+        <p class="form-required-hint"><span class="req">*</span> Campos obrigatórios</p>
+        <button type="submit"><i class="fa-solid fa-paper-plane" aria-hidden="true"></i> Enviar requisição</button>
+    </div>
 </form>

@@ -1,7 +1,7 @@
 <form class="form_request" novalidate>
     <input type="hidden" name="type" value="colorPrint">
 
-    <p class="form-intro" style="border-left-color: #06b6d4; color: #0e7490; background: #ecfeff;">Use para pedir <strong>impressões coloridas</strong> na reprografia.</p>
+    <p class="form-intro">Use para pedir <strong>impressões coloridas</strong> na reprografia.</p>
 
     <div class="form-group">
         <label for="title">Título <span class="req">*</span></label>
@@ -37,6 +37,8 @@
 
 <!--PRIORIDADE-->
 
-    <p class="form-required-hint"><span class="req">*</span> Campos obrigatórios</p>
-    <button type="submit"><i class="fa-solid fa-paper-plane"></i> Enviar requisição</button>
+    <div class="form-submit-bar">
+        <p class="form-required-hint"><span class="req">*</span> Campos obrigatórios</p>
+        <button type="submit"><i class="fa-solid fa-paper-plane" aria-hidden="true"></i> Enviar requisição</button>
+    </div>
 </form>

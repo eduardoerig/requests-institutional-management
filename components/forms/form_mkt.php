@@ -1,7 +1,7 @@
 <form class="form_request" novalidate>
     <input type="hidden" name="type" value="mkt">
 
-    <p class="form-intro" style="border-left-color: #54585a; color: #334155; background: #f8fafc;">Use para pedir <strong>artes e materiais de divulgação</strong>: posts, banners, panfletos, convites etc.</p>
+    <p class="form-intro">Use para pedir <strong>artes e materiais de divulgação</strong>: posts, banners, panfletos, convites etc.</p>
 
     <div class="form-group">
         <label for="title">Título <span class="req">*</span></label>
@@ -27,7 +27,7 @@
             <label><input type="radio" class="model_radius" name="model" value="Ingressos"> Ingressos</label>
             <label><input type="radio" class="model_radius" name="model" value="ClipEscola"> ClipEscola</label>
             <label><input type="radio" class="model_radius" name="model" value="outros" id="radio_outros"> Outro</label>
-            <input type="text" id="input_outros" name="outros_texto" maxlength="255" placeholder="Qual?" style="display:none;">
+            <input type="text" id="input_outros" name="outros_texto" maxlength="255" placeholder="Qual?" hidden>
         </div>
     </fieldset>
     <div class="form-group">
@@ -37,6 +37,8 @@
 
 <!--PRIORIDADE-->
 
-    <p class="form-required-hint"><span class="req">*</span> Campos obrigatórios</p>
-    <button type="submit"><i class="fa-solid fa-paper-plane"></i> Enviar requisição</button>
+    <div class="form-submit-bar">
+        <p class="form-required-hint"><span class="req">*</span> Campos obrigatórios</p>
+        <button type="submit"><i class="fa-solid fa-paper-plane" aria-hidden="true"></i> Enviar requisição</button>
+    </div>
 </form>

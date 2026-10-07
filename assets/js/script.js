@@ -171,20 +171,13 @@ function formatDate(dateStr) {
 
 function showToast(message, type = 'success') {
     const toast = document.querySelector(".toast");
-    
-    let icon = '<i class="fa-solid fa-check-circle"></i>';
-    if(type === 'error') icon = '<i class="fa-solid fa-circle-exclamation"></i>';
-    if(type === 'info') icon = '<i class="fa-solid fa-circle-info"></i>';
-
-    toast.innerHTML = icon + ' ' + message;
-    
-    toast.className = 'toast'; // Reset classes
-    toast.classList.add(type);
-    toast.classList.add("show");
-
-    setTimeout(() => {
-        toast.classList.remove("show");
-    }, 3000);
+    if (!toast) return;
+    const icons = { success: 'fa-circle-check', error: 'fa-circle-exclamation', info: 'fa-circle-info' };
+    toast.innerHTML = `<i class="fa-solid ${icons[type] || icons.success}" aria-hidden="true"></i><span></span>`;
+    toast.querySelector('span').textContent = message;
+    toast.className = 'toast ' + type + ' show';
+    clearTimeout(window.__toastTimer);
+    window.__toastTimer = setTimeout(() => toast.classList.remove('show'), 3500);
 }
 
 // Sidebar toggle logic for mobile (with backdrop)
@@ -223,7 +216,7 @@ if (sidebarBackdrop) {
 if (sidebar) {
     sidebar.querySelectorAll('a').forEach(link => {
         link.addEventListener('click', () => {
-            if (window.innerWidth <= 768) {
+            if (window.innerWidth < 900) {
                 closeSidebar();
             }
         });
@@ -345,15 +338,23 @@ function validateRequestForm(form) {
 }
 
 function showRequestSuccess(container, data) {
+    const id = parseInt(data.id, 10);
+    const title = document.querySelector('.form_request #title')?.value || '';
     container.innerHTML = `
         <div class="request-success" role="status">
-            <div class="request-success__icon"><i class="fa-solid fa-circle-check"></i></div>
-            <h2>Requisição #${parseInt(data.id, 10)} enviada!</h2>
-            <p>Agora ela aguarda aprovação. Você recebe um aviso no sininho <i class="fa-solid fa-bell"></i> quando a situação mudar.</p>
+            <h2><i class="fa-solid fa-circle-check" style="color:var(--ok)" aria-hidden="true"></i> Pedido enviado</h2>
+            <div class="ficha ficha--hero" data-sector="${escapeHtml(data.table)}">
+                <span class="ficha__stub"><span class="ficha__num"><small>Nº</small>${id}</span><span class="ficha__sector-bar" aria-hidden="true"></span></span>
+                <span class="ficha__body">
+                    <span class="ficha__title">${escapeHtml(title)}</span>
+                    <span><span class="status-pill status-pill--P">Aguardando aprovação</span></span>
+                </span>
+            </div>
+            <p>Anote o número <strong>${id}</strong>. Você recebe um aviso no sino <i class="fa-solid fa-bell" aria-hidden="true"></i> quando a situação mudar.</p>
             <div class="request-success__actions">
-                <a class="btn-big btn-big--primary" href="${escapeHtml(safeInternalLink(data.link))}"><i class="fa-solid fa-eye"></i> Ver minha requisição</a>
-                <a class="btn-big" href="new_request"><i class="fa-solid fa-plus"></i> Fazer outra</a>
-                <a class="btn-big" href="myRequests"><i class="fa-solid fa-list"></i> Minhas requisições</a>
+                <a class="btn btn--primary" href="${escapeHtml(safeInternalLink(data.link))}"><i class="fa-solid fa-eye" aria-hidden="true"></i> Ver meu pedido</a>
+                <a class="btn" href="new_request"><i class="fa-solid fa-plus" aria-hidden="true"></i> Fazer outro</a>
+                <a class="btn" href="myRequests"><i class="fa-solid fa-list" aria-hidden="true"></i> Meus pedidos</a>
             </div>
         </div>`;
     container.scrollIntoView({ behavior: 'smooth', block: 'start' });
@@ -373,7 +374,7 @@ function bindFormRequests() {
         form_requests.querySelectorAll('.model_radius').forEach(radio => {
             radio.addEventListener('change', () => {
                 const isOther = radioOutros.checked;
-                inputOutros.style.display = isOther ? 'block' : 'none';
+                inputOutros.hidden = !isOther;
                 inputOutros.required = isOther;
                 if (isOther) inputOutros.focus(); else inputOutros.value = '';
             });

@@ -1,7 +1,7 @@
 <form class="form_request" novalidate>
     <input type="hidden" name="type" value="shopping">
 
-    <p class="form-intro" style="border-left-color: #10b981; color: #047857; background: #ecfdf5;">Use para pedir <strong>compra ou orçamento</strong> de materiais, produtos ou serviços de fora da empresa.</p>
+    <p class="form-intro">Use para pedir <strong>compra ou orçamento</strong> de materiais, produtos ou serviços de fora da empresa.</p>
 
     <div class="form-group">
         <label for="title">Título <span class="req">*</span></label>
@@ -23,6 +23,8 @@
 
 <!--PRIORIDADE-->
 
-    <p class="form-required-hint"><span class="req">*</span> Campos obrigatórios</p>
-    <button type="submit"><i class="fa-solid fa-paper-plane"></i> Enviar requisição</button>
+    <div class="form-submit-bar">
+        <p class="form-required-hint"><span class="req">*</span> Campos obrigatórios</p>
+        <button type="submit"><i class="fa-solid fa-paper-plane" aria-hidden="true"></i> Enviar requisição</button>
+    </div>
 </form>

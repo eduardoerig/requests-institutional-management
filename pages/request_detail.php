@@ -11,7 +11,7 @@ $req_table = isset($_GET['table']) ? preg_replace('/[^a-z]/', '', $_GET['table']
 
 $allowed_tables = ['mkt', 'shop', 'xerox', 'service', 'ti'];
 if (!$req_id || !in_array($req_table, $allowed_tables)) {
-    echo '<div class="main"><div class="empty-big"><i class="fa-solid fa-circle-question"></i><h2>Requisição não encontrada</h2><p>O endereço está incompleto.</p><a class="btn-big" href="home"><i class="fa-solid fa-arrow-left"></i> Voltar ao início</a></div></div>';
+    echo '<div class="panel"><div class="empty-big"><i class="fa-solid fa-circle-question"></i><h2>Requisição não encontrada</h2><p>O endereço está incompleto.</p><a class="btn" href="home"><i class="fa-solid fa-arrow-left"></i> Voltar ao início</a></div></div>';
     return;
 }
 
@@ -38,7 +38,7 @@ $stmt->execute([$req_id]);
 $req = $stmt->fetch();
 
 if (!$req) {
-    echo '<div class="main"><div class="empty-big"><i class="fa-solid fa-circle-question"></i><h2>Requisição não encontrada</h2><p>Ela pode ter sido cancelada.</p><a class="btn-big" href="home"><i class="fa-solid fa-arrow-left"></i> Voltar ao início</a></div></div>';
+    echo '<div class="panel"><div class="empty-big"><i class="fa-solid fa-circle-question"></i><h2>Requisição não encontrada</h2><p>Ela pode ter sido cancelada.</p><a class="btn" href="home"><i class="fa-solid fa-arrow-left"></i> Voltar ao início</a></div></div>';
     return;
 }
 
@@ -52,7 +52,7 @@ $canViewRequest = userCanViewRequest($pdo, $req, $req_table, (int)($_SESSION['id
 $canManageThisRequest = userCanActOnRequest($pdo, $req, $req_table, (int)($_SESSION['id'] ?? 0), $role);
 
 if (!$canViewRequest) {
-    echo '<div class="main"><div class="empty-big"><i class="fa-solid fa-lock"></i><h2>Sem acesso</h2><p>Você não tem permissão para ver esta requisição.</p><a class="btn-big" href="home"><i class="fa-solid fa-arrow-left"></i> Voltar ao início</a></div></div>';
+    echo '<div class="panel"><div class="empty-big"><i class="fa-solid fa-lock"></i><h2>Sem acesso</h2><p>Você não tem permissão para ver esta requisição.</p><a class="btn" href="home"><i class="fa-solid fa-arrow-left"></i> Voltar ao início</a></div></div>';
     return;
 }
 
@@ -104,7 +104,7 @@ $canApproveHere = $current_status === 'P' && $isAdmin && userCanManageOriginalRe
 
 // Frase "o que acontece agora" — linguagem do dia a dia
 $nextStepText = [
-    'P' => 'Aguardando a aprovação da coordenação. Você será avisado no sininho quando houver resposta.',
+    'P' => 'Aguardando a aprovação da coordenação. Você recebe um aviso no sino quando houver resposta.',
     'Y' => "Aprovada! Agora o setor de {$cat} vai iniciar o atendimento.",
     'W' => "O setor de {$cat} está cuidando do seu pedido.",
     'F' => 'O pedido foi encaminhado para outro setor, que vai continuar o atendimento.',
@@ -130,578 +130,231 @@ $stepIndex = ['P' => 0, 'Y' => 1, 'F' => 2, 'W' => 2, 'C' => 3, 'N' => 0][$curre
 $stepNames = ['Aguardando aprovação', 'Aprovada', 'Em atendimento', 'Concluída'];
 
 ?>
-
-<div class="main detail-page">
+<div class="detail">
     <input type="hidden" class="Rid" value="<?= $req_id ?>">
-    <input type="hidden" class="Rtype" value="<?= $req_table ?>">
+    <input type="hidden" class="Rtype" value="<?= e($req_table) ?>">
 
+    <a href="<?= $isOwner ? 'myRequests' : 'home' ?>" class="back-link"><i class="fa-solid fa-arrow-left" aria-hidden="true"></i> Voltar</a>
 
-    <style>
-        .detail-page { padding: 20px 24px; }
-        @media (max-width: 768px) { .detail-page { padding: 12px; } }
-        :root {
-            --ml-primary: #2c2b31;
-            --ml-bg: #f8fafc;
-            --ml-surface: #ffffff;
-            --ml-border: #e2e8f0;
-            --ml-text: #2c2b31;
-            --ml-text-light: #64748b;
-            --radius: 12px;
-            --shadow: 0 1px 3px rgba(0,0,0,0.06);
-        }
-
-
-        /* Cabeçalho da página */
-        .req-detail-header {
-            display: block;
-            margin-bottom: 20px;
-        }
-        .page-breadcrumb {
-            display: flex;
-            align-items: center;
-            gap: 8px;
-            margin-bottom: 14px;
-        }
-        .breadcrumb-back {
-            display: inline-flex;
-            align-items: center;
-            gap: 6px;
-            color: var(--ml-text-light);
-            text-decoration: none;
-            font-size: 0.82rem;
-            font-weight: 600;
-            padding: 5px 10px 5px 6px;
-            border-radius: 8px;
-            transition: background 0.15s, color 0.15s;
-        }
-        .breadcrumb-back:hover { background: #f1f5f9; color: var(--ml-text); }
-        .breadcrumb-sep { color: #cbd5e1; font-size: 0.75rem; }
-        .breadcrumb-current { font-size: 0.82rem; color: var(--ml-text-light); font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 240px; }
-        .hero-card {
-            background: #fff;
-            border: 1px solid var(--ml-border);
-            border-radius: 12px;
-            padding: 18px 22px;
-            display: flex;
-            justify-content: space-between;
-            align-items: flex-start;
-            gap: 16px;
-        }
-        .hero-card-left { flex: 1; min-width: 0; }
-        .hero-card-left h1 { font-size: 1.25rem; font-weight: 800; color: var(--ml-text); margin: 0 0 8px 0; letter-spacing: -0.02em; line-height: 1.3; }
-        .hero-meta { display: flex; flex-wrap: wrap; gap: 10px; font-size: 0.82rem; color: var(--ml-text-light); align-items: center; font-weight: 500; }
-        .hero-meta-item { display: flex; align-items: center; gap: 5px; }
-        .hero-card-right { display: flex; flex-direction: column; align-items: flex-end; gap: 8px; flex-shrink: 0; }
-        .detail-steps { display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; margin: 14px 0 0; padding: 0; list-style: none; }
-        .detail-steps li { text-align: center; font-size: 0.82rem; font-weight: 600; color: #94a3b8; }
-        .detail-steps li::before { content: ''; display: block; height: 6px; border-radius: 3px; background: #e2e8f0; margin-bottom: 6px; }
-        .detail-steps li.done { color: #166534; }
-        .detail-steps li.done::before { background: #16a34a; }
-        .detail-steps li.current { color: #0f172a; }
-        .detail-steps.refused li::before { background: #fecaca; }
-        .approve-box { display: flex; gap: 10px; flex-wrap: wrap; margin-top: 12px; }
-        .approve-box .btn-big { flex: 1 1 160px; }
-        .protocol-badge { font-family: 'JetBrains Mono', monospace; background: #f8fafc; padding: 5px 10px; border: 1px solid var(--ml-border); border-radius: 8px; font-size: 0.9rem; font-weight: 700; color: var(--ml-text-light); }
-
-        /* Grid */
-        .detail-grid { display: grid; grid-template-columns: 1fr 380px; gap: 24px; align-items: start; }
-
-        /* Cards */
-        .card { background: var(--ml-surface); border-radius: 16px; box-shadow: 0 2px 4px rgba(0,0,0,0.02), 0 1px 2px rgba(0,0,0,0.03); border: 1px solid rgba(226, 232, 240, 0.8); margin-bottom: 20px; overflow: hidden; }
-        .card:hover { transform: none !important; background: var(--ml-surface) !important; border-color: rgba(226, 232, 240, 0.8) !important; }
-        .card-header { padding: 16px 20px; border-bottom: 1px solid var(--ml-border); display: flex; justify-content: space-between; align-items: center; transition: background 0.2s ease; }
-        .card[onclick] .card-header, .card-header[onclick] { cursor: pointer; }
-        .card[onclick] .card-header:hover, .card-header[onclick]:hover { background: #f8fafc; }
-        .card-header h2 { font-size: 0.95rem; font-weight: 700; margin: 0; display: flex; align-items: center; gap: 10px; color: var(--ml-text); }
-        .card-body { padding: 24px; }
-        .card.collapsed .card-body { display: none; }
-        .toggle-icon { font-size: 0.85rem; color: var(--ml-text-light); transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1); }
-        .card.collapsed .toggle-icon { transform: rotate(-90deg); }
-
-        /* Info */
-        .info-grid-simple { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 16px; }
-        .info-box { padding: 12px 14px; background: #f8fafc; border-radius: 10px; border: 1px solid #f1f5f9; }
-        .info-box label { display: block; font-size: 0.68rem; font-weight: 800; color: var(--ml-text-light); text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 4px; }
-        .info-box span { font-weight: 700; font-size: 0.95rem; color: var(--ml-text); }
-
-        /* Timeline */
-        .timeline { position: relative; padding-left: 32px; }
-        .timeline::before { content: ''; position: absolute; left: 13px; top: 0; bottom: 0; width: 2px; background: #e2e8f0; border-radius: 2px; }
-        .timeline-event { position: relative; margin-bottom: 24px; }
-        .timeline-dot { position: absolute; left: -32px; width: 28px; height: 28px; background: #fff; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 0.7rem; z-index: 1; box-shadow: 0 0 0 4px #fff; border: 2px solid #cbd5e1; }
-        .dot-comentario { border-color: #3b82f6; color: #3b82f6; background: #eff6ff; }
-        .dot-reaberto { border-color: #f59e0b; color: #f59e0b; background: #fffbeb; }
-        .dot-concluido { border-color: #10b981; color: #10b981; background: #ecfdf5; }
-        .dot-aberto { border-color: #94a3b8; color: #94a3b8; background: #f8fafc; }
-        .timeline-content { background: #fff; padding: 14px 16px; border-radius: 12px; border: 1px solid var(--ml-border); box-shadow: 0 1px 2px rgba(0,0,0,0.02); }
-        .timeline-time { font-size: 0.75rem; font-weight: 800; color: var(--ml-text-light); margin-bottom: 4px; }
-
-        /* Actions */
-        .actions-group { display: flex; flex-direction: column; gap: 10px; }
-        .btn-action { width: 100%; padding: 14px; border-radius: 12px; border: 1px solid var(--ml-border); background: #fff; font-weight: 700; font-size: 0.9rem; cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 8px; transition: all 0.2s ease; box-shadow: 0 1px 2px rgba(0,0,0,0.02); color: var(--ml-text); }
-        .btn-action:hover { background: #f8fafc; transform: translateY(-1px); box-shadow: 0 4px 6px rgba(0,0,0,0.04); }
-        .btn-primary { background: var(--ml-primary); color: #fff; border: none; box-shadow: 0 4px 12px rgba(44,43,49,0.2); }
-        .btn-primary:hover { background: #3d3c42; color: #fff; box-shadow: 0 6px 16px rgba(44,43,49,0.3); }
-        .ml-label { font-size: 0.75rem; font-weight: 800; color: var(--ml-text-light); margin-bottom: 8px; display: block; text-transform: uppercase; letter-spacing: 0.5px; }
-        .ml-select { width: 100%; padding: 12px; border-radius: 10px; border: 1px solid var(--ml-border); background: #fff; font-weight: 600; color: var(--ml-text); outline: none; transition: border-color 0.2s; cursor: pointer; }
-        .ml-select:focus { border-color: var(--ml-primary); box-shadow: 0 0 0 3px rgba(44,43,49,0.1); }
-        .divider { height: 1px; background: var(--ml-border); margin: 16px 0; }
-
-        /* Chat */
-        .chat-card { display: flex; flex-direction: column; max-height: 560px; }
-        .chat-messages { flex: 1; overflow-y: auto; padding: 20px; background: #f8fafc; display: flex; flex-direction: column; gap: 16px; }
-        .chat-item { display: flex; gap: 12px; max-width: 75%; }
-        .chat-item.mine { align-self: flex-end; flex-direction: row-reverse; }
-        .chat-item.theirs { align-self: flex-start; }
-        .chat-avatar { width: 36px; height: 36px; border-radius: 50%; background: var(--ml-primary); color: #fff; display: flex; align-items: center; justify-content: center; font-size: 0.85rem; font-weight: 800; flex-shrink: 0; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }
-        .chat-item.mine .chat-avatar { background: #3d3c42; }
-        .chat-bubble { padding: 12px 16px; border-radius: 16px; font-size: 0.9rem; line-height: 1.5; box-shadow: 0 1px 2px rgba(0,0,0,0.05); position: relative; }
-        .chat-bubble.mine { background: var(--ml-primary); color: #fff; border-bottom-right-radius: 4px; }
-        .chat-bubble.theirs { background: #fff; color: var(--ml-text); border: 1px solid var(--ml-border); border-bottom-left-radius: 4px; }
-        .chat-user-name { font-size: 0.65rem; font-weight: 800; margin-bottom: 4px; color: var(--ml-text-light); }
-        .chat-item.mine .chat-user-name { text-align: right; color: #94a3b8; }
-        .chat-date-header { text-align: center; font-size: 0.7rem; font-weight: 800; color: var(--ml-text-light); text-transform: uppercase; margin: 8px 0; letter-spacing: 0.5px; }
-        .chat-footer { padding: 16px 20px; border-top: 1px solid var(--ml-border); background: #fff; border-bottom-left-radius: 16px; border-bottom-right-radius: 16px; }
-        .chat-input-area { display: flex; gap: 10px; align-items: flex-end; }
-        .chat-input { flex: 1; border: 1px solid var(--ml-border); border-radius: 24px; padding: 12px 18px; font-size: 0.95rem; resize: none; max-height: 120px; outline: none; background: #f8fafc; transition: all 0.2s; font-family: inherit; }
-        .chat-input:focus { background: #fff; border-color: var(--ml-primary); box-shadow: 0 0 0 3px rgba(44,43,49,0.1); }
-        .btn-send { width: 44px; height: 44px; border-radius: 50%; background: var(--ml-primary); color: #fff; border: none; cursor: pointer; display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
-
-        .btn-back { display: flex; align-items: center; justify-content: center; gap: 8px; margin-top: 16px; color: var(--ml-text-light); text-decoration: none; font-size: 0.9rem; font-weight: 700; padding: 12px; border-radius: 12px; transition: all 0.2s; }
-        .btn-back:hover { color: var(--ml-primary); background: #f1f0f2; }
-
-        /* FAB */
-        .fab-chat { position: fixed; right: 20px; bottom: 88px; width: 52px; height: 52px; border-radius: 50%; background: var(--ml-primary); color: #fff; display: flex; align-items: center; justify-content: center; font-size: 1.3rem; box-shadow: 0 2px 8px rgba(44,43,49,0.25); z-index: 99; border: none; cursor: pointer; opacity: 0; pointer-events: none; }
-        .fab-chat.visible { opacity: 1; pointer-events: auto; }
-
-        /* ===== MOBILE ===== */
-        @media (max-width: 768px) {
-            .detail-grid { display: flex; flex-direction: column; gap: 12px; width: 100%; box-sizing: border-box; }
-            .main-column, .sidebar-column { display: contents; }
-
-            /* Ordem de leitura no mobile */
-            .card { order: 10; margin-bottom: 0 !important; border-radius: 12px; width: 100%; box-sizing: border-box; }
-            .card-description { order: 1; }
-            .chat-card { order: 2; max-height: 420px !important; }
-            .card-actions { order: 3; }
-            .card-details { order: 4; }
-            .card-forward { order: 5; }
-            .card-history { order: 6; }
-
-            /* Cabeçalho mobile */
-            .req-detail-header { margin-bottom: 16px; }
-            .page-breadcrumb { margin-top: 12px; margin-bottom: 10px; margin-left: 12px; }
-            .hero-card { flex-direction: column; gap: 12px; padding: 14px 16px; }
-            .hero-card-right { flex-direction: row; align-items: center; justify-content: flex-start; width: 100%; }
-            .hero-card-left h1 { font-size: 1.1rem; }
-            .breadcrumb-current { max-width: 160px; }
-
-            /* Cards */
-            .card-header { padding: 13px 16px; }
-            .card-body { padding: 14px 16px; }
-
-            /* Info: 2 colunas no mobile */
-            .info-grid-simple { grid-template-columns: repeat(2, 1fr); gap: 10px; }
-
-            /* Chat */
-            .chat-messages { min-height: 200px; padding: 14px; gap: 12px; }
-            .chat-footer { padding: 10px 14px; }
-            .chat-input { font-size: 16px !important; padding: 10px 14px; }
-            .btn-send { width: 40px; height: 40px; min-width: 40px; font-size: 0.9rem; }
-            .chat-item { max-width: 85%; }
-
-            /* Botão voltar */
-            .btn-back { order: 10; margin: 8px 0 20px; padding: 12px 16px; background: #fff; border: 1px solid var(--ml-border); justify-content: flex-start; width: 100%; box-sizing: border-box; }
-        }
-    </style>
-
-
-
-    <!-- CABEÇALHO CLEAN -->
-    <div class="req-detail-header">
-        <!-- Breadcrumb / Navegação de volta -->
-        <div class="page-breadcrumb">
-            <a href="<?= $isOwner ? 'myRequests' : 'home' ?>" class="breadcrumb-back">
-                <i class="fa-solid fa-arrow-left" style="font-size:0.8rem;"></i>
-                Voltar
-            </a>
+    <!-- Ficha do pedido -->
+    <section class="ficha ficha--hero" data-sector="<?= e($req_table) ?>" aria-labelledby="reqTitle">
+        <span class="ficha__stub">
+            <span class="ficha__num"><small>Nº</small><?= $req_id ?></span>
+            <span class="status-pill status-pill--<?= e($current_status) ?>"><?= e(statusLabel($current_status)) ?></span>
+        </span>
+        <div class="ficha__body" style="gap:10px; padding:16px 18px;">
+            <h1 class="ficha__title" id="reqTitle"><?= $title ?></h1>
+            <div class="ficha__meta">
+                <span class="sector-tag"><?= e($cat) ?></span>
+                <span><i class="fa-regular fa-user" aria-hidden="true"></i> <?= $user ?></span>
+                <span>Pedido em <?= e($date) ?></span>
+            </div>
+            <div class="row"><?= getPrazoBadge($req['date'] ?? '', $current_status) ?></div>
+            <ol class="steps <?= $current_status === 'N' ? 'refused' : '' ?>" aria-label="Etapas do pedido">
+                <?php foreach ($stepNames as $i => $stepName): ?>
+                    <li class="<?= ($current_status !== 'N' && $i <= $stepIndex) ? 'done' : '' ?> <?= $i === $stepIndex ? 'current' : '' ?>"<?= $i === $stepIndex ? ' aria-current="step"' : '' ?>><?= e($stepName) ?></li>
+                <?php endforeach; ?>
+            </ol>
         </div>
+    </section>
 
-        <!-- Hero card compacto -->
-        <div class="hero-card">
-            <div class="hero-card-left">
-                <h1><?= $title ?></h1>
-                <div class="hero-meta">
-                    <span class="hero-meta-item">
-                        <i class="fa-regular fa-user" style="font-size:0.75rem;"></i>
-                        <strong><?= $user ?></strong>
-                    </span>
-                    <span class="breadcrumb-sep">·</span>
-                    <span class="hero-meta-item">
-                        <i class="fa-regular fa-calendar" style="font-size:0.75rem;"></i>
-                        <?= $date ?>
-                    </span>
-                    <span class="breadcrumb-sep">·</span>
-                    <span class="hero-meta-item">
-                        <i class="fa-solid fa-tag" style="font-size:0.7rem;"></i>
-                        <?= e($cat) ?>
-                    </span>
-                    <span class="breadcrumb-sep">·</span>
-                    <span class="hero-meta-item">
-                        <i class="fa-regular fa-calendar-check" style="font-size:0.75rem;"></i>
-                        Precisa para: <strong><?= e($deadlineText) ?></strong>
-                    </span>
+    <!-- O que acontece agora + decisão -->
+    <div class="next-step">
+        <i class="fa-solid fa-circle-info" aria-hidden="true"></i>
+        <div>
+            <strong>O que acontece agora:</strong> <?= e($nextStepText) ?>
+            <?php if ($canApproveHere): ?>
+                <div class="approve-box">
+                    <button type="button" class="btn btn--success" onclick="decideRequest('Y')"><i class="fa-solid fa-check" aria-hidden="true"></i> Aprovar</button>
+                    <button type="button" class="btn btn--danger" onclick="decideRequest('N')"><i class="fa-solid fa-xmark" aria-hidden="true"></i> Recusar</button>
                 </div>
-                <ol class="detail-steps <?= $current_status === 'N' ? 'refused' : '' ?>" aria-label="Etapas da requisição">
-                    <?php foreach ($stepNames as $i => $stepName): ?>
-                        <li class="<?= ($current_status !== 'N' && $i <= $stepIndex) ? 'done' : '' ?> <?= $i === $stepIndex ? 'current' : '' ?>"><?= e($stepName) ?></li>
-                    <?php endforeach; ?>
-                </ol>
-            </div>
-            <div class="hero-card-right">
-                <span class="status-pill status-pill--<?= e($current_status) ?>"><?= e(statusLabel($current_status)) ?></span>
-                <span class="protocol-badge">#<?= $req_id ?></span>
-            </div>
-        </div>
-
-        <div class="next-step" style="margin-top:14px;">
-            <i class="fa-solid fa-circle-info" aria-hidden="true"></i>
-            <div>
-                <strong>O que acontece agora:</strong> <?= e($nextStepText) ?>
-                <?php if ($canApproveHere): ?>
-                    <div class="approve-box">
-                        <button type="button" class="btn-big btn-big--success" onclick="decideRequest('Y')"><i class="fa-solid fa-check"></i> Aprovar</button>
-                        <button type="button" class="btn-big btn-big--danger" onclick="decideRequest('N')"><i class="fa-solid fa-xmark"></i> Recusar</button>
-                    </div>
-                <?php endif; ?>
-                <?php if ($isOwner && $current_status === 'P'): ?>
-                    <div class="approve-box">
-                        <button type="button" class="btn-big btn-big--danger" onclick="globalRequestAction('delete', '<?= $req_id ?>', 'ctd_<?= $req_table ?>_frm')"><i class="fa-solid fa-trash-can"></i> Cancelar esta requisição</button>
-                    </div>
-                <?php endif; ?>
-            </div>
+            <?php endif; ?>
         </div>
     </div>
 
-    <!-- 2. GRID DE DUAS COLUNAS -->
-    <div class="detail-grid">
-        <!-- Coluna Esquerda (65%) -->
-        <div class="main-column">
-            <!-- Card Descrição -->
-            <div class="card card-description">
-                <div class="card-header">
-                    <h2><i class="fa-solid fa-align-left" style="color: var(--ml-primary);"></i> O que foi pedido</h2>
-                </div>
-                <div class="card-body">
-                    <div style="line-height: 1.7; color: var(--ml-text); font-size: 1.05rem;">
-                        <?= nl2br($desc) ?: '<em style="color:var(--ml-text-light)">Nenhuma descrição fornecida.</em>' ?>
-                    </div>
-                    <?php if ($extraFields): ?>
-                        <div class="info-grid-simple" style="margin-top:16px;">
-                            <?php foreach ($extraFields as $label => $value): ?>
-                                <div class="info-box">
-                                    <label><?= e($label) ?></label>
-                                    <span><?= e($value !== '' ? $value : '—') ?></span>
-                                </div>
-                            <?php endforeach; ?>
-                        </div>
-                    <?php endif; ?>
-                </div>
-            </div>
-
-            <!-- Card Informações (Grid Limpo) -->
-            <div class="card card-details">
-                <div class="card-header" onclick="toggleCard(this)">
-                    <h2><i class="fa-solid fa-circle-info" style="color: var(--ml-primary);"></i> Mais informações</h2>
-                    <i class="fa-solid fa-chevron-down toggle-icon"></i>
-                </div>
-                <div class="card-body">
-                    <div class="info-grid-simple">
-                        <div class="info-box">
-                            <label>Prioridade</label>
-                            <span style="color: <?= [1 => '#047857', 2 => '#334155', 3 => '#c2410c', 4 => '#b91c1c'][(int)($req['priority'] ?? 2)] ?? '#334155' ?>;">
-                                <?= e(priorityLabel((int)($req['priority'] ?? 2))) ?>
-                            </span>
-                        </div>
-                        <div class="info-box">
-                            <label>Subdivisão</label>
-                            <span><?= htmlspecialchars($subName) ?></span>
-                        </div>
-                        <div class="info-box">
-                            <label>Prazo pedido</label>
-                            <span><?= e($deadlineText) ?></span>
-                        </div>
+    <div class="detail__cols">
+        <div class="detail__col">
+            <section class="panel" aria-labelledby="pedidoTitulo">
+                <div class="panel__head"><h2 id="pedidoTitulo"><i class="fa-solid fa-align-left" aria-hidden="true"></i> O que foi pedido</h2></div>
+                <div class="panel__body">
+                    <div class="prose"><?= nl2br($desc) ?: '<em class="muted">Sem descrição.</em>' ?></div>
+                    <dl class="info-grid mt-16" style="margin-bottom:0;">
+                        <?php foreach ($extraFields as $label => $value): ?>
+                            <div class="info-item"><dt><?= e($label) ?></dt><dd><?= e($value !== '' ? $value : '—') ?></dd></div>
+                        <?php endforeach; ?>
+                        <div class="info-item"><dt>Urgência</dt><dd><?= e(priorityLabel((int)($req['priority'] ?? 2))) ?></dd></div>
+                        <div class="info-item"><dt>Precisa para</dt><dd><?= e($deadlineText) ?></dd></div>
+                        <div class="info-item"><dt>Subdivisão</dt><dd><?= e($subName) ?></dd></div>
                         <?php if ($approverName): ?>
-                        <div class="info-box">
-                            <label><?= ($current_status === 'N') ? 'Recusada por' : 'Aprovada por' ?></label>
-                            <span><?= htmlspecialchars($approverName) ?></span>
-                        </div>
+                            <div class="info-item"><dt><?= $current_status === 'N' ? 'Recusada por' : 'Aprovada por' ?></dt><dd><?= e($approverName) ?></dd></div>
                         <?php endif; ?>
-                    </div>
+                    </dl>
                 </div>
-            </div>
+            </section>
 
             <?php if (!empty($forwardChain)): ?>
-            <!-- Card Cadeia de Repasses (Fase 5) - COLAPSÁVEL -->
-            <div class="card card-forward <?= ($activeForward && $activeForward['status'] === 'pending' && $isGestor) ? '' : 'collapsed' ?>">
-                <div class="card-header" onclick="toggleCard(this)">
-                    <h2><i class="fa-solid fa-share-from-square" style="color: #d97706;"></i> Encaminhamentos entre setores</h2>
-                    <i class="fa-solid fa-chevron-down toggle-icon"></i>
-                </div>
-                <div class="card-body">
-                    <?php if ($activeForward && ($isGestor || $isGlobalAdmin)): ?>
-                        <?php
-                            // Verifica se o gestor logado tem permissão sobre o setor de destino
-                            $canActOnForward = false;
-                            if ($isGlobalAdmin) {
-                                $canActOnForward = true;
-                            } else {
-                                $checkStmt = $pdo->prepare("SELECT COUNT(*) FROM cfg_user_area WHERE id_user = ? AND id_area = ?");
-                                $checkStmt->execute([$_SESSION['id'], $activeForward['to_area_id']]);
-                                $canActOnForward = (int)$checkStmt->fetchColumn() > 0;
-                            }
-                        ?>
-                        <?php if ($canActOnForward && $activeForward['status'] === 'pending'): ?>
-                            <div class="forward-pending-indicator">
-                                <i class="fa-solid fa-clock"></i>
-                                <span>Outro setor encaminhou este pedido para você. Vai assumir o atendimento?</span>
-                            </div>
-                            <div style="display: flex; gap: 10px; margin-bottom: 20px;">
-                                <button class="btn-accept-forward" onclick="handleForwardAction('accept', <?= $activeForward['id'] ?>)">
-                                    <i class="fa-solid fa-check"></i> Aceitar e atender
-                                </button>
-                                <button class="btn-refuse-forward" onclick="handleForwardAction('refuse', <?= $activeForward['id'] ?>)">
-                                    <i class="fa-solid fa-xmark"></i> Recusar
-                                </button>
+                <?php
+                $canActOnForward = false;
+                if ($activeForward && ($isGestor || $isGlobalAdmin)) {
+                    if ($isGlobalAdmin) {
+                        $canActOnForward = true;
+                    } else {
+                        $checkStmt = $pdo->prepare("SELECT COUNT(*) FROM cfg_user_area WHERE id_user = ? AND id_area = ?");
+                        $checkStmt->execute([$_SESSION['id'], $activeForward['to_area_id']]);
+                        $canActOnForward = (int)$checkStmt->fetchColumn() > 0;
+                    }
+                }
+                $forwardNeedsMe = $canActOnForward && $activeForward['status'] === 'pending';
+                ?>
+                <details class="panel" <?= $forwardNeedsMe ? 'open' : '' ?>>
+                    <summary class="panel__head"><h2><i class="fa-solid fa-share-from-square" aria-hidden="true"></i> Encaminhamentos entre setores</h2></summary>
+                    <div class="panel__body">
+                        <?php if ($forwardNeedsMe): ?>
+                            <p class="forward-pending">Outro setor encaminhou este pedido para você. Vai assumir o atendimento?</p>
+                            <div class="approve-box" style="margin:0 0 16px;">
+                                <button type="button" class="btn btn--success" onclick="handleForwardAction('accept', <?= (int)$activeForward['id'] ?>)"><i class="fa-solid fa-check" aria-hidden="true"></i> Aceitar e atender</button>
+                                <button type="button" class="btn btn--danger" onclick="handleForwardAction('refuse', <?= (int)$activeForward['id'] ?>)"><i class="fa-solid fa-xmark" aria-hidden="true"></i> Recusar</button>
                             </div>
                         <?php elseif ($canActOnForward && $activeForward['status'] === 'accepted'): ?>
-                            <div class="forward-pending-indicator" style="background: linear-gradient(135deg, #eff6ff, #dbeafe); border-color: #93c5fd;">
-                                <i class="fa-solid fa-hand-holding" style="color: #2563eb;"></i>
-                                <span>Repasse aceito. Você pode concluir a requisição quando o atendimento for finalizado.</span>
-                            </div>
-                            <div style="display: flex; gap: 10px; margin-bottom: 20px;">
-                                <button class="btn-accept-forward" style="background: #10b981;" onclick="handleForwardAction('complete', <?= $activeForward['id'] ?>)">
-                                    <i class="fa-solid fa-check-double"></i> Marcar como concluída
-                                </button>
+                            <p class="forward-pending" style="background:var(--st-y-bg); color:var(--st-y-fg);">Você assumiu este pedido. Marque como concluído quando terminar.</p>
+                            <div class="approve-box" style="margin:0 0 16px;">
+                                <button type="button" class="btn btn--success" onclick="handleForwardAction('complete', <?= (int)$activeForward['id'] ?>)"><i class="fa-solid fa-check-double" aria-hidden="true"></i> Marcar como concluída</button>
                             </div>
                         <?php endif; ?>
-                    <?php endif; ?>
 
-                    <ul class="forward-chain">
-                        <?php foreach ($forwardChain as $fwd):
-                            $fwdIcon = 'fa-clock';
-                            if ($fwd['status'] === 'accepted') $fwdIcon = 'fa-handshake';
-                            elseif ($fwd['status'] === 'refused') $fwdIcon = 'fa-ban';
-                            elseif ($fwd['status'] === 'completed') $fwdIcon = 'fa-circle-check';
-                        ?>
-                        <li class="forward-chain-item">
-                            <div class="forward-chain-icon <?= $fwd['status'] ?>"><i class="fa-solid <?= $fwdIcon ?>"></i></div>
-                            <div class="forward-chain-content">
-                                <strong><?= htmlspecialchars($fwd['from_area_label']) ?> → <?= htmlspecialchars($fwd['to_area_label']) ?></strong>
-                                <div class="forward-meta">
-                                    <span><i class="fa-regular fa-user"></i> <?= htmlspecialchars($fwd['forwarded_by_name'] ?? '—') ?></span>
-                                    <span><i class="fa-regular fa-calendar"></i> <?= date('d/m/Y H:i', strtotime($fwd['created_at'])) ?></span>
-                                    <span class="forward-chain-status <?= $fwd['status'] ?>"><?= $fwd['status_label'] ?></span>
-                                </div>
-                                <?php if (!empty($fwd['observation'])): ?>
-                                    <div class="forward-obs">"<?= htmlspecialchars($fwd['observation']) ?>"</div>
-                                <?php endif; ?>
-                                <?php if ($fwd['received_by_name']): ?>
-                                    <div class="forward-meta" style="margin-top: 8px;">
-                                        <span><i class="fa-solid fa-user-check"></i> Recebido por: <?= htmlspecialchars($fwd['received_by_name']) ?></span>
+                        <ul class="forward-chain">
+                            <?php foreach ($forwardChain as $fwd): ?>
+                                <li class="forward-chain-item">
+                                    <strong><?= e($fwd['from_area_label']) ?> para <?= e($fwd['to_area_label']) ?></strong>
+                                    <div class="forward-meta">
+                                        <span><?= e($fwd['forwarded_by_name'] ?? '—') ?></span>
+                                        <span><?= e(date('d/m/Y H:i', strtotime($fwd['created_at']))) ?></span>
+                                        <span class="forward-chain-status"><?= e($fwd['status_label']) ?></span>
+                                        <?php if (!empty($fwd['received_by_name'])): ?><span>Recebido por <?= e($fwd['received_by_name']) ?></span><?php endif; ?>
                                     </div>
-                                <?php endif; ?>
-                            </div>
-                        </li>
-                        <?php endforeach; ?>
-                    </ul>
-                </div>
-            </div>
+                                    <?php if (!empty($fwd['observation'])): ?>
+                                        <p class="forward-obs">"<?= e($fwd['observation']) ?>"</p>
+                                    <?php endif; ?>
+                                </li>
+                            <?php endforeach; ?>
+                        </ul>
+                    </div>
+                </details>
             <?php endif; ?>
 
-            <!-- Card Histórico (Timeline) - COLAPSÁVEL -->
-            <div class="card card-history collapsed">
-                <div class="card-header" onclick="toggleCard(this)">
-                    <h2><i class="fa-solid fa-clock-rotate-left" style="color: var(--ml-primary);"></i> Histórico</h2>
-                    <i class="fa-solid fa-chevron-down toggle-icon"></i>
+            <details class="panel only-desktop-open" id="historyPanel">
+                <summary class="panel__head"><h2><i class="fa-solid fa-clock-rotate-left" aria-hidden="true"></i> Histórico</h2></summary>
+                <div class="panel__body">
+                    <?php if ($history): ?>
+                        <ol class="timeline">
+                            <?php foreach ($history as $h): ?>
+                                <li>
+                                    <div>
+                                        <time datetime="<?= e($h['created_at']) ?>"><?= e(date('d/m/Y \à\s H:i', strtotime($h['created_at']))) ?></time>
+                                        <strong><?= e($h['user_name']) ?></strong> <?= e(mb_strtolower(mb_substr($h['action'], 0, 1)) . mb_substr($h['action'], 1)) ?>
+                                    </div>
+                                </li>
+                            <?php endforeach; ?>
+                        </ol>
+                    <?php else: ?>
+                        <p class="muted">Sem movimentações registradas.</p>
+                    <?php endif; ?>
                 </div>
-                <div class="card-body">
-                    <div class="timeline">
-                        <?php foreach ($history as $h):
-                            $type = 'aberto';
-                            $icon = 'fa-plus';
-                            if(strpos($h['action'], 'Comentário') !== false) { $type = 'comentario'; $icon = 'fa-comment'; }
-                            elseif(strpos($h['action'], 'reaberto') !== false || strpos($h['action'], 'reaberta') !== false) { $type = 'reaberto'; $icon = 'fa-rotate-left'; }
-                            elseif(strpos($h['action'], 'concluí') !== false) { $type = 'concluido'; $icon = 'fa-check'; }
-                            elseif(strpos($h['action'], 'Prioridade') !== false) { $type = 'aberto'; $icon = 'fa-bolt'; }
-                            elseif(strpos($h['action'], 'repassada') !== false || strpos($h['action'], 'Repasse') !== false || strpos($h['action'], 'repasse') !== false) { $type = 'reaberto'; $icon = 'fa-share-from-square'; }
-                        ?>
-                        <div class="timeline-event">
-                            <div class="timeline-dot dot-<?= $type ?>"><i class="fa-solid <?= $icon ?>"></i></div>
-                            <div class="timeline-content">
-                                <div class="timeline-time"><?= date('d/m/Y \à\s H:i', strtotime($h['created_at'])) ?></div>
-                                <div style="font-size: 0.95rem;">
-                                    <strong><?= htmlspecialchars($h['user_name']) ?></strong> <?= htmlspecialchars($h['action']) ?>
-                                </div>
-                            </div>
-                        </div>
-                        <?php endforeach; ?>
-                    </div>
-                </div>
-            </div>
+            </details>
         </div>
 
-        <!-- Coluna Direita (35%) -->
-        <div class="sidebar-column">
-            <?php if ($role !== 'solicitante'): ?>
-            <!-- Card Ações -->
-            <div class="card card-actions">
-                <div class="card-header">
-                    <h2><i class="fa-solid fa-gear" style="color: var(--ml-primary);"></i> Ações</h2>
-                </div>
-                <div class="card-body">
-                    <div class="actions-group">
-                        <?php if ($isGestor && $canManageThisRequest && $current_status == 'W'): ?>
-                            <button onclick="globalRequestAction('finish', '<?= $req_id ?>', 'ctd_<?= $req_table ?>_frm')" class="btn-action btn-primary">
-                                <i class="fa-solid fa-check-circle"></i> Marcar como concluída
-                            </button>
+        <div class="detail__col">
+            <?php if ($role !== 'solicitante' && ($canManageThisRequest || $isAdmin || $isGestor)): ?>
+                <section class="panel" aria-labelledby="acoesTitulo">
+                    <div class="panel__head"><h2 id="acoesTitulo"><i class="fa-solid fa-gear" aria-hidden="true"></i> Ações</h2></div>
+                    <div class="panel__body actions-group">
+                        <?php if ($isGestor && $canManageThisRequest && $current_status === 'W'): ?>
+                            <button type="button" onclick="globalRequestAction('finish', '<?= $req_id ?>', 'ctd_<?= e($req_table) ?>_frm')" class="btn btn--success"><i class="fa-solid fa-check-circle" aria-hidden="true"></i> Marcar como concluída</button>
                         <?php elseif ($isGestor && $canManageThisRequest && $current_status === 'Y'): ?>
-                            <button onclick="globalRequestAction('start_progress', '<?= $req_id ?>', 'ctd_<?= $req_table ?>_frm')" class="btn-action btn-primary">
-                                <i class="fa-solid fa-play"></i> Começar atendimento
-                            </button>
+                            <button type="button" onclick="globalRequestAction('start_progress', '<?= $req_id ?>', 'ctd_<?= e($req_table) ?>_frm')" class="btn btn--primary"><i class="fa-solid fa-play" aria-hidden="true"></i> Começar atendimento</button>
+                        <?php endif; ?>
+
+                        <?php if (in_array($current_status, ['W', 'F'], true) && $canManageThisRequest): ?>
+                            <button type="button" onclick="openForwardModal()" class="btn"><i class="fa-solid fa-share-from-square" aria-hidden="true"></i> Encaminhar a outro setor</button>
                         <?php endif; ?>
 
                         <?php if ($current_status === 'C' && $canManageThisRequest): ?>
-                            <button onclick="globalRequestAction('reset_status', '<?= $req_id ?>', 'ctd_<?= $req_table ?>_frm')" class="btn-action" style="background:#fff7ed; color:#c2410c;">
-                                <i class="fa-solid fa-rotate-left"></i> Reabrir
-                            </button>
+                            <button type="button" onclick="globalRequestAction('reset_status', '<?= $req_id ?>', 'ctd_<?= e($req_table) ?>_frm')" class="btn"><i class="fa-solid fa-rotate-left" aria-hidden="true"></i> Reabrir</button>
                         <?php endif; ?>
 
-                        <?php if (in_array($current_status, ['W', 'F']) && $canManageThisRequest): ?>
-                            <button type="button" onclick="openForwardModal()" class="btn-action" style="background:#fff7ed; color:#c2410c;">
-                                <i class="fa-solid fa-share-from-square"></i> Encaminhar a outro setor
-                            </button>
-                        <?php endif; ?>
-
-                        <?php if($canManageThisRequest): ?>
-                            <div style="margin-top: 10px;">
-                                <label class="ml-label" for="prioritySelect">Urgência</label>
-                                <select id="prioritySelect" class="ml-select" style="margin-bottom:0" onchange="globalRequestAction('set_priority', '<?= $req_id ?>', 'ctd_<?= $req_table ?>_frm', this.value)">
-                                    <option value="1" <?= ($req['priority'] ?? 2) == 1 ? 'selected' : '' ?>>Baixa</option>
-                                    <option value="2" <?= ($req['priority'] ?? 2) == 2 ? 'selected' : '' ?>>Normal</option>
-                                    <option value="3" <?= ($req['priority'] ?? 2) == 3 ? 'selected' : '' ?>>Alta</option>
-                                    <option value="4" <?= ($req['priority'] ?? 2) == 4 ? 'selected' : '' ?>>Crítica</option>
+                        <?php if ($canManageThisRequest): ?>
+                            <div class="field" style="margin:4px 0 0;">
+                                <label for="prioritySelect">Urgência</label>
+                                <select id="prioritySelect" onchange="globalRequestAction('set_priority', '<?= $req_id ?>', 'ctd_<?= e($req_table) ?>_frm', this.value)">
+                                    <?php foreach (priorityLabels() as $value => $label): ?>
+                                        <option value="<?= $value ?>" <?= (int)($req['priority'] ?? 2) === $value ? 'selected' : '' ?>><?= e($label) ?></option>
+                                    <?php endforeach; ?>
                                 </select>
                             </div>
                         <?php endif; ?>
 
-                        <?php if($isAdmin || $isGestor): ?>
-                            <div class="divider"></div>
-                            <a href="print_request.php?id=<?= $req_id ?>&table=<?= $req_table ?>" target="_blank" class="btn-action" style="text-decoration: none; justify-content: center;">
-                                <i class="fa-solid fa-print" style="color: #ef4444;"></i> Imprimir / salvar PDF
-                            </a>
+                        <?php if ($isAdmin || $isGestor): ?>
+                            <a href="print_request.php?id=<?= $req_id ?>&table=<?= e($req_table) ?>" target="_blank" rel="noopener" class="btn btn--ghost"><i class="fa-solid fa-print" aria-hidden="true"></i> Imprimir ou salvar PDF</a>
                         <?php endif; ?>
                     </div>
-                </div>
-            </div>
+                </section>
             <?php endif; ?>
 
-            <!-- Card Mensagens Internas -->
-            <div class="card chat-card">
-                <div class="card-header">
-                    <h2><i class="fa-solid fa-comments" style="color: var(--ml-primary);"></i> Conversa sobre o pedido</h2>
-                </div>
-                <div class="chat-messages" id="comments-feed">
-                    <?php
-                        if (count($comments) > 0):
-                            $last_chat_date = '';
-                            foreach ($comments as $c):
-                                $this_date = date('d/m/Y', strtotime($c['created_at']));
-                                if($this_date != $last_chat_date):
-                                    echo '<div class="chat-date-header">'.$this_date.'</div>';
-                                    $last_chat_date = $this_date;
-                                endif;
-                                $is_mine = ($c['user_id'] == ($_SESSION['id'] ?? -1));
-                                $initials = e(mb_strtoupper(mb_substr((string)$c['user_name'], 0, 1)));
+            <section class="panel chat" id="conversa" aria-labelledby="conversaTitulo">
+                <div class="panel__head"><h2 id="conversaTitulo"><i class="fa-solid fa-comments" aria-hidden="true"></i> Conversa sobre o pedido</h2></div>
+                <div class="chat-messages" id="comments-feed" aria-live="polite">
+                    <?php if (count($comments) > 0):
+                        $last_chat_date = '';
+                        foreach ($comments as $c):
+                            $this_date = date('d/m/Y', strtotime($c['created_at']));
+                            if ($this_date !== $last_chat_date):
+                                echo '<div class="chat-date-header">' . e($this_date) . '</div>';
+                                $last_chat_date = $this_date;
+                            endif;
+                            $is_mine = ((int)$c['user_id'] === (int)($_SESSION['id'] ?? -1));
                     ?>
-                    <div class="chat-item <?= $is_mine ? 'mine' : 'theirs' ?>">
-                        <div class="chat-avatar"><?= $initials ?></div>
-                        <div class="chat-bubble <?= $is_mine ? 'mine' : 'theirs' ?>">
-                            <div class="chat-user-name"><?= htmlspecialchars($c['user_name']) ?></div>
-                            <?= nl2br(htmlspecialchars($c['comment'])) ?>
-                            <div style="text-align: right; font-size: 0.6rem; margin-top: 5px; opacity: 0.7;">
-                                <?= date('H:i', strtotime($c['created_at'])) ?>
+                        <div class="chat-item <?= $is_mine ? 'mine' : 'theirs' ?>">
+                            <div class="chat-avatar" aria-hidden="true"><?= e(mb_strtoupper(mb_substr((string)$c['user_name'], 0, 1))) ?></div>
+                            <div class="chat-bubble <?= $is_mine ? 'mine' : 'theirs' ?>">
+                                <div class="chat-user-name"><?= e($c['user_name']) ?></div>
+                                <?= nl2br(e($c['comment'])) ?>
+                                <span class="chat-time"><?= e(date('H:i', strtotime($c['created_at']))) ?></span>
                             </div>
                         </div>
-                    </div>
-                    <?php endforeach; ?>
-                    <?php else: ?>
-                        <div style="display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100%; color: #94a3b8; text-align: center; padding: 40px 20px;">
-                            <i class="fa-solid fa-comments-slash" style="font-size: 2.5rem; margin-bottom: 12px; opacity: 0.3;"></i>
-                            <p style="font-size: 0.9rem; font-weight: 600; margin: 0;">Nenhuma mensagem ainda.</p>
-                            <p style="font-size: 0.85rem; margin-top: 4px;">Tem alguma dúvida? Escreva abaixo: quem cuida do pedido recebe sua mensagem.</p>
-                        </div>
+                    <?php endforeach; else: ?>
+                        <p class="chat-empty">Tem alguma dúvida? Escreva abaixo: quem cuida do pedido recebe sua mensagem.</p>
                     <?php endif; ?>
                 </div>
                 <div class="chat-footer">
                     <form id="commentForm">
                         <div class="chat-input-area">
-                            <textarea name="comment" class="chat-input" placeholder="Escreva sua mensagem..." rows="1" required maxlength="3000" aria-label="Mensagem"
+                            <textarea name="comment" class="chat-input" placeholder="Escreva sua mensagem" rows="1" required maxlength="3000" aria-label="Mensagem"
                                 oninput="this.style.height = ''; this.style.height = this.scrollHeight + 'px'"></textarea>
-                            <button type="submit" class="btn-send" aria-label="Enviar mensagem">
-                                <i class="fa-solid fa-paper-plane"></i>
-                            </button>
+                            <button type="submit" class="btn-send" aria-label="Enviar mensagem"><i class="fa-solid fa-paper-plane" aria-hidden="true"></i></button>
                         </div>
                     </form>
                 </div>
-            </div>
+            </section>
 
-
+            <?php if ($isOwner && $current_status === 'P'): ?>
+                <button type="button" class="btn btn--danger btn--block" onclick="globalRequestAction('delete', '<?= $req_id ?>', 'ctd_<?= e($req_table) ?>_frm')"><i class="fa-solid fa-trash-can" aria-hidden="true"></i> Cancelar este pedido</button>
+            <?php endif; ?>
         </div>
     </div>
 </div>
 
-<!-- Floating Chat Button (Mobile) -->
-<button class="fab-chat" id="fabChat" onclick="scrollToChat()" aria-label="Ir para a conversa">
-    <i class="fa-solid fa-comments"></i>
-</button>
-
 <script>
-function toggleCard(header) {
-    const card = header.closest('.card');
-    card.classList.toggle('collapsed');
-}
-
 function scrollToBottom() {
     const feed = document.getElementById('comments-feed');
-    if(feed) feed.scrollTop = feed.scrollHeight;
+    if (feed) feed.scrollTop = feed.scrollHeight;
 }
 
-function scrollToChat() {
-    const chatCard = document.querySelector('.chat-card');
-    if(chatCard) {
-        chatCard.scrollIntoView({ behavior: 'smooth', block: 'center' });
-    }
-}
-
-// Controle de visibilidade do FAB
-window.addEventListener('scroll', () => {
-    const fab = document.getElementById('fabChat');
-    const chatCard = document.querySelector('.chat-card');
-    if (!fab || !chatCard) return;
-
-    const chatRect = chatCard.getBoundingClientRect();
-    // Se o chat sair da visão (para cima ou para baixo), mostra o FAB
-    if (chatRect.bottom < 0 || chatRect.top > window.innerHeight) {
-        fab.classList.add('visible');
-    } else {
-        fab.classList.remove('visible');
-    }
-});
+// Histórico aberto no PC, recolhido no celular
+if (window.innerWidth >= 900) document.getElementById('historyPanel')?.setAttribute('open', '');
 
 function loadComments() {
     if (document.hidden) return;
-    fetch(`api/get_comments.php?id=<?= $req_id ?>&table=<?= $req_table ?>`)
+    fetch(`api/get_comments.php?id=<?= $req_id ?>&table=<?= e($req_table) ?>`)
         .then(response => response.ok ? response.text() : Promise.reject())
         .then(html => {
             const feed = document.getElementById('comments-feed');
@@ -713,12 +366,12 @@ function loadComments() {
         .catch(() => {});
 }
 
-// Decisão do aprovador direto na tela de detalhes
+// Decisão do aprovador direto na tela do pedido
 async function decideRequest(value) {
     let reason = '';
     if (value === 'N') {
         reason = await showConfirm({
-            title: 'Recusar requisição',
+            title: 'Recusar pedido',
             message: 'O solicitante vai receber o motivo abaixo.',
             type: 'error',
             confirmLabel: 'Recusar',
@@ -728,8 +381,8 @@ async function decideRequest(value) {
         if (reason === false) return;
     } else {
         const ok = await showConfirm({
-            title: 'Aprovar requisição',
-            message: 'A requisição será enviada ao setor responsável para atendimento.',
+            title: 'Aprovar pedido',
+            message: 'O pedido vai para o setor responsável começar o atendimento.',
             type: 'success',
             confirmLabel: 'Aprovar'
         });
@@ -738,7 +391,7 @@ async function decideRequest(value) {
     const formData = new FormData();
     formData.append('action', 'post');
     formData.append('id', '<?= $req_id ?>');
-    formData.append('table', '<?= $req_table ?>');
+    formData.append('table', '<?= e($req_table) ?>');
     formData.append('value', value);
     formData.append('reason', reason);
     const data = await fetchAjax('config/aprovRequest.php', formData);
@@ -748,7 +401,7 @@ async function decideRequest(value) {
     }
 }
 
-document.getElementById('commentForm')?.addEventListener('submit', async function(e) {
+document.getElementById('commentForm')?.addEventListener('submit', async function (e) {
     e.preventDefault();
     const textarea = this.querySelector('textarea');
     const text = textarea.value.trim();
@@ -758,7 +411,7 @@ document.getElementById('commentForm')?.addEventListener('submit', async functio
     btn.disabled = true;
     const formData = new URLSearchParams();
     formData.append('id', '<?= $req_id ?>');
-    formData.append('table', '<?= $req_table ?>');
+    formData.append('table', '<?= e($req_table) ?>');
     formData.append('comment', text);
 
     try {
@@ -779,10 +432,10 @@ document.getElementById('commentForm')?.addEventListener('submit', async functio
     }
 });
 
-document.querySelector('#commentForm textarea')?.addEventListener('keydown', function(e) {
-    if (e.key === 'Enter' && !e.shiftKey) {
+document.querySelector('#commentForm textarea')?.addEventListener('keydown', function (e) {
+    if (e.key === 'Enter' && !e.shiftKey && window.innerWidth >= 900) {
         e.preventDefault();
-        document.getElementById('commentForm').dispatchEvent(new Event('submit', {cancelable: true, bubbles: true}));
+        document.getElementById('commentForm').dispatchEvent(new Event('submit', { cancelable: true, bubbles: true }));
     }
 });
 
