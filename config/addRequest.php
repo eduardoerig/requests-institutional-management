@@ -146,8 +146,8 @@ if ($subdivision_id) {
 RequestManager::notifyMany(
     $pdo,
     array_values(array_unique(array_map('intval', $approverIds))),
-    'Nova requisição para aprovar',
-    "📥 $userName abriu a requisição #$newId ($sectorLabel) — \"$title\".",
+    "Pedido nº $newId para aprovar",
+    "$userName pediu: \"$title\" ($sectorLabel).",
     $link,
     $userId
 );

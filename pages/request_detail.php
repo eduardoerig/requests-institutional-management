@@ -23,6 +23,7 @@ if (!userCanViewRequest($pdo, $req, $req_table, (int)$_SESSION['id'], $role)) {
     return;
 }
 
+markRequestNotificationsRead($pdo, (int)$_SESSION['id'], $req_table, $req_id);
 $backHref = $role === 'solicitante' ? 'myRequests' : (isGestorRole($role) ? 'inbox' : 'home');
 ?>
 <div class="detail-page">

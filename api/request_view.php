@@ -26,4 +26,5 @@ if (!$req || !userCanViewRequest($pdo, $req, $sector, (int)$_SESSION['id'], $_SE
     exit;
 }
 
-renderRequestView($pdo, $req, $sector, 'panel');
+markRequestNotificationsRead($pdo, (int)$_SESSION['id'], $sector, $id);
+renderRequestView($pdo, $req, $sector, ($_GET['context'] ?? '') === 'page' ? 'page' : 'panel');

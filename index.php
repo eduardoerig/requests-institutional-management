@@ -229,16 +229,21 @@ $pageClass = preg_replace('/[^a-zA-Z_]/', '', (string)$page);
             </a>
             <p class="topbar__title"><?= e($page === 'myRequests' && $role === 'solicitante' ? 'Olá, ' . $firstName : $pageTitle) ?></p>
             <div class="topbar__actions">
-                <div class="notification-wrapper icon-btn" id="notif-btn" role="button" tabindex="0" aria-label="Avisos" aria-haspopup="true">
+                <div class="notification-wrapper icon-btn" id="notif-btn" role="button" tabindex="0" aria-label="Avisos" aria-haspopup="true" aria-expanded="false">
                     <i class="fa-solid fa-bell" aria-hidden="true"></i>
                     <span class="notif-badge" id="notif-badge" style="display:none;">0</span>
                     <div class="notif-dropdown" id="notif-dropdown" role="dialog" aria-label="Avisos">
                         <div class="notif-header">
                             <span>Avisos</span>
-                            <button type="button" onclick="markAllRead()">Marcar todos como lidos</button>
+                            <button type="button" id="notif-mark-all" onclick="markAllRead()" disabled>Marcar todos como lidos</button>
                         </div>
                         <div class="notif-body" id="notif-body">
-                            <div class="notif-empty">Carregando avisos...</div>
+                            <div class="notif-empty"><p>Carregando avisos...</p></div>
+                        </div>
+                        <div class="notif-foot" id="notif-foot" hidden>
+                            <i class="fa-solid fa-bell" aria-hidden="true"></i>
+                            <span>Quer ser avisado mesmo com o SisReq em outra aba?</span>
+                            <button type="button" class="btn btn--sm" onclick="enableBrowserNotifs()">Ativar</button>
                         </div>
                     </div>
                 </div>

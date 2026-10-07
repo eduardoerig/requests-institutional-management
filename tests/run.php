@@ -206,7 +206,7 @@ check('requisição válida é criada', ($res['json']['success'] ?? false) === t
 $createdIds[] = ['ti', $reqId];
 $hist = $pdo->query("SELECT COUNT(*) FROM request_history WHERE request_id = $reqId AND request_table = 'ti' AND action = 'Requisição criada'")->fetchColumn();
 check('histórico registra a criação', (int)$hist === 1);
-$notif = $pdo->query("SELECT COUNT(*) FROM notifications WHERE link = 'request_detail?id=$reqId&table=ti' AND title = 'Nova requisição para aprovar'")->fetchColumn();
+$notif = $pdo->query("SELECT COUNT(*) FROM notifications WHERE link = 'request_detail?id=$reqId&table=ti' AND title = 'Pedido nº $reqId para aprovar'")->fetchColumn();
 check('aprovadores são avisados', (int)$notif >= 1);
 
 $res = $sol->get("request_detail?id=$reqId&table=ti");

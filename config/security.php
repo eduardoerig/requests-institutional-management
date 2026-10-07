@@ -481,3 +481,12 @@ function getPrazoBadge(?string $rawDate, string $status = 'P'): string
     }
     return '<span class="prazo-badge prazo-futuro"><i class="fa-regular fa-calendar" aria-hidden="true"></i> Até ' . $display . '</span>';
 }
+
+/**
+ * Abrir o pedido conta como ler os avisos dele.
+ */
+function markRequestNotificationsRead(PDO $pdo, int $userId, string $sector, int $requestId): void
+{
+    $pdo->prepare('UPDATE notifications SET is_read = 1 WHERE user_id = ? AND link = ? AND is_read = 0')
+        ->execute([$userId, "request_detail?id=$requestId&table=$sector"]);
+}

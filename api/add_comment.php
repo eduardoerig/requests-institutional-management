@@ -38,7 +38,7 @@ $pdo->prepare('INSERT INTO request_comments (request_id, request_table, user_id,
 $preview = mb_strlen($text) > 60 ? mb_substr($text, 0, 57) . '...' : $text;
 RequestManager::notifyStakeholders(
     $pdo, $req, $sector,
-    "Nova mensagem na requisição #$reqId",
+    "Nova mensagem no pedido nº $reqId",
     "$userName: $preview",
     "request_detail?id=$reqId&table=$sector",
     $userId,

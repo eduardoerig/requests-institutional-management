@@ -50,30 +50,61 @@ async function fetchAjax(path, formData) {
     }
 }
 
-// Lógica de Notificações
+// =====================================================================
+// Avisos (sino): chegam sozinhos, aparecem na tela e atualizam o que está aberto
+// =====================================================================
 const notifBtn = document.getElementById('notif-btn');
 const notifDropdown = document.getElementById('notif-dropdown');
 const notifBadge = document.getElementById('notif-badge');
 const notifBody = document.getElementById('notif-body');
 
+const NOTIF_POLL_MS = 20000;
+const NOTIF_KINDS = {
+    approve:  ['fa-inbox',             'kind-approve'],
+    approved: ['fa-circle-check',      'kind-ok'],
+    done:     ['fa-check-double',      'kind-ok'],
+    refused:  ['fa-circle-xmark',      'kind-bad'],
+    forward:  ['fa-share-from-square', 'kind-forward'],
+    message:  ['fa-comment-dots',      'kind-message'],
+    started:  ['fa-gears',             'kind-info'],
+    priority: ['fa-bolt',              'kind-warn'],
+    info:     ['fa-bell',              'kind-info'],
+};
+const notifState = { lastId: null, unread: 0, items: [], loading: false, baseTitle: document.title, pending: [], lastFetch: 0 };
+
 if (notifBtn) {
     notifBtn.addEventListener('click', (e) => {
+        if (e.target.closest('#notif-dropdown')) return;
         e.stopPropagation();
-        notifDropdown.classList.toggle('active');
-        if (notifDropdown.classList.contains('active')) {
-            updateNotifications();
-        }
+        const open = notifDropdown.classList.toggle('active');
+        notifBtn.setAttribute('aria-expanded', open ? 'true' : 'false');
+        if (open) updateNotifications();
     });
-
-    document.addEventListener('click', () => {
-        notifDropdown.classList.remove('active');
+    notifBtn.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); notifBtn.click(); }
     });
-
+    document.addEventListener('click', () => closeNotifDropdown());
+    document.addEventListener('keydown', (e) => { if (e.key === 'Escape') closeNotifDropdown(); });
     notifDropdown.addEventListener('click', (e) => e.stopPropagation());
 
-    // Polling inicial e a cada 60s
     updateNotifications();
-    setInterval(updateNotifications, 60000);
+    setInterval(updateNotifications, NOTIF_POLL_MS);
+    // Voltou para a aba/app: confere na hora
+    document.addEventListener('visibilitychange', () => {
+        if (document.hidden) return;
+        // Mostra o que chegou enquanto a pessoa estava em outra aba
+        const waiting = notifState.pending.splice(0);
+        waiting.slice(-3).forEach(n => showNotifPop(n));
+        if (waiting.length) refreshForNotifications(waiting);
+        updateNotifications();
+    });
+    window.addEventListener('focus', () => updateNotifications());
+}
+
+function closeNotifDropdown() {
+    if (!notifDropdown || !notifDropdown.classList.contains('active')) return;
+    notifDropdown.classList.remove('active');
+    notifBtn.setAttribute('aria-expanded', 'false');
 }
 
 function escapeHtml(value) {
@@ -89,83 +120,258 @@ function safeInternalLink(link) {
 }
 
 async function updateNotifications() {
-    if (document.hidden) return;
+    if (!notifBadge || notifState.loading) return;
+    // Em segundo plano confere a cada minuto (atualiza o número no título da aba)
+    if (document.hidden && notifState.lastId !== null && Date.now() - notifState.lastFetch < 55000) return;
+    notifState.loading = true;
+    notifState.lastFetch = Date.now();
     try {
-        const response = await fetch('api/get_notifications.php');
+        const response = await fetch('api/get_notifications.php', { cache: 'no-store' });
+        if (!response.ok) return;
         const data = await response.json();
-        
-        if (data.unreadCount > 0) {
-            notifBadge.textContent = data.unreadCount;
-            notifBadge.style.display = 'grid';
-        } else {
-            notifBadge.style.display = 'none';
-        }
+        const items = data.notifications || [];
+        const fresh = notifState.lastId === null ? [] : items.filter(n => n.id > notifState.lastId && !n.is_read);
 
-        if (data.notifications && data.notifications.length > 0) {
-            notifBody.innerHTML = data.notifications.map(n => `
-                <a class="notif-item ${n.is_read == 0 ? 'unread' : ''}" href="${escapeHtml(safeInternalLink(n.link))}">
-                    <div class="notif-item-content">
-                        <span class="notif-item-title">${escapeHtml(n.title)}</span>
-                        <p class="notif-item-msg">${escapeHtml(n.message)}</p>
-                        <span class="notif-item-time">${escapeHtml(formatDate(n.created_at))}</span>
-                    </div>
-                    ${n.is_read == 0 ? `
-                        <button class="notif-mark-read" onclick="markSingleRead(event, ${parseInt(n.id, 10)})" title="Marcar como lida" aria-label="Marcar como lida">
-                            <i class="fa-solid fa-circle"></i>
-                        </button>
-                    ` : ''}
-                </a>
-            `).join('');
-        } else {
-            notifBody.innerHTML = '<div class="notif-empty">Nenhuma notificação nova</div>';
+        notifState.items = items;
+        notifState.lastId = Math.max(notifState.lastId || 0, data.latestId || 0);
+        setNotifCount(data.unreadCount || 0, fresh.length > 0);
+        renderNotifList();
+
+        if (fresh.length && document.hidden) {
+            notifState.pending.push(...fresh.slice().reverse());
+            fresh.slice(0, 3).forEach(n => showBrowserNotif(n));
+        } else if (fresh.length) {
+            fresh.slice(0, 3).reverse().forEach(n => showNotifPop(n));
+            if (fresh.length > 3) showNotifPop({ id: 0, kind: 'info', title: `Mais ${fresh.length - 3} avisos`, message: 'Abra o sino para ver todos.', link: '' });
+            refreshForNotifications(fresh);
         }
     } catch (err) {
-        console.error('Erro ao carregar notificações:', err);
+        /* sem conexão: tenta no próximo ciclo */
+    } finally {
+        notifState.loading = false;
     }
+}
+
+function setNotifCount(count, bump) {
+    notifState.unread = count;
+    notifBadge.textContent = count > 99 ? '99+' : count;
+    notifBadge.style.display = count > 0 ? 'grid' : 'none';
+    notifBtn.setAttribute('aria-label', count > 0 ? `Avisos: ${count} não lidos` : 'Avisos');
+    document.title = (count > 0 ? `(${count}) ` : '') + notifState.baseTitle;
+    const markAll = document.getElementById('notif-mark-all');
+    if (markAll) markAll.disabled = count === 0;
+    if (bump) {
+        notifBtn.classList.remove('ring');
+        void notifBtn.offsetWidth; // reinicia a animação
+        notifBtn.classList.add('ring');
+    }
+}
+
+function notifRelativeTime(dateStr) {
+    const date = new Date(String(dateStr).replace(' ', 'T'));
+    const diff = Math.round((Date.now() - date.getTime()) / 60000);
+    if (diff < 1) return 'agora';
+    if (diff < 60) return `há ${diff} min`;
+    if (diff < 60 * 24 && date.getDate() === new Date().getDate()) return `há ${Math.floor(diff / 60)} h`;
+    return date.toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' }) + ' às ' + date.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
+}
+
+function notifGroup(dateStr) {
+    const d = new Date(String(dateStr).replace(' ', 'T'));
+    const today = new Date(); today.setHours(0, 0, 0, 0);
+    const day = new Date(d); day.setHours(0, 0, 0, 0);
+    const diff = Math.round((today - day) / 86400000);
+    return diff === 0 ? 'Hoje' : diff === 1 ? 'Ontem' : 'Antes';
+}
+
+function notifIcon(kind) {
+    const [icon, cls] = NOTIF_KINDS[kind] || NOTIF_KINDS.info;
+    return `<span class="notif-icon ${cls}" aria-hidden="true"><i class="fa-solid ${icon}"></i></span>`;
+}
+
+function renderNotifList() {
+    if (!notifBody) return;
+    const items = notifState.items;
+    if (!items.length) {
+        notifBody.innerHTML = '<div class="notif-empty"><i class="fa-regular fa-bell" aria-hidden="true"></i><p>Nenhum aviso ainda.</p><small>Quando algo acontecer nos seus pedidos, aparece aqui.</small></div>';
+    } else {
+        let html = '';
+        let group = '';
+        items.forEach(n => {
+            const g = notifGroup(n.created_at);
+            if (g !== group) { html += `<p class="notif-group">${g}</p>`; group = g; }
+            html += `
+                <a class="notif-item ${n.is_read ? '' : 'unread'}" href="${escapeHtml(safeInternalLink(n.link))}" data-id="${n.id}">
+                    ${notifIcon(n.kind)}
+                    <span class="notif-item-content">
+                        <span class="notif-item-title">${escapeHtml(n.title)}</span>
+                        <span class="notif-item-msg">${escapeHtml(n.message)}</span>
+                        <span class="notif-item-time">${escapeHtml(notifRelativeTime(n.created_at))}</span>
+                    </span>
+                    ${n.is_read ? '' : `<button type="button" class="notif-mark-read" data-read="${n.id}" title="Marcar como lido" aria-label="Marcar como lido"><span></span></button>`}
+                </a>`;
+        });
+        notifBody.innerHTML = html;
+    }
+    renderNotifPermission();
+}
+
+// Oferece aviso do navegador (aparece mesmo com o SisReq em outra aba)
+function renderNotifPermission() {
+    const foot = document.getElementById('notif-foot');
+    if (!foot) return;
+    const can = 'Notification' in window && window.isSecureContext !== false;
+    if (!can || Notification.permission !== 'default') { foot.hidden = true; return; }
+    foot.hidden = false;
+}
+
+async function enableBrowserNotifs() {
+    if (!('Notification' in window)) return;
+    const result = await Notification.requestPermission();
+    renderNotifPermission();
+    showToast(result === 'granted' ? 'Pronto: você será avisado mesmo com o SisReq em outra aba.' : 'Tudo bem, os avisos continuam aparecendo aqui no SisReq.', result === 'granted' ? 'success' : 'info');
+}
+
+function showBrowserNotif(n) {
+    if (!('Notification' in window) || Notification.permission !== 'granted') return;
+    try {
+        const notif = new Notification(n.title, { body: n.message, icon: 'assets/img/LogoFavConSisreq.png', tag: 'sisreq-' + n.id });
+        notif.onclick = () => {
+            window.focus();
+            const link = safeInternalLink(n.link);
+            if (link !== '#') openNotification(n.id, link);
+            notif.close();
+        };
+    } catch (err) { /* alguns celulares só permitem pelo service worker */ }
+}
+
+// Cartão que aparece na tela quando chega um aviso novo
+function showNotifPop(n) {
+    let stack = document.getElementById('notif-pops');
+    if (!stack) {
+        stack = document.createElement('div');
+        stack.id = 'notif-pops';
+        stack.className = 'notif-pops';
+        stack.setAttribute('aria-live', 'polite');
+        document.body.appendChild(stack);
+    }
+    const link = safeInternalLink(n.link);
+    const pop = document.createElement('div');
+    pop.className = 'notif-pop';
+    pop.setAttribute('role', 'status');
+    pop.innerHTML = `
+        ${notifIcon(n.kind)}
+        <div class="notif-pop__text"><strong></strong><p></p></div>
+        <div class="notif-pop__actions">
+            ${link !== '#' && link !== '' ? '<button type="button" class="notif-pop__open">Abrir</button>' : ''}
+            <button type="button" class="notif-pop__close" aria-label="Fechar aviso"><i class="fa-solid fa-xmark" aria-hidden="true"></i></button>
+        </div>`;
+    pop.querySelector('strong').textContent = n.title;
+    pop.querySelector('p').textContent = n.message;
+    stack.appendChild(pop);
+    while (stack.children.length > 3) stack.firstElementChild.remove();
+    setTimeout(() => pop.classList.add('show'), 20);
+
+    let timer;
+    const dismiss = () => {
+        clearTimeout(timer);
+        pop.classList.remove('show');
+        setTimeout(() => pop.remove(), 250);
+    };
+    const arm = () => { clearTimeout(timer); timer = setTimeout(dismiss, 8000); };
+    arm();
+    pop.addEventListener('mouseenter', () => clearTimeout(timer));
+    pop.addEventListener('mouseleave', arm);
+    pop.querySelector('.notif-pop__close').addEventListener('click', dismiss);
+    const open = pop.querySelector('.notif-pop__open');
+    if (open) open.addEventListener('click', () => { dismiss(); openNotification(n.id, link); });
+}
+
+// Abre o pedido do aviso: no painel da fila quando ele está na lista, senão a página
+function openNotification(id, link) {
+    if (id) markNotifRead(id, true);
+    const m = /request_detail\?id=(\d+)&table=([a-z]+)/.exec(link);
+    if (m && window.innerWidth >= 900 && document.getElementById('requestPanel')) {
+        const row = document.querySelector(`[data-queue] .row-item[data-table="${m[2]}"][data-id="${m[1]}"]`);
+        if (row) { openInPanel(m[2], m[1], row); closeNotifDropdown(); return; }
+    }
+    window.location.href = link;
+}
+
+// O aviso fala do que está aberto? Atualiza sem a pessoa precisar recarregar
+function refreshForNotifications(fresh) {
+    const links = fresh.map(n => String(n.link || ''));
+    if (document.querySelector('[data-queue]') && typeof refreshAfterChange === 'function') {
+        const panelView = document.querySelector('#requestPanel .request-view');
+        const typing = panelView?.querySelector('[data-chat-form] textarea')?.value.trim();
+        refreshAfterChange({ keepPanel: !!typing });
+        if (typing) reloadChat(panelView);
+        return;
+    }
+    document.querySelectorAll('.request-view').forEach(view => {
+        const link = `request_detail?id=${view.dataset.id}&table=${view.dataset.table}`;
+        if (!links.includes(link)) return;
+        const typing = view.querySelector('[data-chat-form] textarea')?.value.trim();
+        const onlyMessages = fresh.every(n => n.kind === 'message' || n.link !== link);
+        if (onlyMessages || typing) {
+            reloadChat(view);
+        } else {
+            reloadRequestView(view);
+        }
+    });
+}
+
+async function reloadRequestView(view) {
+    try {
+        const html = await (await fetch(`api/request_view.php?id=${view.dataset.id}&table=${view.dataset.table}&context=page`)).text();
+        const box = document.createElement('div');
+        box.innerHTML = html;
+        const fresh = box.querySelector('.request-view');
+        if (!fresh) return;
+        view.replaceWith(fresh);
+        initRequestView(fresh.parentElement);
+        fresh.classList.add('just-updated');
+    } catch (err) { /* mantém a versão atual */ }
 }
 
 async function markAllRead() {
-    try {
-        const formData = new URLSearchParams();
-        const response = await fetch('api/mark_notifications_read.php', {
-            method: 'POST',
-            body: attachCsrfToken(formData)
-        });
-        const data = await response.json();
-        if (data.success) {
-            updateNotifications();
-        }
-    } catch (err) {
-        console.error('Erro ao marcar como lidas:', err);
+    const data = await postForm('api/mark_notifications_read.php', {});
+    if (data && data.success) {
+        notifState.items.forEach(n => { n.is_read = 1; });
+        setNotifCount(0, false);
+        renderNotifList();
     }
 }
 
-async function markSingleRead(event, id) {
-    event.preventDefault();
-    event.stopPropagation();
-    try {
-        const formData = new URLSearchParams();
-        formData.append('id', id);
-        const response = await fetch('api/mark_notification_read_single.php', {
-            method: 'POST',
-            body: attachCsrfToken(formData)
-        });
-        const data = await response.json();
-        if (data.success) {
-            updateNotifications();
-        }
-    } catch (err) {
-        console.error('Erro ao marcar como lida:', err);
+async function markNotifRead(id, keepalive = false) {
+    const item = notifState.items.find(n => n.id === id);
+    if (item && !item.is_read) {
+        item.is_read = 1;
+        setNotifCount(Math.max(0, notifState.unread - 1), false);
+        renderNotifList();
     }
+    const body = attachCsrfToken(new URLSearchParams({ id }));
+    try {
+        await fetch('api/mark_notification_read_single.php', { method: 'POST', body, keepalive });
+    } catch (err) { /* o próximo ciclo corrige */ }
 }
 
-function formatDate(dateStr) {
-    const date = new Date(dateStr);
-    return date.toLocaleDateString('pt-BR', { 
-        day: '2-digit', 
-        month: '2-digit',
-        hour: '2-digit',
-        minute: '2-digit'
+if (notifBody) {
+    notifBody.addEventListener('click', (e) => {
+        const mark = e.target.closest('[data-read]');
+        if (mark) {
+            e.preventDefault();
+            markNotifRead(parseInt(mark.dataset.read, 10));
+            return;
+        }
+        const item = e.target.closest('.notif-item');
+        if (!item) return;
+        e.preventDefault();
+        const id = parseInt(item.dataset.id, 10);
+        const link = item.getAttribute('href');
+        if (link === '#') { markNotifRead(id); return; }
+        closeNotifDropdown();
+        openNotification(item.classList.contains('unread') ? id : 0, link);
     });
 }
 
@@ -600,7 +806,7 @@ async function postForm(url, fields) {
 }
 
 // Depois de uma ação: no painel da fila, recarrega lista + painel sem sair da tela; na página, recarrega a página
-async function refreshAfterChange() {
+async function refreshAfterChange(opts = {}) {
     const queue = document.querySelector('[data-queue]');
     if (!queue) {
         setTimeout(() => location.reload(), 700);
@@ -627,6 +833,11 @@ async function refreshAfterChange() {
         });
         bindQueue();
         if (!key) return;
+        if (opts.keepPanel) {
+            const current = document.querySelector(`[data-queue] .row-item[data-table="${key.split(':')[0]}"][data-id="${key.split(':')[1]}"]`);
+            if (current) current.classList.add('selected');
+            return;
+        }
         const [table, id] = key.split(':');
         const row = document.querySelector(`[data-queue] .row-item[data-table="${table}"][data-id="${id}"]`);
         if (row || !advance) {
@@ -771,6 +982,7 @@ async function openInPanel(table, id, row) {
         panel.innerHTML = await response.text();
         panel.dataset.key = table + ':' + id;
         initRequestView(panel);
+        if (typeof updateNotifications === 'function') updateNotifications(); // abrir o pedido marcou os avisos dele como lidos
         const url = new URL(location.href);
         url.searchParams.set('sel', table + ':' + id);
         history.replaceState(null, '', url);

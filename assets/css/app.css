@@ -389,32 +389,113 @@ small { font-size: 0.85em; }
     min-height: 40px;
     cursor: pointer;
 }
-.notif-body { overflow-y: auto; flex: 1; }
+.notif-header button:disabled { color: var(--texto-3); cursor: default; }
+.notif-body { overflow-y: auto; flex: 1; overscroll-behavior: contain; }
+.notif-group { position: sticky; top: 0; z-index: 1; margin: 0; padding: 8px 16px; background: var(--superficie); border-bottom: 1px solid var(--linha); font-size: 0.78rem; font-weight: 800; letter-spacing: 0.04em; text-transform: uppercase; color: var(--texto-3); }
 .notif-item {
+    position: relative;
     display: flex;
-    gap: 10px;
+    gap: 12px;
     align-items: flex-start;
-    padding: 14px 16px;
+    padding: 14px 12px 14px 16px;
     border-bottom: 1px solid var(--linha);
     color: inherit;
     text-decoration: none;
+    transition: background 0.15s;
 }
 .notif-item:hover { background: var(--fundo); }
-.notif-item.unread { background: var(--laranja-claro); }
-.notif-item-content { flex: 1; min-width: 0; }
+.notif-item.unread { background: #FFF8F1; }
+.notif-item.unread::before { content: ""; position: absolute; left: 0; top: 0; bottom: 0; width: 3px; background: var(--laranja); }
+.notif-item:not(.unread) .notif-item-title { font-weight: 600; color: var(--texto-2); }
+.notif-item-content { flex: 1; min-width: 0; display: grid; gap: 2px; }
 .notif-item-title { display: block; font-weight: 800; font-size: 0.95rem; }
-.notif-item-msg { margin: 2px 0 4px; font-size: 0.92rem; color: var(--texto-2); overflow-wrap: anywhere; }
+.notif-item-msg { font-size: 0.9rem; color: var(--texto-2); overflow-wrap: anywhere; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
 .notif-item-time { font-size: 0.8rem; color: var(--texto-3); }
 .notif-mark-read {
+    flex: 0 0 36px;
+    height: 36px;
+    display: grid;
+    place-items: center;
     border: 0;
     background: none;
-    color: var(--laranja-vivo);
-    width: 40px; height: 40px;
     border-radius: 10px;
     cursor: pointer;
-    font-size: 0.7rem;
 }
-.notif-empty { padding: 40px 16px; text-align: center; color: var(--texto-2); }
+.notif-mark-read span { width: 10px; height: 10px; border-radius: 50%; background: var(--laranja); }
+.notif-mark-read:hover { background: var(--laranja-claro); }
+.notif-empty { display: grid; justify-items: center; gap: 6px; padding: 48px 20px; text-align: center; color: var(--texto-2); }
+.notif-empty i { font-size: 1.8rem; color: var(--linha-forte); }
+.notif-empty p { font-weight: 700; color: var(--texto); }
+.notif-foot { display: flex; align-items: center; gap: 10px; padding: 12px 16px; border-top: 1px solid var(--linha); background: var(--fundo); font-size: 0.88rem; }
+.notif-foot[hidden] { display: none; }
+.notif-foot i { color: var(--laranja); }
+.notif-foot span { flex: 1; }
+
+/* Ícone por tipo de aviso */
+.notif-icon { flex: 0 0 36px; height: 36px; border-radius: 50%; display: grid; place-items: center; font-size: 0.95rem; background: var(--fundo); color: var(--texto-2); }
+.notif-icon.kind-ok { background: var(--ok-claro); color: var(--ok); }
+.notif-icon.kind-bad { background: var(--perigo-claro); color: var(--perigo); }
+.notif-icon.kind-forward { background: var(--st-f-bg); color: var(--st-f-fg); }
+.notif-icon.kind-message { background: var(--st-y-bg); color: var(--st-y-fg); }
+.notif-icon.kind-approve { background: var(--st-p-bg); color: var(--st-p-fg); }
+.notif-icon.kind-warn { background: var(--aviso-claro); color: var(--aviso); }
+.notif-icon.kind-info { background: var(--st-w-bg); color: var(--st-w-fg); }
+
+/* Sino balança quando chega aviso novo */
+.notification-wrapper.ring > i { animation: bell-ring 0.9s ease; transform-origin: 50% 0; }
+.notification-wrapper.ring .notif-badge { animation: badge-pop 0.5s ease; }
+@keyframes bell-ring {
+    0%, 100% { transform: rotate(0); }
+    15% { transform: rotate(18deg); } 30% { transform: rotate(-16deg); }
+    45% { transform: rotate(12deg); } 60% { transform: rotate(-8deg); } 75% { transform: rotate(4deg); }
+}
+@keyframes badge-pop { 0% { transform: scale(0.4); } 60% { transform: scale(1.25); } 100% { transform: scale(1); } }
+
+/* Cartões de aviso novo */
+.notif-pops {
+    position: fixed;
+    z-index: 110;
+    top: calc(var(--topbar-h) + 10px);
+    left: 12px;
+    right: 12px;
+    display: grid;
+    gap: 8px;
+    pointer-events: none;
+}
+@media (min-width: 900px) { .notif-pops { left: auto; right: 20px; width: 380px; } }
+.notif-pop {
+    pointer-events: auto;
+    display: flex;
+    gap: 12px;
+    align-items: flex-start;
+    padding: 14px 12px 14px 14px;
+    background: var(--superficie);
+    border: 1px solid var(--linha);
+    border-left: 4px solid var(--laranja);
+    border-radius: var(--r-ficha);
+    box-shadow: var(--sombra-flutuante);
+    opacity: 0;
+    transform: translateY(-12px) scale(0.98);
+    transition: opacity 0.22s ease, transform 0.22s ease;
+}
+.notif-pop.show { opacity: 1; transform: none; }
+.notif-pop__text { flex: 1; min-width: 0; }
+.notif-pop__text strong { display: block; font-size: 0.97rem; }
+.notif-pop__text p { margin-top: 2px; font-size: 0.9rem; color: var(--texto-2); overflow-wrap: anywhere; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+.notif-pop__actions { display: flex; align-items: center; gap: 2px; }
+.notif-pop__open { min-height: 36px; padding: 0 12px; border: 0; border-radius: 10px; background: var(--grafite); color: #fff; font: inherit; font-weight: 700; font-size: 0.88rem; cursor: pointer; }
+.notif-pop__open:hover { background: var(--grafite-2); }
+.notif-pop__close { width: 36px; height: 36px; border: 0; border-radius: 10px; background: none; color: var(--texto-2); cursor: pointer; }
+.notif-pop__close:hover { background: var(--fundo); }
+
+/* Pedido atualizado sozinho */
+.request-view.just-updated { animation: just-updated 1.6s ease; }
+@keyframes just-updated { 0% { box-shadow: 0 0 0 3px var(--laranja-vivo); } 100% { box-shadow: 0 0 0 0 transparent; } }
+
+@media (prefers-reduced-motion: reduce) {
+    .notification-wrapper.ring > i, .notification-wrapper.ring .notif-badge, .request-view.just-updated { animation: none; }
+    .notif-pop { transition: none; }
+}
 
 /* ---------- 5. Cabeçalho de página e ajuda ---------- */
 .page-head {
