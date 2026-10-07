@@ -1088,7 +1088,9 @@ details.panel[open] > summary::after { transform: rotate(180deg); }
 .panel .panel__body p + p { margin-top: 10px; }
 
 .users-layout { display: grid; gap: 16px; align-items: start; }
-@media (min-width: 1200px) { .users-layout { grid-template-columns: minmax(0, 1fr) 340px; } }
+/* Cadastros em linha acima da tabela; a tabela usa a largura toda */
+.users-layout > aside { order: -1; display: grid; gap: 16px; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); align-items: start; }
+.users-layout > aside > .panel + .panel { margin-top: 0; }
 .switch { position: relative; display: inline-block; width: 52px; height: 30px; }
 .switch input { opacity: 0; width: 0; height: 0; }
 .slider { position: absolute; inset: 0; border-radius: 30px; background: #C5CAD3; cursor: pointer; transition: background 0.2s; }
@@ -1211,3 +1213,11 @@ details.panel[open] > summary::after { transform: rotate(180deg); }
 .data-table td:nth-child(2) { min-width: 240px; }
 .data-table .cell-title { display: block; text-decoration: none; }
 .data-table .cell-title:hover { text-decoration: underline; }
+
+@media (max-width: 899.98px) {
+    .pipeline { grid-template-columns: repeat(3, 1fr) !important; gap: 8px; }
+    .pipeline__step { padding: 10px; }
+    .pipeline__step strong { font-size: 1.5rem; }
+    .pipeline__step span { font-size: 0.85rem; line-height: 1.25; }
+    .alerts-row { font-size: 0.92rem; }
+}

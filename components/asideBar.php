@@ -73,12 +73,10 @@ if ($canManage || $isAdmSub) {
         $fwdW = RequestForwardService::getForwardsByDestination($pdo, 'all', null, null, $subdivisionFilter, 'accepted');
         $badge_andamento = $dedupCount($reqW, $fwdW);
         
-        $fwdY = RequestForwardService::getForwardsByDestination($pdo, 'all', null, null, $subdivisionFilter, 'completed');
-        $reqF = array_filter($allReqs, function($r) { return trim(strtoupper($r['st_raw'] ?? '')) === 'F'; }); // Repassadas pendentes
-        
-        // O admin via as F pendentes nas aprovadas antigamente. Vamos manter a lógica deduplicada
+        // Mesmo critério da lista "Aprovadas" (pages/approved.php): aprovadas + encaminhamentos aguardando aceite
+        $fwdY = RequestForwardService::getForwardsByDestination($pdo, 'all', null, null, $subdivisionFilter, 'pending');
         $uniqueAprovadas = [];
-        $allAprovadas = array_merge($reqY, $reqF, $fwdY);
+        $allAprovadas = array_merge($reqY, $fwdY);
         foreach ($allAprovadas as $r) {
             $cT = str_replace(['ctd_', '_frm'], '', strtolower(trim($r['table'] ?? $r['request_table'] ?? '')));
             // Para repasses do fwdY, o ID pode estar em request_id ou request_data['id']

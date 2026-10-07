@@ -1,7 +1,7 @@
 <?php
 // Buscar dados completos do usuário logado (Apenas admins acessam esta página)
 if (!isGlobalAdminRole($_SESSION['role'] ?? '')) {
-    echo '<div class="main"><div class="empty-big"><i class="fa-solid fa-lock"></i><h2>Sem acesso</h2><p>Somente administradores gerenciam usuários.</p></div></div>';
+    echo '<div class="panel"><div class="empty-big"><i class="fa-solid fa-lock"></i><h2>Sem acesso</h2><p>Somente administradores gerenciam usuários.</p></div></div>';
     return;
 }
 
@@ -34,14 +34,14 @@ $categories = [
 ];
 
 $role_labels = [
-    'admin' => 'Administrador',
-    'adm_sub' => 'Admin de Subdivisão',
-    'ti' => 'Gestor de TI',
-    'xerox' => 'Gestor de Reprografia',
-    'service' => 'Gestor de Manutenção',
-    'shop' => 'Gestor de Compras',
-    'mkt' => 'Gestor de Marketing',
-    'solicitante' => 'Solicitante'
+    'solicitante' => 'Solicitante (faz pedidos)',
+    'adm_sub' => 'Coordenação (aprova a subdivisão)',
+    'ti' => 'Setor de TI',
+    'service' => 'Setor de Manutenção',
+    'shop' => 'Setor de Compras',
+    'xerox' => 'Setor de Reprografia',
+    'mkt' => 'Setor de Marketing',
+    'admin' => 'Administrador (acesso total)',
 ];
 
 // Mapeamento estendido para exibir nomes de perfis legados no banco de dados
@@ -51,205 +51,46 @@ $full_role_labels = array_merge($role_labels, [
 ]);
 
 ?>
-<div class="main" style="max-width: 1300px; margin: 0 auto; padding: 20px;">
-
-    <!-- 1. Header da Página -->
-    <div class="page-header">
-        <div style="display: flex; align-items: center; gap: 15px;">
-            <div style="background: var(--primary); color: white; width: 50px; height: 50px; border-radius: 12px; display: flex; align-items: center; justify-content: center; font-size: 1.5rem; box-shadow: 0 4px 12px rgba(124, 58, 237, 0.2);">
-                <i class="fa-solid fa-users-gear"></i>
-            </div>
-            <div>
-                <h3>Gestão de Contas</h3>
-                <p style="margin: 5px 0 0; font-size: 0.9rem; color: var(--text-muted);">Controle centralizado de usuários, permissões e setores do sistema.</p>
-            </div>
-        </div>
-        <a href="api/export_accounts_csv.php" class="btn-primary" style="background: #1e293b; width: auto; padding: 0 20px; height: 42px; display: flex; align-items: center; gap: 8px; font-size: 0.85rem;">
-            <i class="fa-solid fa-file-csv"></i> Exportar CSV
-        </a>
+<div class="page-head">
+    <div>
+        <h1>Usuários e setores</h1>
+        <p>Cadastre pessoas, defina o que cada uma pode fazer e ligue os responsáveis aos setores.</p>
     </div>
+    <a href="api/export_accounts_csv.php" class="btn"><i class="fa-solid fa-file-csv" aria-hidden="true"></i> Exportar planilha</a>
+</div>
 
-    <!-- 2. Grid de Três Colunas (Ações Rápidas) -->
-    <div class="actions-grid" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(350px, 1fr)); gap: 20px; margin-bottom: 30px;">
-
-        <!-- Card: Criar Novo Setor -->
-        <div class="card" style="border-left: 4px solid #8b5cf6;">
-            <div class="card-header" style="padding: 15px 20px; border-bottom: 1px solid var(--border-color);">
-                <h4 style="margin: 0; font-size: 0.95rem; color: var(--text-main); display: flex; align-items: center; gap: 10px;">
-                    <i class="fa-solid fa-folder-plus" style="color: #8b5cf6;"></i> Criar Novo Setor
-                </h4>
-            </div>
-            <div class="card-body" style="padding: 20px;">
-                <form id="formCreateSector">
-                    <div style="display: flex; gap: 10px;">
-                        <input type="text" name="sector_title" placeholder="Ex: financeiro, rh..." required
-                               style="padding: 10px 14px; border: 1px solid var(--border-color); border-radius: 8px; outline: none; flex: 1; font-size: 0.85rem;">
-                        <button type="submit" class="btn-primary" style="width: auto; background: #8b5cf6; padding: 0 15px; border-radius: 8px;">
-                            <i class="fa-solid fa-plus"></i>
-                        </button>
-                    </div>
-                </form>
-            </div>
-        </div>
-
-        <!-- Card: Setores Cadastrados -->
-        <div class="card" style="border-left: 4px solid #6366f1;">
-            <div class="card-header" style="padding: 15px 20px; border-bottom: 1px solid var(--border-color);">
-                <h4 style="margin: 0; font-size: 0.95rem; color: var(--text-main); display: flex; align-items: center; gap: 10px;">
-                    <i class="fa-solid fa-tags" style="color: #6366f1;"></i> Setores Cadastrados
-                </h4>
-            </div>
-            <div class="card-body" style="padding: 15px 20px; max-height: 100px; overflow-y: auto;">
-                <div style="display: flex; flex-wrap: wrap; gap: 8px;">
-                    <?php foreach($all_sectors as $s):
-                        $label = $categories[$s['title']] ?? ucfirst($s['title']);
-                    ?>
-                        <span style="background: #f1f5f9; padding: 4px 10px; border-radius: 6px; font-size: 0.75rem; font-weight: 600; color: #475569; border: 1px solid #e2e8f0; display: flex; align-items: center; gap: 6px;">
-                            <?= $label ?>
-                            <i class="fa-solid fa-times" onclick="deleteSector(<?= $s['id'] ?>)" style="cursor: pointer; opacity: 0.6; hover: opacity: 1;"></i>
-                        </span>
+<div class="users-layout">
+    <section class="panel" aria-labelledby="contasTitulo" style="min-width:0;">
+        <div class="panel__head" style="flex-wrap:wrap;">
+            <h2 id="contasTitulo"><i class="fa-solid fa-users" aria-hidden="true"></i> Contas <span id="userCount" class="sidebar-badge" style="background:var(--grafite); color:#fff;"></span></h2>
+            <div class="row" style="flex:1 1 520px; justify-content:flex-end;">
+                <div class="search-box" style="flex:1 1 220px;">
+                    <i class="fa-solid fa-search" aria-hidden="true"></i>
+                    <input type="search" id="userSearch" placeholder="Buscar por nome ou login" aria-label="Buscar usuário">
+                </div>
+                <select id="roleFilter" aria-label="Filtrar por perfil" style="width:auto; flex:0 1 220px;">
+                    <option value="all">Todos os perfis</option>
+                    <?php foreach($role_labels as $key => $label): ?>
+                        <option value="<?= e($key) ?>"><?= e($label) ?></option>
                     <?php endforeach; ?>
-                </div>
+                </select>
+                <select id="subdivisionFilter" aria-label="Filtrar por subdivisão" style="width:auto; flex:0 1 200px;">
+                    <option value="all">Todas as subdivisões</option>
+                    <?php foreach($all_subdivisions as $sub): ?>
+                        <option value="<?= (int)$sub['id'] ?>"><?= e($sub['name']) ?></option>
+                    <?php endforeach; ?>
+                </select>
             </div>
         </div>
 
-        <!-- Card: Vincular Responsável -->
-        <div class="card" style="border-left: 4px solid var(--primary);">
-            <div class="card-header" style="padding: 15px 20px; border-bottom: 1px solid var(--border-color);">
-                <h4 style="margin: 0; font-size: 0.95rem; color: var(--text-main); display: flex; align-items: center; gap: 10px;">
-                    <i class="fa-solid fa-link" style="color: var(--primary);"></i> Vincular Responsável
-                </h4>
-            </div>
-            <div class="card-body" style="padding: 20px;">
-                <form id="formAssignSector">
-                    <div style="display: grid; grid-template-columns: 1fr 1fr auto; gap: 10px;">
-                        <select name="user_id" required style="padding: 10px; border: 1px solid var(--border-color); border-radius: 8px; background: #fff; font-size: 0.8rem;">
-                            <option value="">Usuário...</option>
-                            <?php foreach($all_users as $u): ?>
-                                <option value="<?= $u['id'] ?>"><?= htmlspecialchars($u['name']) ?></option>
-                            <?php endforeach; ?>
-                        </select>
-                        <select name="sector_id" required style="padding: 10px; border: 1px solid var(--border-color); border-radius: 8px; background: #fff; font-size: 0.8rem;">
-                            <option value="">Setor...</option>
-                            <?php foreach($all_sectors as $s):
-                                $label = $categories[$s['title']] ?? ucfirst($s['title']);
-                            ?>
-                                <option value="<?= $s['id'] ?>"><?= $label ?></option>
-                            <?php endforeach; ?>
-                        </select>
-                        <button type="submit" class="btn-primary" style="height: 38px; width: 38px; border-radius: 8px; padding: 0;">
-                            <i class="fa-solid fa-link"></i>
-                        </button>
-                    </div>
-                </form>
-            </div>
-        </div>
-    </div>
-
-    <!-- 3. Card Cadastrar Novo Usuário (Largura Total - Expansivo) -->
-    <div class="card" style="border-left: 4px solid #10b981; margin-bottom: 30px;">
-        <div class="card-header" style="padding: 15px 20px; border-bottom: 1px solid var(--border-color);">
-            <h4 style="margin: 0; font-size: 1rem; color: var(--text-main); display: flex; align-items: center; gap: 10px;">
-                <i class="fa-solid fa-user-plus" style="color: #10b981;"></i> Cadastrar Novo Usuário
-            </h4>
-        </div>
-        <div class="card-body" style="padding: 20px;">
-            <form id="formCreateUser">
-                <div style="display: grid; grid-template-columns: 2fr 1fr 1fr 1fr 1fr 1fr; gap: 15px; align-items: start;">
-                    <div style="display: flex; flex-direction: column; gap: 5px;">
-                        <label style="font-size: 0.75rem; font-weight: 700; color: var(--text-muted);">NOME COMPLETO</label>
-                        <input type="text" name="new_name" placeholder="Nome do usuário" required style="padding: 11px; border: 1px solid var(--border-color); border-radius: 8px; font-size: 0.85rem;">
-                    </div>
-                    <div style="display: flex; flex-direction: column; gap: 5px;">
-                        <label style="font-size: 0.75rem; font-weight: 700; color: var(--text-muted);">LOGIN</label>
-                        <input type="text" name="new_login" placeholder="Ex: joao.silva" required style="padding: 11px; border: 1px solid var(--border-color); border-radius: 8px; font-size: 0.85rem;">
-                    </div>
-                    <div style="display: flex; flex-direction: column; gap: 5px;">
-                        <label style="font-size: 0.75rem; font-weight: 700; color: var(--text-muted);">SENHA INICIAL</label>
-                        <input type="password" name="new_password" placeholder="******" required style="padding: 11px; border: 1px solid var(--border-color); border-radius: 8px; font-size: 0.85rem;">
-                    </div>
-                    <div style="display: flex; flex-direction: column; gap: 5px;">
-                        <label style="font-size: 0.75rem; font-weight: 700; color: var(--text-muted);">WHATSAPP <i class="fa-brands fa-whatsapp" style="color:#25d366;"></i></label>
-                        <input type="text" name="new_phone" placeholder="5511999998888" maxlength="20" style="padding: 11px; border: 1px solid var(--border-color); border-radius: 8px; font-size: 0.85rem;" title="Formato internacional sem + (ex: 5511999998888)">
-                    </div>
-                    <div style="display: flex; flex-direction: column; gap: 5px;">
-                        <label style="font-size: 0.75rem; font-weight: 700; color: var(--text-muted);">PERFIL DE ACESSO</label>
-                        <select name="new_role" required style="padding: 11px; border: 1px solid var(--border-color); border-radius: 8px; background: #fff; font-size: 0.85rem;">
-                            <?php foreach($role_labels as $key => $label): ?>
-                                <option value="<?= $key ?>"><?= $label ?></option>
-                            <?php endforeach; ?>
-                        </select>
-                    </div>
-                    <div style="display: flex; flex-direction: column; gap: 5px;" id="subdivisionContainer">
-                        <label style="font-size: 0.75rem; font-weight: 700; color: var(--text-muted); display: flex; justify-content: space-between; align-items: center;">
-                            SUBDIVISÃO
-                            <button type="button" onclick="addSubdivisionField()" style="background: var(--primary); color: white; border: none; border-radius: 4px; padding: 2px 6px; font-size: 0.7rem; cursor: pointer;">
-                                <i class="fa-solid fa-plus"></i>
-                            </button>
-                        </label>
-                        <select name="new_subdivisions[]" style="padding: 11px; border: 1px solid var(--border-color); border-radius: 8px; background: #fff; font-size: 0.85rem;">
-                            <option value="">Nenhuma</option>
-                            <?php foreach($all_subdivisions as $sub): ?>
-                                <option value="<?= $sub['id'] ?>"><?= htmlspecialchars($sub['name']) ?></option>
-                            <?php endforeach; ?>
-                        </select>
-                    </div>
-                </div>
-                <div style="margin-top: 15px; display: flex; justify-content: space-between; align-items: center;">
-                    <label style="display: flex; align-items: center; gap: 10px; font-size: 0.85rem; color: var(--text-main); cursor: pointer;">
-                        <input type="checkbox" name="force_reset" value="1" style="width: 18px; height: 18px; accent-color: var(--primary);">
-                        Forçar redefinição de senha no próximo login
-                    </label>
-                    <button type="submit" class="btn-primary" style="width: auto; padding: 0 30px; background: #10b981; font-weight: 600;">
-                        <i class="fa-solid fa-plus-circle" style="margin-right: 8px;"></i> Criar Usuário
-                    </button>
-                </div>
-            </form>
-        </div>
-    </div>
-
-    <!-- 4. Card Contas Registradas -->
-    <div class="card" style="border-left: 4px solid var(--primary);">
-        <!-- Cabeçalho com filtros em linha, sem scroll -->
-        <div style="padding: 12px 16px; border-bottom: 1px solid var(--border-color); display: flex; align-items: center; gap: 8px; min-width: 0;">
-            <!-- Título fixo -->
-            <h4 style="margin: 0; font-size: 0.9rem; color: var(--text-main); display: flex; align-items: center; gap: 6px; white-space: nowrap; flex-shrink: 0;">
-                <i class="fa-solid fa-users" style="color: var(--primary);"></i>
-                Contas
-                <span id="userCount" style="background: var(--primary); color: #fff; font-size: 0.65rem; padding: 1px 7px; border-radius: 20px; font-weight: 700;"></span>
-            </h4>
-            <!-- Separador -->
-            <div style="width: 1px; height: 20px; background: var(--border-color); flex-shrink: 0;"></div>
-            <!-- Busca: cresce para preencher espaço disponível -->
-            <div style="position: relative; flex: 2; min-width: 80px;">
-                <i class="fa-solid fa-search" style="position: absolute; left: 9px; top: 50%; transform: translateY(-50%); color: var(--text-muted); font-size: 0.72rem; pointer-events:none;"></i>
-                <input type="text" id="userSearch" placeholder="Buscar..."
-                       style="padding: 6px 8px 6px 28px; border: 1px solid var(--border-color); border-radius: 7px; font-size: 0.78rem; outline: none; width: 100%; box-sizing: border-box;">
-            </div>
-            <!-- Filtro de Perfil -->
-            <select id="roleFilter" style="flex: 1.5; min-width: 80px; padding: 6px 6px; border: 1px solid var(--border-color); border-radius: 7px; font-size: 0.78rem; outline: none; background: #fff; color: var(--text-muted); overflow: hidden; text-overflow: ellipsis;">
-                <option value="all">Todos os Perfis</option>
-                <?php foreach($role_labels as $key => $label): ?>
-                    <option value="<?= $key ?>"><?= $label ?></option>
-                <?php endforeach; ?>
-            </select>
-            <!-- Filtro de Subdivisão -->
-            <select id="subdivisionFilter" style="flex: 1.5; min-width: 80px; padding: 6px 6px; border: 1px solid var(--border-color); border-radius: 7px; font-size: 0.78rem; outline: none; background: #fff; color: var(--text-muted); overflow: hidden; text-overflow: ellipsis;">
-                <option value="all">Todas as Subdivisões</option>
-                <?php foreach($all_subdivisions as $sub): ?>
-                    <option value="<?= $sub['id'] ?>"><?= htmlspecialchars($sub['name']) ?></option>
-                <?php endforeach; ?>
-            </select>
-        </div>
-
-        <div style="overflow-x: auto; overflow-y: visible;">
-            <table id="tableUsers" style="width: 100%; border-collapse: collapse; font-size: 0.82rem;">
+        <div class="table-wrap">
+            <table id="tableUsers" style="width: 100%; border-collapse: collapse; font-size: 0.92rem;">
                 <thead>
-                    <tr style="background: #f8fafc; border-bottom: 2px solid var(--border-color);">
+                    <tr>
                         <th class="ac-th">Usuário</th>
                         <th class="ac-th">Login</th>
-                        <th class="ac-th">WhatsApp <i class="fa-brands fa-whatsapp" style="color:#25d366;"></i></th>
-                        <th class="ac-th">Perfil de Acesso</th>
+                        <th class="ac-th">WhatsApp</th>
+                        <th class="ac-th">O que faz</th>
                         <th class="ac-th">Setores</th>
                         <th class="ac-th">Subdivisões</th>
                         <th class="ac-th" style="text-align:center;">Status</th>
@@ -382,8 +223,8 @@ $full_role_labels = array_merge($role_labels, [
                                 <input type="checkbox" <?= $isActive ? 'checked' : '' ?> onchange="toggleUserStatus(<?= $u['id'] ?>, this.checked, this)" aria-label="Conta ativa">
                                 <span class="slider round"></span>
                             </label>
-                            <div style="font-size:0.6rem; margin-top:3px; font-weight:800; color: <?= $isActive ? '#10b981' : '#ef4444' ?>;">
-                                <?= $isActive ? 'ATIVO' : 'INATIVO' ?>
+                            <div style="font-size:0.8rem; margin-top:3px; font-weight:700; color: <?= $isActive ? 'var(--ok)' : 'var(--perigo)' ?>;">
+                                <?= $isActive ? 'Ativa' : 'Inativa' ?>
                             </div>
                         </td>
 
@@ -411,32 +252,132 @@ $full_role_labels = array_merge($role_labels, [
                                     <i class="fa-solid fa-trash"></i>
                                 </button>
                             </div>
-                            <div class="row-save-state" style="font-size:0.6rem; color:var(--text-muted); font-weight:600;"></div>
+                            <div class="row-save-state" style="font-size:0.8rem; color:var(--texto-2); font-weight:600;"></div>
                         </td>
                     </tr>
                     <?php endforeach; ?>
                 </tbody>
             </table>
         </div>
-    </div>
+    </section>
+
+    <aside class="stack" aria-label="Cadastros">
+        <section class="panel" aria-labelledby="novoUsuarioTitulo">
+            <div class="panel__head"><h2 id="novoUsuarioTitulo"><i class="fa-solid fa-user-plus" aria-hidden="true"></i> Cadastrar pessoa</h2></div>
+            <div class="panel__body">
+                <form id="formCreateUser">
+                    <div class="field">
+                        <label for="new_name">Nome completo</label>
+                        <input type="text" id="new_name" name="new_name" required>
+                    </div>
+                    <div class="field">
+                        <label for="new_login">Usuário para entrar</label>
+                        <input type="text" id="new_login" name="new_login" placeholder="Ex.: joao.silva" autocapitalize="none" required>
+                    </div>
+                    <div class="field">
+                        <label for="new_password">Senha temporária</label>
+                        <input type="text" id="new_password" name="new_password" minlength="8" placeholder="Mínimo 8 caracteres" autocomplete="off" required>
+                        <span>Passe para a pessoa; ela cria a própria senha no primeiro acesso.</span>
+                    </div>
+                    <div class="field">
+                        <label for="new_role">O que a pessoa faz</label>
+                        <select id="new_role" name="new_role" required>
+                            <?php foreach($role_labels as $key => $label): ?>
+                                <option value="<?= e($key) ?>"><?= e($label) ?></option>
+                            <?php endforeach; ?>
+                        </select>
+                    </div>
+                    <div class="field" id="subdivisionContainer">
+                        <label class="row" style="justify-content:space-between;">Subdivisão
+                            <button type="button" class="btn btn--sm btn--ghost" onclick="addSubdivisionField()"><i class="fa-solid fa-plus" aria-hidden="true"></i> Outra</button>
+                        </label>
+                        <select name="new_subdivisions[]" aria-label="Subdivisão">
+                            <option value="">Nenhuma</option>
+                            <?php foreach($all_subdivisions as $sub): ?>
+                                <option value="<?= (int)$sub['id'] ?>"><?= e($sub['name']) ?></option>
+                            <?php endforeach; ?>
+                        </select>
+                    </div>
+                    <div class="field">
+                        <label for="new_phone">WhatsApp <small>(opcional)</small></label>
+                        <input type="tel" id="new_phone" name="new_phone" placeholder="5511999998888" maxlength="20" inputmode="numeric">
+                    </div>
+                    <input type="hidden" name="force_reset" value="1">
+                    <button type="submit" class="btn btn--primary btn--block"><i class="fa-solid fa-user-plus" aria-hidden="true"></i> Cadastrar pessoa</button>
+                </form>
+            </div>
+        </section>
+
+        <section class="panel" aria-labelledby="setoresTitulo">
+            <div class="panel__head"><h2 id="setoresTitulo"><i class="fa-solid fa-building" aria-hidden="true"></i> Setores</h2></div>
+            <div class="panel__body">
+                <ul class="list-links" style="margin:-8px -18px 12px;">
+                    <?php foreach($all_sectors as $s):
+                        $label = $categories[$s['title']] ?? ucfirst($s['title']);
+                        $isSystem = areaTitleToSector((string)$s['title']) !== null;
+                    ?>
+                        <li class="row" style="justify-content:space-between; padding:0 18px; min-height:48px; border-bottom:1px solid var(--linha);">
+                            <span style="font-weight:700;"><?= e($label) ?></span>
+                            <?php if ($isSystem): ?>
+                                <span class="muted" style="font-size:0.85rem;">Setor do sistema</span>
+                            <?php else: ?>
+                                <button type="button" class="btn btn--sm btn--ghost" onclick="deleteSector(<?= (int)$s['id'] ?>)" aria-label="Excluir setor <?= e($label) ?>"><i class="fa-solid fa-trash-can" aria-hidden="true"></i> Excluir</button>
+                            <?php endif; ?>
+                        </li>
+                    <?php endforeach; ?>
+                </ul>
+                <form id="formCreateSector" class="row">
+                    <input type="text" name="sector_title" placeholder="Nome do novo setor" required aria-label="Nome do novo setor" style="flex:1 1 160px; width:auto;">
+                    <button type="submit" class="btn btn--dark"><i class="fa-solid fa-plus" aria-hidden="true"></i> Criar</button>
+                </form>
+            </div>
+        </section>
+
+        <section class="panel" aria-labelledby="vinculoTitulo">
+            <div class="panel__head"><h2 id="vinculoTitulo"><i class="fa-solid fa-link" aria-hidden="true"></i> Ligar responsável a um setor</h2></div>
+            <div class="panel__body">
+                <form id="formAssignSector">
+                    <div class="field">
+                        <label for="assignUser">Pessoa</label>
+                        <select id="assignUser" name="user_id" required>
+                            <option value="">Escolha</option>
+                            <?php foreach($all_users as $u): ?>
+                                <option value="<?= (int)$u['id'] ?>"><?= e($u['name']) ?></option>
+                            <?php endforeach; ?>
+                        </select>
+                    </div>
+                    <div class="field">
+                        <label for="assignSector">Setor</label>
+                        <select id="assignSector" name="sector_id" required>
+                            <option value="">Escolha</option>
+                            <?php foreach($all_sectors as $s): ?>
+                                <option value="<?= (int)$s['id'] ?>"><?= e($categories[$s['title']] ?? ucfirst($s['title'])) ?></option>
+                            <?php endforeach; ?>
+                        </select>
+                    </div>
+                    <button type="submit" class="btn btn--dark btn--block"><i class="fa-solid fa-link" aria-hidden="true"></i> Ligar</button>
+                </form>
+            </div>
+        </section>
+    </aside>
 </div>
 
 <style>
     /* === ACCOUNTS TABLE COMPACT UI === */
     .ac-th {
         padding: 10px 14px;
-        font-size: 0.68rem;
+        font-size: 0.85rem;
         font-weight: 700;
-        color: var(--text-muted);
-        text-transform: uppercase;
-        letter-spacing: 0.6px;
+        color: var(--texto-2);
+        background: #FAFAFB;
+        border-bottom: 1px solid var(--linha);
         white-space: nowrap;
         text-align: left;
     }
     .ac-td {
         padding: 10px 14px;
         vertical-align: middle;
-        border-bottom: 1px solid #f1f5f9;
+        border-bottom: 1px solid var(--linha);
     }
     .ac-row:hover { background: #f8fafc; }
     .ac-row:hover .ac-td { border-bottom-color: #e2e8f0; }
@@ -450,8 +391,8 @@ $full_role_labels = array_merge($role_labels, [
         padding: 6px 10px;
         border: 1px solid var(--border-color);
         border-radius: 6px;
-        font-size: 0.8rem;
-        outline: none;
+        font-size: 0.92rem;
+        min-height: 40px;
         transition: border-color 0.15s;
         background: #fff;
         width: 100%;
@@ -462,9 +403,9 @@ $full_role_labels = array_merge($role_labels, [
         color: #475569;
         padding: 2px 7px;
         border-radius: 10px;
-        font-size: 0.62rem;
+        font-size: 0.8rem;
         font-weight: 700;
-        border: 1px solid #e2e8f0;
+        border: 1px solid var(--linha);
         white-space: nowrap;
     }
     .ac-subs-editor {
@@ -552,8 +493,8 @@ $full_role_labels = array_merge($role_labels, [
         padding: 7px 10px;
         border: 1px solid var(--border-color);
         border-radius: 6px;
-        font-size: 0.8rem;
-        outline: none;
+        font-size: 0.92rem;
+        min-height: 40px;
         transition: border-color 0.15s;
         box-sizing: border-box;
     }
@@ -1113,26 +1054,19 @@ async function saveRowAccount(id, button) {
     // Função: Adicionar Campo de Subdivisão
     function addSubdivisionField() {
         const container = document.getElementById('subdivisionContainer');
-        const originalSelect = container.querySelector('select');
-        const newSelect = originalSelect.cloneNode(true);
+        const newSelect = container.querySelector('select').cloneNode(true);
         newSelect.value = '';
-        newSelect.style.marginTop = '8px';
-
-        // Adicionar botão de remover
-        const div = document.createElement('div');
-        div.style.position = 'relative';
-        div.style.marginTop = '8px';
-
-        newSelect.style.marginTop = '0';
-        div.appendChild(newSelect);
-
+        const row = document.createElement('div');
+        row.className = 'row';
+        row.style.flexWrap = 'nowrap';
+        row.appendChild(newSelect);
         const removeBtn = document.createElement('button');
         removeBtn.type = 'button';
-        removeBtn.innerHTML = '<i class="fa-solid fa-times"></i>';
-        removeBtn.style = 'position: absolute; right: -25px; top: 50%; transform: translateY(-50%); background: transparent; border: none; color: #ef4444; cursor: pointer; font-size: 0.8rem;';
-        removeBtn.onclick = () => div.remove();
-
-        div.appendChild(removeBtn);
-        container.appendChild(div);
+        removeBtn.className = 'btn btn--sm btn--ghost';
+        removeBtn.setAttribute('aria-label', 'Remover subdivisão');
+        removeBtn.innerHTML = '<i class="fa-solid fa-xmark" aria-hidden="true"></i>';
+        removeBtn.onclick = () => row.remove();
+        row.appendChild(removeBtn);
+        container.appendChild(row);
     }
 </script>
