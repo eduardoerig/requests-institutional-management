@@ -13,8 +13,8 @@ $isGestor = in_array($role, $gestorRoles);
 $canManage = $isAdmin || $isGestor || $isAdmSub;
 
 if (!$canManage) {
-    echo '<div class="main"><div class="empty-state"><i class="fa-solid fa-lock"></i><p>Acesso restrito a gestores e administradores.</p></div></div>';
-    exit;
+    echo '<div class="main"><div class="empty-big"><i class="fa-solid fa-lock"></i><h2>Sem acesso</h2><p>Esta tela é dos setores e da coordenação.</p><a class="btn-big" href="myRequests">Ir para Minhas requisições</a></div></div>';
+    return;
 }
 
 $managingId = ($isAdmin || $isAdmSub) ? null : $user_id;

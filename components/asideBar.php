@@ -5,15 +5,13 @@ require_once __DIR__ . '/../classes/RequestManager.php';
 $role = $_SESSION['role'] ?? 'solicitante';
 $sidebar_user_id = $_SESSION['id'] ?? 0;
 
-$adminRoles = ['admin', 'adm', 'coord'];
-$gestorRoles = ['gestor', 'ti', 'xerox', 'service', 'shop', 'mkt', 'marketing'];
-$approverRoles = ['admin', 'adm']; // Quem pode aprovar
-
-$isAdmin = in_array($role, $adminRoles);
+$isAdmin = isGlobalAdminRole($role);
 $isAdmSub = ($role === 'adm_sub');
-$isGestor = in_array($role, $gestorRoles);
+$isGestor = isGestorRole($role);
 $canManage = $isAdmin || $isGestor;
-$canApprove = in_array($role, $approverRoles);
+$canApprove = $isAdmin || $isAdmSub;
+$currentPage = $page ?? ((isset($url[0]) && $url[0] !== '') ? $url[0] : 'home');
+$currentStatus = $_GET['status'] ?? '';
 
 // Buscar contagens para badges (apenas para gestores/admin)
 $badge_pendentes = 0;
@@ -105,79 +103,46 @@ if ($canManage || $isAdmSub) {
     }
 }
 ?>
+<?php
+// Item de menu: ícone + texto simples + contador opcional
+$menuItem = function (string $href, string $icon, string $label, int $badge = 0, string $badgeClass = '', bool $active = false) {
+    $badgeHtml = $badge > 0 ? '<span class="sidebar-badge ' . e($badgeClass) . '" aria-label="' . $badge . ' itens">' . $badge . '</span>' : '';
+    return '<a href="' . e($href) . '" class="menu-link' . ($active ? ' is-active' : '') . '"' . ($active ? ' aria-current="page"' : '') . '>'
+        . '<i class="fa-solid ' . e($icon) . '" aria-hidden="true"></i><span>' . e($label) . '</span>' . $badgeHtml . '</a>';
+};
+?>
 <aside id="main-sidebar">
     <div class="logo-container">
-        <img src="assets/img/LogoFavConSisreq.png" alt="Logo SisReq" class="logo">
+        <img src="assets/img/LogoFavConSisreq.png" alt="SisReq" class="logo">
     </div>
-    <nav>
-        <?php if ($canManage): ?>
-            <a href="home" class="dashboard-link"><i class="fa-solid fa-chart-pie"></i>Dashboard</a>
+    <nav aria-label="Menu principal">
+        <?= $menuItem('new_request', 'fa-plus', 'Nova requisição', 0, '', $currentPage === 'new_request') ?>
+        <?= $menuItem('myRequests', 'fa-folder-open', 'Minhas requisições', 0, '', $currentPage === 'myRequests') ?>
+
+        <?php if ($canApprove || $canManage): ?>
+            <p class="menu-section">Trabalho</p>
+            <?php if ($canApprove): ?>
+                <?= $menuItem('approve', 'fa-clipboard-check', 'Aprovar pedidos', (int)$badge_pendentes, 'pending-badge', $currentPage === 'approve') ?>
+            <?php endif; ?>
+            <?php if ($canManage): ?>
+                <?= $menuItem('approved', 'fa-inbox', $isGestor ? 'Para atender' : 'Aprovadas', (int)$badge_aprovadas, 'approved-badge', $currentPage === 'approved') ?>
+                <?= $menuItem('inWork', 'fa-gears', 'Em atendimento', (int)$badge_andamento, 'progress-badge', $currentPage === 'inWork') ?>
+                <?= $menuItem('home?status=C', 'fa-check-double', 'Concluídas', 0, '', $currentPage === 'home' && $currentStatus === 'C') ?>
+            <?php endif; ?>
+            <?= $menuItem('home', 'fa-chart-pie', 'Painel geral', 0, '', $currentPage === 'home' && $currentStatus === '') ?>
         <?php endif; ?>
 
-        <a href="new_request" class="new_request"><i class="fa-solid fa-plus"></i>Nova requisição</a>
-        
-        <details open>
-            <summary><i class="fa-solid fa-clipboard-list"></i> Requisições<i class="fa-solid fa-angle-right arrow"></i></summary>
-            <ul>    
-                <?php if ($canApprove): ?>
-                    <li>
-                        <a href="approve">
-                            <i class="fa-solid fa-clipboard-check" style="width:16px; font-size:0.85rem; color:#94a3b8; margin-right:6px;"></i>
-                            Aprovar
-                            <?php if ($badge_pendentes > 0): ?>
-                                <span class="sidebar-badge pending-badge"><?= $badge_pendentes ?></span>
-                            <?php endif; ?>
-                        </a>
-                    </li>
-                <?php endif; ?>
-                <?php if ($canManage): ?>
-                    <li>
-                        <a href="approved">
-                            <i class="fa-solid fa-circle-check" style="width:16px; font-size:0.85rem; color:#94a3b8; margin-right:6px;"></i>
-                            Aprovadas
-                            <?php if ($badge_aprovadas > 0): ?>
-                                <span class="sidebar-badge approved-badge"><?= $badge_aprovadas ?></span>
-                            <?php endif; ?>
-                        </a>
-                    </li>
-                    <li>
-                        <a href="inWork">
-                            <i class="fa-solid fa-gears" style="width:16px; font-size:0.85rem; color:#94a3b8; margin-right:6px;"></i>
-                            Em Andamento
-                            <?php if ($badge_andamento > 0): ?>
-                                <span class="sidebar-badge progress-badge"><?= $badge_andamento ?></span>
-                            <?php endif; ?>
-                        </a>
-                    </li>
-                    <li>
-                        <a href="home?status=C">
-                            <i class="fa-solid fa-check-double" style="width:16px; font-size:0.85rem; color:#94a3b8; margin-right:6px;"></i>
-                            Concluídas
-                            <?php if ($badge_concluidas > 0): ?>
-                                <span class="sidebar-badge" style="background:#10b981; color:white; padding: 2px 6px; border-radius: 10px; font-size: 0.7rem; font-weight: 700; margin-left: auto;"><?= $badge_concluidas ?></span>
-                            <?php endif; ?>
-                        </a>
-                    </li>
-                <?php endif; ?>
-                <li><a href="myRequests"><i class="fa-solid fa-folder-open" style="width:16px; font-size:0.85rem; color:#94a3b8; margin-right:6px;"></i>Minhas requisições</a></li>
-            </ul>
-        </details>
-
-        <details>
-            <summary><i class="fa-solid fa-gear"></i>Configurações<i class="fa-solid fa-angle-right arrow"></i></summary>
-            <ul>
-                <li><a href="myAccount">Minha Conta</a></li>
-                <?php if ($isAdmin): ?>
-                    <li><a href="accounts">Contas</a></li>
-                <?php endif; ?>
-                <li><a href="#" class="logout" id="btn_logout"><i class="fa-solid fa-arrow-right-from-bracket"></i>Sair</a></li>
-            </ul>
-        </details>
+        <p class="menu-section">Conta</p>
+        <?php if ($isAdmin): ?>
+            <?= $menuItem('accounts', 'fa-users-gear', 'Usuários e setores', 0, '', $currentPage === 'accounts') ?>
+        <?php endif; ?>
+        <?= $menuItem('myAccount', 'fa-user', 'Minha conta', 0, '', $currentPage === 'myAccount') ?>
+        <?= $menuItem('ajuda', 'fa-circle-question', 'Como usar', 0, '', $currentPage === 'ajuda') ?>
+        <a href="#" class="menu-link logout" id="btn_logout"><i class="fa-solid fa-arrow-right-from-bracket" aria-hidden="true"></i><span>Sair</span></a>
     </nav>
     <footer>
         <div class="copy">
             <p>SisReq © 2026</p>
-            <p>Developed by <a href="https://github.com/eduardoerig" rel="noopener" target="_blank">Eduardo F. S. Erig</a></p>
         </div>
     </footer>
 </aside>

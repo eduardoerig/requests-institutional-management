@@ -10,6 +10,13 @@ $force_reset = (int)($_SESSION['force_reset'] ?? 0);
 $assetVersion = max(array_map(fn($f) => (int)@filemtime($f), glob(__DIR__ . '/assets/{js,css}/*.{js,css}', GLOB_BRACE) ?: [])) ?: time();
 $csrfToken = getCsrfToken();
 
+// Solicitante não tem painel: vai direto para as próprias requisições
+$requestedPage = (isset($url[0]) && $url[0] !== '') ? $url[0] : 'home';
+if ($logged && $role === 'solicitante' && $requestedPage === 'home' && $force_reset !== 1) {
+    header('Location: myRequests');
+    exit;
+}
+
 // Se forçado a resetar, só permite acessar 'myAccount' ou 'logout'
 // Ignora redirecionamento para arquivos estáticos (assets)
 if ($logged && $force_reset === 1) {
@@ -168,7 +175,7 @@ if ($logged && $force_reset === 1) {
         <?php if ($logged): ?>
         <header class="top-bar">
             <div class="top-bar-left">
-                <button class="menu-toggle" id="mobile-menu-btn">
+                <button class="menu-toggle" id="mobile-menu-btn" aria-label="Abrir menu">
                     <i class="fa-solid fa-bars"></i>
                 </button>
             </div>
@@ -177,8 +184,8 @@ if ($logged && $force_reset === 1) {
             </div>
             
             <div class="top-bar-right">
-                <div class="notification-wrapper" id="notif-btn">
-                    <i class="fa-solid fa-bell"></i>
+                <div class="notification-wrapper" id="notif-btn" role="button" tabindex="0" aria-label="Avisos">
+                    <i class="fa-solid fa-bell" aria-hidden="true"></i>
                     <span class="notif-badge" id="notif-badge" style="display:none;">0</span>
                     
                     <div class="notif-dropdown" id="notif-dropdown">
@@ -196,12 +203,12 @@ if ($logged && $force_reset === 1) {
                     <span class="user-name"><?= e($_SESSION['name'] ?? 'Usuário') ?></span>
                     <?php 
                     $role_labels = [
-                        'admin' => 'ADMIN', 'adm' => 'ADMIN', 'coord' => 'COORD',
-                        'adm_sub' => 'ADM. ' . strtoupper($_SESSION['subdivision_name'] ?? 'SUBDIVISÃO'),
-                        'gestor'=> 'GESTOR TI', 'ti' => 'GESTOR TI', 'xerox' => 'GESTOR REPROGRAFIA',
-                        'service' => 'GESTOR MANUT.', 'shop' => 'GESTOR COMPRAS',
-                        'mkt' => 'GESTOR MKT', 'marketing' => 'GESTOR MKT',
-                        'solicitante' => 'SOLICITANTE'
+                        'admin' => 'Administrador', 'adm' => 'Administrador', 'coord' => 'Coordenação',
+                        'adm_sub' => 'Coordenação ' . ($_SESSION['subdivision_name'] ?? ''),
+                        'gestor' => 'Setor de TI', 'ti' => 'Setor de TI', 'xerox' => 'Setor de Reprografia',
+                        'service' => 'Setor de Manutenção', 'shop' => 'Setor de Compras',
+                        'mkt' => 'Setor de Marketing', 'marketing' => 'Setor de Marketing',
+                        'solicitante' => 'Solicitante'
                     ];
                     ?>
                     <span class="user-role"><?= e($role_labels[$role] ?? strtoupper($role)) ?></span>
@@ -237,6 +244,8 @@ if ($logged && $force_reset === 1) {
             include "pages/accounts.php";
         } else if ($page === "request_detail" && $logged) {
             include "pages/request_detail.php";
+        } else if ($page === "ajuda" && $logged) {
+            include "pages/ajuda.php";
         } else {
             include "pages/home.php"; // Fallback
         }

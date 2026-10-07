@@ -432,13 +432,13 @@ function customConfirm(message, title = 'Confirmação') {
 async function globalRequestAction(action, id, table, value = '') {
     // Configurações de mensagens de confirmação
     const confirmations = {
-        'reset_status': 'Deseja realmente REABRIR esta requisição? Ela voltará para o estado em andamento.',
-        'finish': 'Deseja marcar esta requisição como CONCLUÍDA? Isso encerrará o atendimento.',
-        'start_progress': 'Deseja INICIAR o atendimento desta requisição agora?',
-        'set_priority': 'Deseja ALTERAR a PRIORIDADE desta requisição?',
+        'reset_status': 'Reabrir esta requisição? Ela volta para "Em atendimento".',
+        'finish': 'Marcar como concluída? O solicitante será avisado que o pedido foi atendido.',
+        'start_progress': 'Começar o atendimento agora? O solicitante será avisado.',
+        'set_priority': 'Mudar a urgência desta requisição?',
         'approve': 'Deseja APROVAR esta requisição?',
         'reject': 'Deseja RECUSAR esta requisição?',
-        'delete': 'Deseja realmente EXCLUIR esta requisição? Esta ação não pode ser desfeita.'
+        'delete': 'Deseja cancelar esta requisição? Ela será apagada e não poderá ser recuperada.'
     };
 
     // Se houver uma mensagem definida para a ação, pede confirmação via Custom Modal
@@ -479,9 +479,13 @@ async function globalRequestAction(action, id, table, value = '') {
 
         if (data.success) {
             showToast(data.message, 'success');
-            setTimeout(() => location.reload(), 1000);
+            // Após cancelar, a requisição não existe mais: volta para a lista
+            setTimeout(() => {
+                if (action === 'delete') window.location.href = 'myRequests';
+                else location.reload();
+            }, 1000);
         } else {
-            showToast(data.message || 'Erro ao processar ação.', 'error');
+            showToast(data.message || 'Não foi possível concluir a ação.', 'error');
         }
     } catch (error) {
         console.error("Erro fatal", error);

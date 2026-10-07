@@ -23,7 +23,7 @@ $canManage = $isAdmin || $isGestor || $isAdmSub;
 
 if (!$canManage) {
     echo "<script>location.href='myRequests';</script>";
-    exit;
+    return;
 }
 
 require_once __DIR__ . '/../classes/RequestManager.php';

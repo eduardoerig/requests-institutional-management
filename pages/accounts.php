@@ -1,17 +1,8 @@
 <?php
-if (session_status() === PHP_SESSION_NONE) {
-    session_start();
-}
-
-if (!isset($_SESSION['id']) || !isset($_SESSION['role'])) { 
-    header("Location: ../index.php"); 
-    exit; 
-}
-
 // Buscar dados completos do usuário logado (Apenas admins acessam esta página)
-if (!in_array($_SESSION['role'], ['admin', 'adm'])) {
-    echo '<div class="main"><p>Acesso negado.</p></div>';
-    exit;
+if (!isGlobalAdminRole($_SESSION['role'] ?? '')) {
+    echo '<div class="main"><div class="empty-big"><i class="fa-solid fa-lock"></i><h2>Sem acesso</h2><p>Somente administradores gerenciam usuários.</p></div></div>';
+    return;
 }
 
 // Buscar todos os usuários com seus respectivos setores (Concatenados para evitar duplicidade)

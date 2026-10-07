@@ -4,17 +4,14 @@ require_once __DIR__ . '/../classes/RequestManager.php';
 $role = $_SESSION['role'] ?? 'solicitante';
 $user_id = $_SESSION['id'] ?? 0;
 
-$adminRoles = ['admin', 'adm'];
-$gestorRoles = ['gestor', 'ti', 'xerox', 'service', 'shop', 'mkt', 'marketing'];
-
-$isAdmin = in_array($role, $adminRoles);
+$isAdmin = isGlobalAdminRole($role);
 $isAdmSub = ($role === 'adm_sub');
-$isGestor = in_array($role, $gestorRoles);
-$canApprove = $isAdmin; // Apenas admin e adm aprovam agora
+$isGestor = isGestorRole($role);
+$canApprove = $isAdmin || $isAdmSub; // Admin geral aprova tudo; coordenação aprova a própria subdivisão
 
 if (!$canApprove) {
-    echo '<div class="main"><div class="empty-state"><i class="fa-solid fa-lock"></i><p>Você não tem permissão para acessar esta página.<br>Apenas administradores podem aprovar requisições.</p></div></div>';
-    exit;
+    echo '<div class="main"><div class="empty-big"><i class="fa-solid fa-lock"></i><h2>Sem acesso</h2><p>Somente a coordenação e os administradores aprovam pedidos.</p><a class="btn-big" href="home"><i class="fa-solid fa-arrow-left"></i> Voltar ao início</a></div></div>';
+    return;
 }
 
 $managingId = null; // Admin vê tudo para aprovação

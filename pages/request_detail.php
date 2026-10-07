@@ -3,9 +3,7 @@
  * pages/request_detail.php
  * Fase 3 — Página de detalhes, histórico e comentários de uma requisição.
  */
-require_once 'config/conn.php';
-require_once 'classes/RequestManager.php';
-require_once 'config/security.php';
+require_once __DIR__ . '/../classes/RequestManager.php';
 
 // Validação dos parâmetros
 $req_id    = isset($_GET['id'])    ? (int)$_GET['id']              : 0;
@@ -13,8 +11,8 @@ $req_table = isset($_GET['table']) ? preg_replace('/[^a-z]/', '', $_GET['table']
 
 $allowed_tables = ['mkt', 'shop', 'xerox', 'service', 'ti'];
 if (!$req_id || !in_array($req_table, $allowed_tables)) {
-    echo '<div class="main"><p>Requisição inválida.</p></div>';
-    exit;
+    echo '<div class="main"><div class="empty-big"><i class="fa-solid fa-circle-question"></i><h2>Requisição não encontrada</h2><p>O endereço está incompleto.</p><a class="btn-big" href="home"><i class="fa-solid fa-arrow-left"></i> Voltar ao início</a></div></div>';
+    return;
 }
 
 // ---------- MAP de tabelas → colunas ----------
@@ -26,7 +24,7 @@ $col_map = [
     'ti'      => ['title' => 'title', 'desc' => 'descp', 'user' => 'created_by'],
 ];
 
-$label_map = ['mkt' => 'Marketing', 'shop' => 'Compras', 'xerox' => 'Reprografia', 'service' => 'Serviços', 'ti' => 'TI'];
+$label_map = ['mkt' => 'Marketing', 'shop' => 'Compras', 'xerox' => 'Reprografia', 'service' => 'Manutenção', 'ti' => 'TI'];
 $cols = $col_map[$req_table];
 
 // ---------- Buscar a requisição com JOIN no usuário para pegar o nome ----------
@@ -40,8 +38,8 @@ $stmt->execute([$req_id]);
 $req = $stmt->fetch();
 
 if (!$req) {
-    echo '<div class="main"><p>Requisição não encontrada.</p></div>';
-    exit;
+    echo '<div class="main"><div class="empty-big"><i class="fa-solid fa-circle-question"></i><h2>Requisição não encontrada</h2><p>Ela pode ter sido cancelada.</p><a class="btn-big" href="home"><i class="fa-solid fa-arrow-left"></i> Voltar ao início</a></div></div>';
+    return;
 }
 
 // ---------- Segurança: Validar permissão de acesso ----------
@@ -54,35 +52,8 @@ $canViewRequest = userCanViewRequest($pdo, $req, $req_table, (int)($_SESSION['id
 $canManageThisRequest = userCanActOnRequest($pdo, $req, $req_table, (int)($_SESSION['id'] ?? 0), $role);
 
 if (!$canViewRequest) {
-    echo '<div class="main"><div class="empty-state"><i class="fa-solid fa-lock"></i><p>Acesso negado. Você não tem permissão para visualizar esta requisição.</p></div></div>';
-    exit;
-}
-
-// ---------- Tratar POST de novo comentário ----------
-if ($_SERVER['REQUEST_METHOD'] === 'POST' && (isset($_POST['new_comment']) || isset($_POST['new_comment_ajax']))) {
-    requireCsrfTokenFromRequest();
-    $comment_text = trim($_POST['new_comment'] ?? $_POST['new_comment_ajax_text'] ?? '');
-
-    if (!empty($comment_text)) {
-        $user_id   = $_SESSION['id']   ?? 0;
-        $user_name = $_SESSION['name'] ?? 'Usuário';
-
-        $ins = $pdo->prepare("INSERT INTO request_comments (request_id, request_table, user_id, user_name, comment) VALUES (?, ?, ?, ?, ?)");
-        $ins->execute([$req_id, $req_table, $user_id, $user_name, $comment_text]);
-
-        // ---------- Notificar Stakeholders (Solicitante, Gestor e Admin) ----------
-        $link = "?page=request_detail&id={$req_id}&table={$req_table}#comments";
-        $notifTitle = "Mensagem na Requisição #{$req_id}";
-        $notifMsg   = "{$user_name}: " . (mb_strlen($comment_text) > 60 ? mb_substr($comment_text, 0, 57) . '...' : $comment_text);
-
-        RequestManager::notifyStakeholders($pdo, $req, $req_table, $notifTitle, $notifMsg, $link, $user_id, false);
-
-        if (!isset($_POST['new_comment_ajax'])) {
-            header("Location: ?page=request_detail&id={$req_id}&table={$req_table}#comments");
-            exit;
-        }
-        exit;
-    }
+    echo '<div class="main"><div class="empty-big"><i class="fa-solid fa-lock"></i><h2>Sem acesso</h2><p>Você não tem permissão para ver esta requisição.</p><a class="btn-big" href="home"><i class="fa-solid fa-arrow-left"></i> Voltar ao início</a></div></div>';
+    return;
 }
 
 // ---------- Buscar comentários e histórico ----------
@@ -95,8 +66,6 @@ $stmt_his->execute([$req_id, $req_table]);
 $history = $stmt_his->fetchAll();
 
 // ---------- Helpers ----------
-$status_label = ['P' => 'Pendente', 'Y' => 'Aprovado', 'N' => 'Recusado', 'W' => 'Em Andamento', 'C' => 'Concluída', 'F' => 'Repassada'];
-$status_class = ['P' => 'pending',  'Y' => 'approved', 'N' => 'rejected', 'W' => 'in-progress', 'C' => 'completed', 'F' => 'forwarded'];
 $current_status = trim(strtoupper($req['status'] ?? 'P'));
 if ($current_status === '') $current_status = 'P';
 
@@ -116,7 +85,7 @@ if (!empty($req['subdivision_id'])) {
 
 // Buscar quem aprovou/recusou no histórico
 $approverName = null;
-$histStmt = $pdo->prepare("SELECT user_name FROM request_history WHERE request_id = ? AND request_table = ? AND action LIKE 'Requisição %' AND (new_value = 'Aprovada' OR new_value = 'Rejeitada') ORDER BY id DESC LIMIT 1");
+$histStmt = $pdo->prepare("SELECT user_name FROM request_history WHERE request_id = ? AND request_table = ? AND action LIKE 'Requisição %' AND new_value IN ('Aprovada', 'Recusada', 'Rejeitada') ORDER BY id DESC LIMIT 1");
 $histStmt->execute([$req_id, $req_table]);
 $approverName = $histStmt->fetchColumn();
 
@@ -125,6 +94,40 @@ require_once __DIR__ . '/../classes/RequestForwardService.php';
 $forwardChainResult = RequestForwardService::getForwardChain($pdo, $req_id, $req_table);
 $forwardChain = $forwardChainResult['data'] ?? [];
 $activeForward = RequestForwardService::getActiveForward($pdo, $req_id, $req_table);
+
+// Prazo pedido
+$deadlineRaw = $req['date'] ?? '';
+$deadlineText = (!empty($deadlineRaw) && $deadlineRaw !== '0000-00-00') ? date('d/m/Y', strtotime($deadlineRaw)) : 'Sem prazo';
+
+// Quem pode aprovar/recusar daqui (requisição aguardando aprovação)
+$canApproveHere = $current_status === 'P' && $isAdmin && userCanManageOriginalRequest($pdo, $req, $req_table, (int)$_SESSION['id'], $role);
+
+// Frase "o que acontece agora" — linguagem do dia a dia
+$nextStepText = [
+    'P' => 'Aguardando a aprovação da coordenação. Você será avisado no sininho quando houver resposta.',
+    'Y' => "Aprovada! Agora o setor de {$cat} vai iniciar o atendimento.",
+    'W' => "O setor de {$cat} está cuidando do seu pedido.",
+    'F' => 'O pedido foi encaminhado para outro setor, que vai continuar o atendimento.',
+    'C' => 'Pedido concluído. Se algo não ficou certo, escreva na conversa abaixo.',
+    'N' => 'Pedido recusado. Veja o motivo na conversa abaixo. Se precisar, faça uma nova requisição corrigindo o que foi pedido.',
+][$current_status] ?? '';
+
+// Campos específicos do formulário
+$extraFields = [];
+if ($req_table === 'xerox') {
+    $extraFields['Arquivo'] = $req['arquive'] ?? '';
+    $extraFields['Cópias'] = $req['qtd'] ?? '';
+    $extraFields['Tamanho do papel'] = $req['type'] ?? '';
+} elseif ($req_table === 'mkt') {
+    $extraFields['Onde será usada'] = $req['type'] ?? '';
+}
+if (!empty($req['obs'])) {
+    $extraFields['Observações'] = $req['obs'];
+}
+
+// Etapas para a barra de progresso
+$stepIndex = ['P' => 0, 'Y' => 1, 'F' => 2, 'W' => 2, 'C' => 3, 'N' => 0][$current_status] ?? 0;
+$stepNames = ['Aguardando aprovação', 'Aprovada', 'Em atendimento', 'Concluída'];
 
 ?>
 
@@ -189,13 +192,15 @@ $activeForward = RequestForwardService::getActiveForward($pdo, $req_id, $req_tab
         .hero-meta { display: flex; flex-wrap: wrap; gap: 10px; font-size: 0.82rem; color: var(--ml-text-light); align-items: center; font-weight: 500; }
         .hero-meta-item { display: flex; align-items: center; gap: 5px; }
         .hero-card-right { display: flex; flex-direction: column; align-items: flex-end; gap: 8px; flex-shrink: 0; }
-        .status-pill { padding: 5px 12px; border-radius: 20px; font-size: 0.72rem; font-weight: 800; text-transform: uppercase; letter-spacing: 0.5px; }
-        .status-P { background: #eff6ff; color: #2563eb; border: 1px solid #bfdbfe; }
-        .status-Y,.status-A { background: #f0fdf4; color: #15803d; border: 1px solid #bbf7d0; }
-        .status-N { background: #fef2f2; color: #dc2626; border: 1px solid #fecaca; }
-        .status-W { background: #fff7ed; color: #c2410c; border: 1px solid #fed7aa; }
-        .status-C { background: #f0fdf4; color: #15803d; border: 1px solid #bbf7d0; }
-        .status-F { background: #faf5ff; color: #7e22ce; border: 1px solid #e9d5ff; }
+        .detail-steps { display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; margin: 14px 0 0; padding: 0; list-style: none; }
+        .detail-steps li { text-align: center; font-size: 0.82rem; font-weight: 600; color: #94a3b8; }
+        .detail-steps li::before { content: ''; display: block; height: 6px; border-radius: 3px; background: #e2e8f0; margin-bottom: 6px; }
+        .detail-steps li.done { color: #166534; }
+        .detail-steps li.done::before { background: #16a34a; }
+        .detail-steps li.current { color: #0f172a; }
+        .detail-steps.refused li::before { background: #fecaca; }
+        .approve-box { display: flex; gap: 10px; flex-wrap: wrap; margin-top: 12px; }
+        .approve-box .btn-big { flex: 1 1 160px; }
         .protocol-badge { font-family: 'JetBrains Mono', monospace; background: #f8fafc; padding: 5px 10px; border: 1px solid var(--ml-border); border-radius: 8px; font-size: 0.9rem; font-weight: 700; color: var(--ml-text-light); }
 
         /* Grid */
@@ -316,7 +321,7 @@ $activeForward = RequestForwardService::getActiveForward($pdo, $req_id, $req_tab
     <div class="req-detail-header">
         <!-- Breadcrumb / Navegação de volta -->
         <div class="page-breadcrumb">
-            <a href="javascript:history.back()" class="breadcrumb-back">
+            <a href="<?= $isOwner ? 'myRequests' : 'home' ?>" class="breadcrumb-back">
                 <i class="fa-solid fa-arrow-left" style="font-size:0.8rem;"></i>
                 Voltar
             </a>
@@ -339,13 +344,41 @@ $activeForward = RequestForwardService::getActiveForward($pdo, $req_id, $req_tab
                     <span class="breadcrumb-sep">·</span>
                     <span class="hero-meta-item">
                         <i class="fa-solid fa-tag" style="font-size:0.7rem;"></i>
-                        <?= $cat ?>
+                        <?= e($cat) ?>
+                    </span>
+                    <span class="breadcrumb-sep">·</span>
+                    <span class="hero-meta-item">
+                        <i class="fa-regular fa-calendar-check" style="font-size:0.75rem;"></i>
+                        Precisa para: <strong><?= e($deadlineText) ?></strong>
                     </span>
                 </div>
+                <ol class="detail-steps <?= $current_status === 'N' ? 'refused' : '' ?>" aria-label="Etapas da requisição">
+                    <?php foreach ($stepNames as $i => $stepName): ?>
+                        <li class="<?= ($current_status !== 'N' && $i <= $stepIndex) ? 'done' : '' ?> <?= $i === $stepIndex ? 'current' : '' ?>"><?= e($stepName) ?></li>
+                    <?php endforeach; ?>
+                </ol>
             </div>
             <div class="hero-card-right">
-                <span class="status-pill status-<?= $current_status ?>"><?= $status_label[$current_status] ?></span>
+                <span class="status-pill status-pill--<?= e($current_status) ?>"><?= e(statusLabel($current_status)) ?></span>
                 <span class="protocol-badge">#<?= $req_id ?></span>
+            </div>
+        </div>
+
+        <div class="next-step" style="margin-top:14px;">
+            <i class="fa-solid fa-circle-info" aria-hidden="true"></i>
+            <div>
+                <strong>O que acontece agora:</strong> <?= e($nextStepText) ?>
+                <?php if ($canApproveHere): ?>
+                    <div class="approve-box">
+                        <button type="button" class="btn-big btn-big--success" onclick="decideRequest('Y')"><i class="fa-solid fa-check"></i> Aprovar</button>
+                        <button type="button" class="btn-big btn-big--danger" onclick="decideRequest('N')"><i class="fa-solid fa-xmark"></i> Recusar</button>
+                    </div>
+                <?php endif; ?>
+                <?php if ($isOwner && $current_status === 'P'): ?>
+                    <div class="approve-box">
+                        <button type="button" class="btn-big btn-big--danger" onclick="globalRequestAction('delete', '<?= $req_id ?>', 'ctd_<?= $req_table ?>_frm')"><i class="fa-solid fa-trash-can"></i> Cancelar esta requisição</button>
+                    </div>
+                <?php endif; ?>
             </div>
         </div>
     </div>
@@ -357,31 +390,37 @@ $activeForward = RequestForwardService::getActiveForward($pdo, $req_id, $req_tab
             <!-- Card Descrição -->
             <div class="card card-description">
                 <div class="card-header">
-                    <h2><i class="fa-solid fa-align-left" style="color: var(--ml-primary);"></i> Descrição</h2>
+                    <h2><i class="fa-solid fa-align-left" style="color: var(--ml-primary);"></i> O que foi pedido</h2>
                 </div>
                 <div class="card-body">
                     <div style="line-height: 1.7; color: var(--ml-text); font-size: 1.05rem;">
                         <?= nl2br($desc) ?: '<em style="color:var(--ml-text-light)">Nenhuma descrição fornecida.</em>' ?>
                     </div>
+                    <?php if ($extraFields): ?>
+                        <div class="info-grid-simple" style="margin-top:16px;">
+                            <?php foreach ($extraFields as $label => $value): ?>
+                                <div class="info-box">
+                                    <label><?= e($label) ?></label>
+                                    <span><?= e($value !== '' ? $value : '—') ?></span>
+                                </div>
+                            <?php endforeach; ?>
+                        </div>
+                    <?php endif; ?>
                 </div>
             </div>
 
             <!-- Card Informações (Grid Limpo) -->
             <div class="card card-details">
                 <div class="card-header" onclick="toggleCard(this)">
-                    <h2><i class="fa-solid fa-circle-info" style="color: var(--ml-primary);"></i> Detalhes Técnicos</h2>
+                    <h2><i class="fa-solid fa-circle-info" style="color: var(--ml-primary);"></i> Mais informações</h2>
                     <i class="fa-solid fa-chevron-down toggle-icon"></i>
                 </div>
                 <div class="card-body">
                     <div class="info-grid-simple">
                         <div class="info-box">
                             <label>Prioridade</label>
-                            <span style="color: <?php
-                                $pri_colors = [1=>'#10b981', 2=>'#f59e0b', 3=>'#ef4444', 4=>'#7f1d1d'];
-                                $pri_labels = [1=>'Baixa', 2=>'Média', 3=>'Alta', 4=>'Crítica'];
-                                echo $pri_colors[$req['priority'] ?? 2] ?? '#64748b';
-                            ?>;">
-                                <?= $pri_labels[$req['priority'] ?? 2] ?? 'Normal' ?>
+                            <span style="color: <?= [1 => '#047857', 2 => '#334155', 3 => '#c2410c', 4 => '#b91c1c'][(int)($req['priority'] ?? 2)] ?? '#334155' ?>;">
+                                <?= e(priorityLabel((int)($req['priority'] ?? 2))) ?>
                             </span>
                         </div>
                         <div class="info-box">
@@ -389,8 +428,8 @@ $activeForward = RequestForwardService::getActiveForward($pdo, $req_id, $req_tab
                             <span><?= htmlspecialchars($subName) ?></span>
                         </div>
                         <div class="info-box">
-                            <label>Local / Sala</label>
-                            <span><?= htmlspecialchars($req['sala'] ?? 'N/A') ?></span>
+                            <label>Prazo pedido</label>
+                            <span><?= e($deadlineText) ?></span>
                         </div>
                         <?php if ($approverName): ?>
                         <div class="info-box">
@@ -404,9 +443,9 @@ $activeForward = RequestForwardService::getActiveForward($pdo, $req_id, $req_tab
 
             <?php if (!empty($forwardChain)): ?>
             <!-- Card Cadeia de Repasses (Fase 5) - COLAPSÁVEL -->
-            <div class="card card-forward collapsed">
+            <div class="card card-forward <?= ($activeForward && $activeForward['status'] === 'pending' && $isGestor) ? '' : 'collapsed' ?>">
                 <div class="card-header" onclick="toggleCard(this)">
-                    <h2><i class="fa-solid fa-share-from-square" style="color: #d97706;"></i> Cadeia de Repasses</h2>
+                    <h2><i class="fa-solid fa-share-from-square" style="color: #d97706;"></i> Encaminhamentos entre setores</h2>
                     <i class="fa-solid fa-chevron-down toggle-icon"></i>
                 </div>
                 <div class="card-body">
@@ -425,11 +464,11 @@ $activeForward = RequestForwardService::getActiveForward($pdo, $req_id, $req_tab
                         <?php if ($canActOnForward && $activeForward['status'] === 'pending'): ?>
                             <div class="forward-pending-indicator">
                                 <i class="fa-solid fa-clock"></i>
-                                <span>Este repasse aguarda sua aceitação. Deseja assumir o atendimento?</span>
+                                <span>Outro setor encaminhou este pedido para você. Vai assumir o atendimento?</span>
                             </div>
                             <div style="display: flex; gap: 10px; margin-bottom: 20px;">
                                 <button class="btn-accept-forward" onclick="handleForwardAction('accept', <?= $activeForward['id'] ?>)">
-                                    <i class="fa-solid fa-check"></i> Aceitar Repasse
+                                    <i class="fa-solid fa-check"></i> Aceitar e atender
                                 </button>
                                 <button class="btn-refuse-forward" onclick="handleForwardAction('refuse', <?= $activeForward['id'] ?>)">
                                     <i class="fa-solid fa-xmark"></i> Recusar
@@ -442,7 +481,7 @@ $activeForward = RequestForwardService::getActiveForward($pdo, $req_id, $req_tab
                             </div>
                             <div style="display: flex; gap: 10px; margin-bottom: 20px;">
                                 <button class="btn-accept-forward" style="background: #10b981;" onclick="handleForwardAction('complete', <?= $activeForward['id'] ?>)">
-                                    <i class="fa-solid fa-check-double"></i> Concluir via Repasse
+                                    <i class="fa-solid fa-check-double"></i> Marcar como concluída
                                 </button>
                             </div>
                         <?php endif; ?>
@@ -483,7 +522,7 @@ $activeForward = RequestForwardService::getActiveForward($pdo, $req_id, $req_tab
             <!-- Card Histórico (Timeline) - COLAPSÁVEL -->
             <div class="card card-history collapsed">
                 <div class="card-header" onclick="toggleCard(this)">
-                    <h2><i class="fa-solid fa-clock-rotate-left" style="color: var(--ml-primary);"></i> Histórico de Atividade</h2>
+                    <h2><i class="fa-solid fa-clock-rotate-left" style="color: var(--ml-primary);"></i> Histórico</h2>
                     <i class="fa-solid fa-chevron-down toggle-icon"></i>
                 </div>
                 <div class="card-body">
@@ -500,7 +539,7 @@ $activeForward = RequestForwardService::getActiveForward($pdo, $req_id, $req_tab
                         <div class="timeline-event">
                             <div class="timeline-dot dot-<?= $type ?>"><i class="fa-solid <?= $icon ?>"></i></div>
                             <div class="timeline-content">
-                                <div class="timeline-time"><?= date('d M, Y - H:i', strtotime($h['created_at'])) ?></div>
+                                <div class="timeline-time"><?= date('d/m/Y \à\s H:i', strtotime($h['created_at'])) ?></div>
                                 <div style="font-size: 0.95rem;">
                                     <strong><?= htmlspecialchars($h['user_name']) ?></strong> <?= htmlspecialchars($h['action']) ?>
                                 </div>
@@ -518,38 +557,38 @@ $activeForward = RequestForwardService::getActiveForward($pdo, $req_id, $req_tab
             <!-- Card Ações -->
             <div class="card card-actions">
                 <div class="card-header">
-                    <h2><i class="fa-solid fa-gear" style="color: var(--ml-primary);"></i> Gerenciar Requisição</h2>
+                    <h2><i class="fa-solid fa-gear" style="color: var(--ml-primary);"></i> Ações</h2>
                 </div>
                 <div class="card-body">
                     <div class="actions-group">
                         <?php if ($isGestor && $canManageThisRequest && $current_status == 'W'): ?>
                             <button onclick="globalRequestAction('finish', '<?= $req_id ?>', 'ctd_<?= $req_table ?>_frm')" class="btn-action btn-primary">
-                                <i class="fa-solid fa-check-circle"></i> CONCLUIR
+                                <i class="fa-solid fa-check-circle"></i> Marcar como concluída
                             </button>
                         <?php elseif ($isGestor && $canManageThisRequest && $current_status === 'Y'): ?>
                             <button onclick="globalRequestAction('start_progress', '<?= $req_id ?>', 'ctd_<?= $req_table ?>_frm')" class="btn-action btn-primary">
-                                <i class="fa-solid fa-play"></i> INICIAR ATENDIMENTO
+                                <i class="fa-solid fa-play"></i> Começar atendimento
                             </button>
                         <?php endif; ?>
 
                         <?php if ($current_status === 'C' && $canManageThisRequest): ?>
                             <button onclick="globalRequestAction('reset_status', '<?= $req_id ?>', 'ctd_<?= $req_table ?>_frm')" class="btn-action" style="background:#fff7ed; color:#c2410c;">
-                                <i class="fa-solid fa-rotate-left"></i> REABRIR
+                                <i class="fa-solid fa-rotate-left"></i> Reabrir
                             </button>
                         <?php endif; ?>
 
                         <?php if (in_array($current_status, ['W', 'F']) && $canManageThisRequest): ?>
                             <button type="button" onclick="openForwardModal()" class="btn-action" style="background:#fff7ed; color:#c2410c;">
-                                <i class="fa-solid fa-share-from-square"></i> REPASSAR
+                                <i class="fa-solid fa-share-from-square"></i> Encaminhar a outro setor
                             </button>
                         <?php endif; ?>
 
                         <?php if($canManageThisRequest): ?>
                             <div style="margin-top: 10px;">
-                                <label class="ml-label">MUDAR PRIORIDADE</label>
-                                <select class="ml-select" style="margin-bottom:0" onchange="globalRequestAction('set_priority', '<?= $req_id ?>', 'ctd_<?= $req_table ?>_frm', this.value)">
+                                <label class="ml-label" for="prioritySelect">Urgência</label>
+                                <select id="prioritySelect" class="ml-select" style="margin-bottom:0" onchange="globalRequestAction('set_priority', '<?= $req_id ?>', 'ctd_<?= $req_table ?>_frm', this.value)">
                                     <option value="1" <?= ($req['priority'] ?? 2) == 1 ? 'selected' : '' ?>>Baixa</option>
-                                    <option value="2" <?= ($req['priority'] ?? 2) == 2 ? 'selected' : '' ?>>Média</option>
+                                    <option value="2" <?= ($req['priority'] ?? 2) == 2 ? 'selected' : '' ?>>Normal</option>
                                     <option value="3" <?= ($req['priority'] ?? 2) == 3 ? 'selected' : '' ?>>Alta</option>
                                     <option value="4" <?= ($req['priority'] ?? 2) == 4 ? 'selected' : '' ?>>Crítica</option>
                                 </select>
@@ -559,7 +598,7 @@ $activeForward = RequestForwardService::getActiveForward($pdo, $req_id, $req_tab
                         <?php if($isAdmin || $isGestor): ?>
                             <div class="divider"></div>
                             <a href="print_request.php?id=<?= $req_id ?>&table=<?= $req_table ?>" target="_blank" class="btn-action" style="text-decoration: none; justify-content: center;">
-                                <i class="fa-solid fa-file-pdf" style="color: #ef4444;"></i> Gerar Relatório PDF
+                                <i class="fa-solid fa-print" style="color: #ef4444;"></i> Imprimir / salvar PDF
                             </a>
                         <?php endif; ?>
                     </div>
@@ -570,7 +609,7 @@ $activeForward = RequestForwardService::getActiveForward($pdo, $req_id, $req_tab
             <!-- Card Mensagens Internas -->
             <div class="card chat-card">
                 <div class="card-header">
-                    <h2>Mensagens Internas</h2>
+                    <h2><i class="fa-solid fa-comments" style="color: var(--ml-primary);"></i> Conversa sobre o pedido</h2>
                 </div>
                 <div class="chat-messages" id="comments-feed">
                     <?php
@@ -583,7 +622,7 @@ $activeForward = RequestForwardService::getActiveForward($pdo, $req_id, $req_tab
                                     $last_chat_date = $this_date;
                                 endif;
                                 $is_mine = ($c['user_id'] == ($_SESSION['id'] ?? -1));
-                                $initials = strtoupper(substr($c['user_name'], 0, 1));
+                                $initials = e(mb_strtoupper(mb_substr((string)$c['user_name'], 0, 1)));
                     ?>
                     <div class="chat-item <?= $is_mine ? 'mine' : 'theirs' ?>">
                         <div class="chat-avatar"><?= $initials ?></div>
@@ -600,17 +639,16 @@ $activeForward = RequestForwardService::getActiveForward($pdo, $req_id, $req_tab
                         <div style="display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100%; color: #94a3b8; text-align: center; padding: 40px 20px;">
                             <i class="fa-solid fa-comments-slash" style="font-size: 2.5rem; margin-bottom: 12px; opacity: 0.3;"></i>
                             <p style="font-size: 0.9rem; font-weight: 600; margin: 0;">Nenhuma mensagem ainda.</p>
-                            <p style="font-size: 0.75rem; margin-top: 4px;">Inicie a conversa usando o campo abaixo.</p>
+                            <p style="font-size: 0.85rem; margin-top: 4px;">Tem alguma dúvida? Escreva abaixo: quem cuida do pedido recebe sua mensagem.</p>
                         </div>
                     <?php endif; ?>
                 </div>
                 <div class="chat-footer">
                     <form id="commentForm">
-                        <input type="hidden" name="csrf_token" value="<?= htmlspecialchars(getCsrfToken(), ENT_QUOTES, 'UTF-8') ?>">
                         <div class="chat-input-area">
-                            <textarea name="new_comment_ajax_text" class="chat-input" placeholder="Escreva aqui..." rows="1" required
+                            <textarea name="comment" class="chat-input" placeholder="Escreva sua mensagem..." rows="1" required maxlength="3000" aria-label="Mensagem"
                                 oninput="this.style.height = ''; this.style.height = this.scrollHeight + 'px'"></textarea>
-                            <button type="submit" class="btn-send">
+                            <button type="submit" class="btn-send" aria-label="Enviar mensagem">
                                 <i class="fa-solid fa-paper-plane"></i>
                             </button>
                         </div>
@@ -624,7 +662,7 @@ $activeForward = RequestForwardService::getActiveForward($pdo, $req_id, $req_tab
 </div>
 
 <!-- Floating Chat Button (Mobile) -->
-<button class="fab-chat" id="fabChat" onclick="scrollToChat()">
+<button class="fab-chat" id="fabChat" onclick="scrollToChat()" aria-label="Ir para a conversa">
     <i class="fa-solid fa-comments"></i>
 </button>
 
@@ -662,45 +700,86 @@ window.addEventListener('scroll', () => {
 });
 
 function loadComments() {
-    const id = "<?= $req_id ?>";
-    const table = "<?= $req_table ?>";
-
-    fetch(`api/get_comments.php?id=${id}&table=${table}`)
-        .then(response => response.text())
+    if (document.hidden) return;
+    fetch(`api/get_comments.php?id=<?= $req_id ?>&table=<?= $req_table ?>`)
+        .then(response => response.ok ? response.text() : Promise.reject())
         .then(html => {
             const feed = document.getElementById('comments-feed');
-            if(!feed) return;
-            // Só scrolla se o usuário estiver próximo do fundo ou se o HTML mudou significativamente
+            if (!feed || feed.innerHTML === html) return;
             const isAtBottom = feed.scrollHeight - feed.scrollTop <= feed.clientHeight + 150;
-            const oldHtml = feed.innerHTML;
-
-            if (oldHtml !== html) {
-                feed.innerHTML = html;
-                if(isAtBottom) scrollToBottom();
-            }
-        });
+            feed.innerHTML = html;
+            if (isAtBottom) scrollToBottom();
+        })
+        .catch(() => {});
 }
 
-document.getElementById('commentForm')?.addEventListener('submit', function(e) {
+// Decisão do aprovador direto na tela de detalhes
+async function decideRequest(value) {
+    let reason = '';
+    if (value === 'N') {
+        reason = await showConfirm({
+            title: 'Recusar requisição',
+            message: 'O solicitante vai receber o motivo abaixo.',
+            type: 'error',
+            confirmLabel: 'Recusar',
+            isDanger: true,
+            input: { label: 'Motivo da recusa *', placeholder: 'Ex.: falta informar a quantidade', required: true }
+        });
+        if (reason === false) return;
+    } else {
+        const ok = await showConfirm({
+            title: 'Aprovar requisição',
+            message: 'A requisição será enviada ao setor responsável para atendimento.',
+            type: 'success',
+            confirmLabel: 'Aprovar'
+        });
+        if (!ok) return;
+    }
+    const formData = new FormData();
+    formData.append('action', 'post');
+    formData.append('id', '<?= $req_id ?>');
+    formData.append('table', '<?= $req_table ?>');
+    formData.append('value', value);
+    formData.append('reason', reason);
+    const data = await fetchAjax('config/aprovRequest.php', formData);
+    if (data && data.success) {
+        showToast(data.message, 'success');
+        setTimeout(() => location.reload(), 900);
+    }
+}
+
+document.getElementById('commentForm')?.addEventListener('submit', async function(e) {
     e.preventDefault();
-    const formData = new FormData(this);
-    formData.append('new_comment_ajax', '1');
+    const textarea = this.querySelector('textarea');
+    const text = textarea.value.trim();
+    if (!text) { textarea.focus(); return; }
+
     const btn = this.querySelector('button');
     btn.disabled = true;
+    const formData = new URLSearchParams();
+    formData.append('id', '<?= $req_id ?>');
+    formData.append('table', '<?= $req_table ?>');
+    formData.append('comment', text);
 
-    fetch(window.location.href, {
-        method: 'POST',
-        body: formData
-    })
-    .then(() => {
-        this.reset();
-        this.querySelector('textarea').style.height = '';
+    try {
+        const response = await fetch('api/add_comment.php', { method: 'POST', body: attachCsrfToken(formData) });
+        const data = await response.json();
+        if (data.success) {
+            this.reset();
+            textarea.style.height = '';
+            loadComments();
+            setTimeout(scrollToBottom, 300);
+        } else {
+            showToast(data.message || 'Não foi possível enviar a mensagem.', 'error');
+        }
+    } catch (err) {
+        showToast('Sem conexão. Sua mensagem não foi enviada; tente de novo.', 'error');
+    } finally {
         btn.disabled = false;
-        loadComments();
-    });
+    }
 });
 
-document.querySelector('textarea[name="new_comment_ajax_text"]')?.addEventListener('keydown', function(e) {
+document.querySelector('#commentForm textarea')?.addEventListener('keydown', function(e) {
     if (e.key === 'Enter' && !e.shiftKey) {
         e.preventDefault();
         document.getElementById('commentForm').dispatchEvent(new Event('submit', {cancelable: true, bubbles: true}));
@@ -708,5 +787,6 @@ document.querySelector('textarea[name="new_comment_ajax_text"]')?.addEventListen
 });
 
 scrollToBottom();
-setInterval(loadComments, 3000);
+setInterval(loadComments, 15000);
+document.addEventListener('visibilitychange', () => { if (!document.hidden) loadComments(); });
 </script>
