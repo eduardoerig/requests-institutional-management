@@ -470,3 +470,50 @@ aside nav .sidebar-badge.progress-badge { background: #7c3aed; }
     background: #2c2b31; color: #fff; font-weight: 700;
 }
 .help-status { list-style: none; padding: 0; margin: 0 0 10px; display: grid; gap: 8px; }
+
+/* ---------- Modal: ação principal em destaque, cancelar discreto ---------- */
+.btn-modal { min-height: 48px; font-size: 1rem !important; }
+.btn-modal-confirm {
+    background: #2c2b31 !important;
+    color: #fff !important;
+    border: 1px solid #2c2b31 !important;
+    box-shadow: none !important;
+}
+.btn-modal-confirm:hover { background: #3d3c42 !important; }
+.btn-modal-cancel {
+    background: #fff !important;
+    color: #334155 !important;
+    border: 1px solid #cbd5e1 !important;
+    box-shadow: none !important;
+}
+.btn-modal-cancel:hover { background: #f8fafc !important; transform: none; }
+.btn-modal-danger { min-height: 48px; }
+.modal-message { font-size: 1rem; color: #334155; }
+
+/* Filtros com texto (substituem as bolinhas coloridas) */
+.radio_field { flex-wrap: wrap; gap: 6px !important; }
+label.chip-radio { position: relative; cursor: pointer; }
+label.chip-radio input {
+    position: absolute !important;
+    opacity: 0 !important;
+    width: 1px !important;
+    height: 1px !important;
+    pointer-events: none;
+}
+label.chip-radio input::after,
+label.chip-radio input::before { display: none !important; }
+label.chip-radio span {
+    display: inline-flex;
+    align-items: center;
+    min-height: 40px;
+    padding: 6px 12px;
+    border-radius: 999px;
+    border: 1px solid var(--border-color);
+    background: #fff;
+    font-size: 0.92rem;
+    font-weight: 600;
+    color: #334155;
+    white-space: nowrap;
+}
+label.chip-radio input:checked + span { background: #2c2b31; border-color: #2c2b31; color: #fff; }
+label.chip-radio input:focus-visible + span { outline: 3px solid var(--focus-ring); outline-offset: 2px; }

@@ -51,7 +51,7 @@ if (!is_array($allowedSectors)) $allowedSectors = [];
             <div>
                 <i class="fa-solid fa-clipboard-check"></i>
                 <div>
-                    <h3>Aprovar Requisições</h3>
+                    <h3>Aprovar pedidos</h3>
                     <p style="font-size: 0.85rem; color: var(--text-muted); margin: 2px 0 0;">
                         <?= $totalPendentes ?> requisição(ões) aguardando aprovação
                     </p>

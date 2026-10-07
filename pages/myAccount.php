@@ -79,23 +79,23 @@ $role_labels = [
 
 <!-- MODAL ALTERAR SENHA -->
 <div class="modal-overlay" id="modalChangePass">
-  <div class="modal-card" role="dialog" aria-modal="true" aria-labelledby="modalTitle">
+  <div class="modal-card" role="dialog" aria-modal="true" aria-labelledby="changePassTitle">
     <div class="modal-header">
-      <h3 id="modalTitle">Alterar senha</h3>
+      <h3 id="changePassTitle">Criar nova senha</h3>
       <button class="modal-close" id="btnCloseModal" aria-label="Fechar">✕</button>
     </div>
 
     <form class="modal-body" id="formChangePass">
       <div style="background: #f8fafc; padding: 15px; border-radius: 8px; border: 1px solid #e2e8f0; margin-bottom: 20px; display: flex; align-items: flex-start; gap: 12px;">
         <i class="fa-solid fa-shield-halved" style="color: var(--primary); margin-top: 3px;"></i>
-        <p style="margin: 0; font-size: 0.85rem; color: #64748b; line-height: 1.5;">Para sua segurança, escolha uma senha forte que não tenha sido usada anteriormente.</p>
+        <p style="margin: 0; font-size: 0.85rem; color: #64748b; line-height: 1.5;">Use pelo menos 8 caracteres. Dica: junte duas palavras e um número (ex.: <strong>Cafe-Azul-27</strong>).</p>
       </div>
 
       <div class="modal-field">
         <label for="currentPass" style="font-weight: 600; color: var(--text-main); margin-bottom: 6px; display: block; font-size: 0.85rem;">Senha Atual</label>
         <div style="position: relative;">
             <i class="fa-solid fa-key" style="position: absolute; left: 12px; top: 50%; transform: translateY(-50%); color: #94a3b8; font-size: 0.8rem;"></i>
-            <input id="currentPass" name="currentPass" type="password" required style="width: 100%; padding: 10px 10px 10px 35px; border: 1px solid #e2e8f0; border-radius: 8px; outline: none; font-size: 0.9rem;" placeholder="Digite sua senha atual" />
+            <input id="currentPass" name="currentPass" type="password" required autocomplete="current-password" style="width: 100%; padding: 10px 10px 10px 35px; border: 1px solid #e2e8f0; border-radius: 8px; font-size: 1rem;" placeholder="A senha que você usou para entrar" />
         </div>
       </div>
 
@@ -103,12 +103,25 @@ $role_labels = [
         <label for="password" style="font-weight: 600; color: var(--text-main); margin-bottom: 6px; display: block; font-size: 0.85rem;">Nova Senha</label>
         <div style="position: relative;">
             <i class="fa-solid fa-lock" style="position: absolute; left: 12px; top: 50%; transform: translateY(-50%); color: #94a3b8; font-size: 0.8rem;"></i>
-            <input id="password" name="password" type="password" required minlength="6" style="width: 100%; padding: 10px 10px 10px 35px; border: 1px solid #e2e8f0; border-radius: 8px; outline: none; font-size: 0.9rem;" placeholder="Mínimo 6 caracteres" />
+            <input id="password" name="password" type="password" required minlength="8" autocomplete="new-password" style="width: 100%; padding: 10px 10px 10px 35px; border: 1px solid #e2e8f0; border-radius: 8px; font-size: 1rem;" placeholder="Mínimo 8 caracteres" />
         </div>
       </div>
 
+      <div class="modal-field" style="margin-top: 15px;">
+        <label for="passwordConfirm" style="font-weight: 600; color: var(--text-main); margin-bottom: 6px; display: block; font-size: 0.95rem;">Repita a nova senha</label>
+        <div style="position: relative;">
+            <i class="fa-solid fa-lock" style="position: absolute; left: 12px; top: 50%; transform: translateY(-50%); color: #94a3b8; font-size: 0.8rem;"></i>
+            <input id="passwordConfirm" type="password" required minlength="8" autocomplete="new-password" style="width: 100%; padding: 10px 10px 10px 35px; border: 1px solid #e2e8f0; border-radius: 8px; font-size: 1rem;" placeholder="Digite a mesma senha" />
+        </div>
+      </div>
+
+      <label style="display:flex; align-items:center; gap:8px; margin-top:12px; font-size:0.95rem; cursor:pointer;">
+        <input type="checkbox" id="showPasswords" style="width:18px; height:18px;"> Mostrar senhas
+      </label>
+      <p id="passError" role="alert" style="display:none; color:#b91c1c; font-weight:600; margin:10px 0 0;"></p>
+
       <div class="modal-actions" style="margin-top: 25px; gap: 12px;">
-        <button type="submit" class="btn-modal btn-modal-confirm" style="flex: 2; height: 45px; font-weight: 600;">Atualizar Senha</button>
+        <button type="submit" class="btn-modal btn-modal-confirm" style="flex: 2; height: 45px; font-weight: 600;">Salvar nova senha</button>
         <button type="button" class="btn-modal btn-modal-cancel" id="btnCloseModal2" style="flex: 1; height: 45px; font-weight: 600;">Voltar</button>
       </div>
     </form>
@@ -158,19 +171,40 @@ $role_labels = [
     }
 
     // Envio do formulário
+    document.getElementById('showPasswords').addEventListener('change', function () {
+        ['currentPass', 'password', 'passwordConfirm'].forEach(id => {
+            document.getElementById(id).type = this.checked ? 'text' : 'password';
+        });
+    });
+
     document.getElementById("formChangePass").onsubmit = async function(e) {
         e.preventDefault();
+
+        const passError = document.getElementById('passError');
+        const newPass = document.getElementById('password').value;
+        const confirmPass = document.getElementById('passwordConfirm').value;
+        let problem = '';
+        if (!document.getElementById('currentPass').value) problem = 'Digite sua senha atual.';
+        else if (newPass.length < 8) problem = 'A nova senha precisa ter pelo menos 8 caracteres.';
+        else if (newPass !== confirmPass) problem = 'As duas senhas novas não são iguais. Digite de novo.';
+        passError.textContent = problem;
+        passError.style.display = problem ? 'block' : 'none';
+        if (problem) return;
 
         const formData = new FormData(this);
         fetch('api/update_user_admin.php?self=1', { method: 'POST', body: withCsrf(formData) })
         .then(r => r.json()).then(async data => {
             if(data.success) {
                 modal.classList.remove("active");
-                await showAlert({ title: 'Sucesso', message: 'Sua senha foi alterada com sucesso!', type: 'success' });
-                location.reload(); // Recarregar para atualizar estado da sessão
+                await showAlert({ title: 'Senha alterada', message: 'Pronto! Use a nova senha nos próximos acessos.', type: 'success' });
+                location.href = 'home';
             } else {
-                showAlert({ title: 'Erro', message: data.message, type: 'error' });
+                passError.textContent = data.message;
+                passError.style.display = 'block';
             }
+        }).catch(() => {
+            passError.textContent = 'Sem conexão. Tente de novo.';
+            passError.style.display = 'block';
         });
     };
 </script>

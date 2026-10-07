@@ -112,7 +112,7 @@ if (!is_array($allowedSectors)) $allowedSectors = [];
             <div>
                 <i class="fa-solid fa-gears" style="color: #3b82f6;"></i>
                 <div>
-                    <h3>Em Andamento</h3>
+                    <h3>Em atendimento</h3>
                     <p style="font-size: 0.85rem; color: var(--text-muted); margin: 2px 0 0;">
                         <?= $totalAndamento ?> requisição(ões) em atendimento
                     </p>

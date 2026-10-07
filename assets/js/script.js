@@ -562,3 +562,17 @@ if (formCard) {
         }
     });
 }
+// Filtros de setor/situação: transforma as bolinhas em botões com o nome escrito
+document.addEventListener('DOMContentLoaded', () => {
+    document.querySelectorAll('input.radioType, input.statusRadio').forEach(input => {
+        if (input.closest('label.chip-radio')) return;
+        const text = input.dataset.tooltip === 'Todas req' ? 'Todos' : (input.dataset.tooltip || input.value);
+        const label = document.createElement('label');
+        label.className = 'chip-radio';
+        input.parentNode.insertBefore(label, input);
+        label.appendChild(input);
+        const span = document.createElement('span');
+        span.textContent = text;
+        label.appendChild(span);
+    });
+});

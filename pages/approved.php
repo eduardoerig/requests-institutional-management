@@ -113,7 +113,7 @@ if (!is_array($allowedSectors)) $allowedSectors = [];
             <div>
                 <i class="fa-solid fa-circle-check" style="color: #10b981;"></i>
                 <div>
-                    <h3>Requisições Aprovadas</h3>
+                    <h3><?= $isGestor ? "Para atender" : "Aprovadas" ?></h3>
                     <p style="font-size: 0.85rem; color: var(--text-muted); margin: 2px 0 0;">
                         <?= $totalAprovadas ?> requisição(ões) aguardando atendimento
                     </p>

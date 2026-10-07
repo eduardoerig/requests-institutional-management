@@ -379,7 +379,7 @@ $full_role_labels = array_merge($role_labels, [
                         <!-- Status -->
                         <td class="ac-td" style="text-align:center; white-space:nowrap;">
                             <label class="switch">
-                                <input type="checkbox" <?= $isActive ? 'checked' : '' ?> onchange="toggleUserStatus(<?= $u['id'] ?>, this.checked)">
+                                <input type="checkbox" <?= $isActive ? 'checked' : '' ?> onchange="toggleUserStatus(<?= $u['id'] ?>, this.checked, this)" aria-label="Conta ativa">
                                 <span class="slider round"></span>
                             </label>
                             <div style="font-size:0.6rem; margin-top:3px; font-weight:800; color: <?= $isActive ? '#10b981' : '#ef4444' ?>;">
@@ -872,15 +872,35 @@ $full_role_labels = array_merge($role_labels, [
     }
 
     // Função: Toggle Status (Ativar/Inativar)
-    function toggleUserStatus(id, active) {
+    async function toggleUserStatus(id, active, checkbox) {
+        const ok = await showConfirm({
+            title: active ? 'Reativar conta' : 'Desativar conta',
+            message: active
+                ? 'A pessoa voltará a conseguir entrar no sistema.'
+                : 'A pessoa não conseguirá mais entrar. O histórico de pedidos é mantido.',
+            type: 'warning',
+            confirmLabel: active ? 'Reativar' : 'Desativar',
+            isDanger: !active
+        });
+        if (!ok) {
+            if (checkbox) checkbox.checked = !active;
+            return;
+        }
         const formData = new FormData();
         formData.append('id', id);
         formData.append('status', active ? 1 : 0);
-        fetch('api/update_user_admin.php', { method: 'POST', body: withCsrf(formData) })
-        .then(r => r.json()).then(data => {
-            if(!data.success) alert(data.message);
-            else location.reload();
-        });
+        try {
+            const data = await (await fetch('api/update_user_admin.php', { method: 'POST', body: withCsrf(formData) })).json();
+            if (data.success) {
+                location.reload();
+            } else {
+                if (checkbox) checkbox.checked = !active;
+                showAlert({ title: 'Não foi possível', message: data.message, type: 'error' });
+            }
+        } catch (e) {
+            if (checkbox) checkbox.checked = !active;
+            showAlert({ title: 'Sem conexão', message: 'Tente de novo.', type: 'error' });
+        }
     }
 
     // Função: Salvar Mudanças (Senha)
@@ -917,8 +937,8 @@ $full_role_labels = array_merge($role_labels, [
 
     async function confirmPassChange(id) {
         const newPass = document.getElementById('pop_newpass_' + id)?.value?.trim();
-        if (!newPass) {
-            showAlert({ title: 'Campo vazio', message: 'Informe a nova senha.', type: 'warning' });
+        if (!newPass || newPass.length < 8) {
+            showAlert({ title: 'Senha curta', message: 'A senha precisa ter pelo menos 8 caracteres.', type: 'warning' });
             return;
         }
         closePassPopover(id);
@@ -928,7 +948,7 @@ $full_role_labels = array_merge($role_labels, [
         try {
             const r = await fetch('api/update_user_admin.php', { method: 'POST', body: withCsrf(formData) });
             const data = await r.json();
-            if (data.success) showAlert({ title: 'Sucesso', message: 'Senha atualizada com sucesso!', type: 'success' });
+            if (data.success) showAlert({ title: 'Senha temporária definida', message: 'Passe a senha para a pessoa. No próximo acesso o sistema vai pedir para ela criar uma senha nova.', type: 'success' });
             else showAlert({ title: 'Erro', message: data.message, type: 'error' });
         } catch(e) {
             showAlert({ title: 'Erro', message: 'Falha na comunicação com o servidor.', type: 'error' });

@@ -215,8 +215,8 @@ try {
         $fields[] = "password = ?";
         $params[] = password_hash(trim($_POST['password']), PASSWORD_DEFAULT);
 
-        // Sempre que a senha é alterada, removemos o bloqueio de force_reset
-        $fields[] = "force_reset = 0";
+        // Troca feita pela própria pessoa libera o acesso; senha definida pelo admin é temporária
+        $fields[] = $is_self ? "force_reset = 0" : "force_reset = 1";
     }
 
     if (empty($fields)) {
