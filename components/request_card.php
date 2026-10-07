@@ -99,7 +99,7 @@ if (!function_exists('renderRequestCard')) {
      * Linha compacta das filas de trabalho: número, título, quem pediu, prazo e no máximo um aviso.
      * $note: frase curta sobre encaminhamento (opcional).
      */
-    function renderRequestRow(array $row, string $note = '', string $noteKind = ''): string
+    function renderRequestRow(array $row, string $note = '', string $noteKind = '', bool $selectable = false): string
     {
         $id = (int)($row['id'] ?? 0);
         $sector = str_replace(['ctd_', '_frm'], '', strtolower(trim((string)($row['table'] ?? ''))));
@@ -118,7 +118,7 @@ if (!function_exists('renderRequestCard')) {
         $deadline = ($date !== '' && strpos($date, '0000') !== 0) ? 'até ' . date('d/m', strtotime($date)) : 'sem prazo';
         $meta = '<span>' . e(requestSectorName($sector)) . '</span><span>' . e($who) . '</span><span>' . $deadline . '</span>';
 
-        return '<a class="row-item card_req" href="' . e($link) . '" data-id="' . $id . '" data-table="' . e($sector) . '" data-sector="' . e($sector) . '">'
+        $html = '<a class="row-item card_req" href="' . e($link) . '" data-id="' . $id . '" data-table="' . e($sector) . '" data-sector="' . e($sector) . '">'
             . '<span class="row-item__num">' . $id . '</span>'
             . '<span class="row-item__body">'
             .   '<span class="row-item__title">' . e($row['title'] ?? 'Sem título') . '</span>'
@@ -127,5 +127,77 @@ if (!function_exists('renderRequestCard')) {
             . '</span>'
             . '<span class="row-item__flag">' . $flag . '</span>'
             . '</a>';
+        if (!$selectable) {
+            return $html;
+        }
+        // Caixinha para escolher vários pedidos de uma vez
+        return '<div class="row-wrap">'
+            . '<label class="row-check"><input type="checkbox" data-pick value="' . e($sector) . ':' . $id . '" aria-label="Selecionar pedido nº ' . $id . '"></label>'
+            . $html
+            . '</div>';
+    }
+
+    /** Atrasado: prazo vencido e pedido ainda aberto */
+    function requestRowIsLate(array $row): bool
+    {
+        $date = (string)($row['date'] ?? '');
+        $status = strtoupper((string)($row['st_raw'] ?? $row['status'] ?? ''));
+        return $date !== '' && strpos($date, '0000') !== 0 && !in_array($status, ['C', 'N'], true)
+            && date('Y-m-d', strtotime($date)) < date('Y-m-d');
+    }
+
+    function requestRowIsUrgent(array $row): bool
+    {
+        return (int)($row['priority'] ?? 2) >= 3;
+    }
+
+    /** Filtros rápidos das listas: todos | atrasados | urgentes */
+    function filterRequestRows(array $rows, string $filter): array
+    {
+        if ($filter === 'atrasados') return array_values(array_filter($rows, 'requestRowIsLate'));
+        if ($filter === 'urgentes') return array_values(array_filter($rows, 'requestRowIsUrgent'));
+        return $rows;
+    }
+
+    /**
+     * Topo da lista: filtros rápidos e "selecionar todos".
+     * $link(string $filter) devolve a URL do filtro.
+     */
+    function renderListTools(array $rows, string $filter, callable $link, bool $selectable): string
+    {
+        $late = count(array_filter($rows, 'requestRowIsLate'));
+        $urgent = count(array_filter($rows, 'requestRowIsUrgent'));
+        if (!$rows || (!$selectable && !$late && !$urgent && $filter === '')) {
+            return '';
+        }
+        $chip = function (string $key, string $label, int $n) use ($filter, $link) {
+            $on = $filter === $key;
+            return '<a class="chip' . ($on ? ' is-on' : '') . ($key !== '' && $n > 0 && $key === 'atrasados' ? ' chip--bad' : '') . '" href="' . e($link($key)) . '"' . ($on ? ' aria-current="true"' : '') . '>'
+                . e($label) . ' <b>' . $n . '</b></a>';
+        };
+        $html = '<div class="list-tools">';
+        if ($selectable) {
+            $html .= '<label class="row-check row-check--all"><input type="checkbox" data-pick-all aria-label="Selecionar todos"></label>';
+        }
+        $html .= '<div class="chips" role="group" aria-label="Filtrar">'
+            . $chip('', 'Todos', count($rows))
+            . ($late || $filter === 'atrasados' ? $chip('atrasados', 'Atrasados', $late) : '')
+            . ($urgent || $filter === 'urgentes' ? $chip('urgentes', 'Urgentes', $urgent) : '')
+            . '</div></div>';
+        return $html;
+    }
+
+    /** Barra que aparece quando há pedidos marcados. $actions: [acao => [rótulo, classe do botão, ícone]] */
+    function renderBulkBar(array $actions): string
+    {
+        $buttons = '';
+        foreach ($actions as $action => [$label, $class, $icon]) {
+            $buttons .= '<button type="button" class="btn ' . e($class) . '" data-bulk-action="' . e($action) . '"><i class="fa-solid ' . e($icon) . '" aria-hidden="true"></i> ' . e($label) . '</button>';
+        }
+        return '<div class="bulk-bar" data-bulk hidden role="region" aria-label="Pedidos selecionados">'
+            . '<span class="bulk-bar__count" data-bulk-count>0 selecionados</span>'
+            . '<div class="bulk-bar__actions">' . $buttons
+            . '<button type="button" class="btn btn--ghost" data-bulk-clear>Limpar</button></div>'
+            . '</div>';
     }
 }

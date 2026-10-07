@@ -31,11 +31,23 @@ if (!isset(RequestInbox::TABS[$tab])) {
     $tab = $counts['chegaram'] > 0 ? 'chegaram' : ($counts['novos'] > 0 ? 'novos' : ($counts['andamento'] > 0 ? 'andamento' : 'novos'));
 }
 $q = mb_substr(trim((string)($_GET['q'] ?? '')), 0, 100);
-$rows = RequestInbox::search($inbox['tabs'][$tab], $q);
+$filter = in_array($_GET['f'] ?? '', ['atrasados', 'urgentes'], true) ? $_GET['f'] : '';
+$baseRows = RequestInbox::search($inbox['tabs'][$tab], $q);
+$rows = filterRequestRows($baseRows, $filter);
 
-$tabLink = function (string $t) use ($areaFilter, $q) {
-    return 'inbox?' . http_build_query(array_filter(['tab' => $t, 'setor' => $areaFilter ?: null, 'q' => $q !== '' ? $q : null]));
+$tabLink = function (string $t, string $f = '') use ($areaFilter, $q) {
+    return 'inbox?' . http_build_query(array_filter(['tab' => $t, 'setor' => $areaFilter ?: null, 'q' => $q !== '' ? $q : null, 'f' => $f ?: null]));
 };
+$filterLink = fn(string $f) => $tabLink($tab, $f);
+
+// Ações em lote: só onde fazem sentido
+$bulk = [
+    'novos' => ['start' => ['Começar atendimento', 'btn--primary', 'fa-play']],
+    'andamento' => ['finish' => ['Concluir', 'btn--success', 'fa-check-double']],
+][$tab] ?? [];
+if (!isGestorRole($role)) {
+    $bulk = []; // começar e concluir são do setor
+}
 
 // Frase de contexto de cada linha (encaminhamentos)
 $noteFor = function (array $row) use ($tab): array {
@@ -109,8 +121,9 @@ $emptyText = [
     <?php endforeach; ?>
 </nav>
 
-<div class="workbench" data-queue data-url="<?= e($tabLink($tab)) ?>">
+<div class="workbench" data-queue data-url="<?= e($tabLink($tab, $filter)) ?>">
     <div class="workbench__list" aria-label="Pedidos">
+        <?= renderListTools($baseRows, $filter, $filterLink, (bool)$bulk) ?>
         <?php if ($q !== ''): ?>
             <p class="result-count"><?= count($rows) ?> resultado(s) para "<?= e($q) ?>" <a href="<?= e($tabLink($tab)) ?>">limpar</a></p>
         <?php endif; ?>
@@ -118,11 +131,12 @@ $emptyText = [
             <?php foreach ($rows as $row):
                 [$note, $kind] = $noteFor($row);
             ?>
-                <?= renderRequestRow($row, $note, $kind) ?>
+                <?= renderRequestRow($row, $note, $kind, (bool)$bulk && !($row['open_forward'] ?? null)) ?>
             <?php endforeach; ?>
         <?php else: ?>
-            <div class="empty-state"><i class="fa-regular fa-circle-check" aria-hidden="true"></i><p><?= e($q !== '' ? 'Nada encontrado nesta aba.' : $emptyText) ?></p></div>
+            <div class="empty-state"><i class="fa-regular fa-circle-check" aria-hidden="true"></i><p><?= e($q !== '' || $filter !== '' ? 'Nada encontrado com esse filtro.' : $emptyText) ?></p></div>
         <?php endif; ?>
+        <?php if ($bulk): ?><?= renderBulkBar($bulk) ?><?php endif; ?>
     </div>
     <aside class="workbench__panel" id="requestPanel" aria-live="polite" aria-label="Pedido selecionado">
         <div class="empty-state"><i class="fa-regular fa-hand-pointer" aria-hidden="true"></i><p>Escolha um pedido na lista.</p></div>

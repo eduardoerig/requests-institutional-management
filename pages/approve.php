@@ -30,6 +30,7 @@ foreach ($requests as $r) {
 asort($sectors);
 
 $sector = (string)($_GET['setor'] ?? '');
+$filter = in_array($_GET['f'] ?? '', ['atrasados', 'urgentes'], true) ? $_GET['f'] : '';
 $q = mb_substr(trim((string)($_GET['q'] ?? '')), 0, 100);
 $rows = array_values(array_filter($requests, function ($r) use ($sector, $q) {
     if ($sector !== '' && $r['table'] !== $sector) return false;
@@ -38,6 +39,11 @@ $rows = array_values(array_filter($requests, function ($r) use ($sector, $q) {
     return mb_strpos($haystack, mb_strtolower($q)) !== false;
 }));
 $total = count($requests);
+$baseRows = $rows;
+$rows = filterRequestRows($rows, $filter);
+$pageLink = function (string $f) use ($sector, $q) {
+    return 'approve?' . http_build_query(array_filter(['setor' => $sector ?: null, 'q' => $q !== '' ? $q : null, 'f' => $f ?: null]));
+};
 ?>
 <div class="page-head">
     <div class="page-head--hide-mobile">
@@ -62,18 +68,20 @@ $total = count($requests);
     <?php endif; ?>
 </div>
 
-<div class="workbench" data-queue data-advance>
+<div class="workbench" data-queue data-advance data-url="<?= e($pageLink($filter)) ?>">
     <div class="workbench__list" aria-label="Pedidos aguardando aprovação">
+        <?= renderListTools($baseRows, $filter, $pageLink, true) ?>
         <?php if ($q !== '' || $sector !== ''): ?>
             <p class="result-count"><?= count($rows) ?> de <?= $total ?> <a href="approve">limpar filtros</a></p>
         <?php endif; ?>
         <?php if ($rows): ?>
             <?php foreach ($rows as $row): ?>
-                <?= renderRequestRow($row, !empty($row['subdivision_name']) ? (string)$row['subdivision_name'] : '') ?>
+                <?= renderRequestRow($row, !empty($row['subdivision_name']) ? (string)$row['subdivision_name'] : '', '', true) ?>
             <?php endforeach; ?>
         <?php else: ?>
             <div class="empty-state"><i class="fa-regular fa-circle-check" aria-hidden="true"></i><p><?= $total === 0 ? 'Tudo em dia: nenhum pedido aguardando aprovação.' : 'Nada encontrado com esses filtros.' ?></p></div>
         <?php endif; ?>
+        <?= renderBulkBar(['approve' => ['Aprovar', 'btn--success', 'fa-check'], 'refuse' => ['Recusar', 'btn--danger', 'fa-xmark']]) ?>
     </div>
     <aside class="workbench__panel" id="requestPanel" aria-live="polite" aria-label="Pedido selecionado">
         <div class="empty-state"><i class="fa-regular fa-hand-pointer" aria-hidden="true"></i><p>Escolha um pedido na lista para aprovar ou recusar.</p></div>

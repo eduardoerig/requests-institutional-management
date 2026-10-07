@@ -63,7 +63,7 @@ if (!function_exists('renderRequestView')) {
         if ($status === 'P') {
             $now = 'Aguardando a aprovação da coordenação.';
         } elseif ($status === 'N') {
-            $now = 'Pedido recusado. O motivo está na conversa abaixo.';
+            $now = 'Pedido recusado.';
         } elseif ($status === 'C') {
             $now = "Concluído pelo setor de $ownerLabel.";
         } elseif ($open && $open['mode'] === 'transfer') {
@@ -101,11 +101,18 @@ if (!function_exists('renderRequestView')) {
         }
 
         // Linha do tempo: histórico + encaminhamentos com mensagens (mensagens só para setores/admin)
-        $st = $pdo->prepare('SELECT user_name, action, created_at FROM request_history WHERE request_id = ? AND request_table = ? ORDER BY created_at ASC, id ASC');
+        $st = $pdo->prepare('SELECT user_name, action, new_value, created_at FROM request_history WHERE request_id = ? AND request_table = ? ORDER BY created_at ASC, id ASC');
         $st->execute([$reqId, $sector]);
+        $history = $st->fetchAll(PDO::FETCH_ASSOC);
+        $statusAt = [];
+        foreach ($history as $h) {
+            if (!empty($h['new_value'])) {
+                $statusAt[(string)$h['new_value']] = $h['created_at'];
+            }
+        }
         $events = [];
         $forwardActionPattern = '/^(Encaminhou|Pediu ajuda|Setor .* (assumiu|aceitou|recusou|devolveu)|Cancelou o encaminhamento|Assumiu o pedido|Aceitou ajudar|Recusou o encaminhamento|Devolveu a ajuda)/u';
-        foreach ($st->fetchAll(PDO::FETCH_ASSOC) as $h) {
+        foreach ($history as $h) {
             if ($isStaff && preg_match($forwardActionPattern, $h['action'])) {
                 continue; // contado abaixo, com a mensagem
             }
@@ -140,6 +147,7 @@ if (!function_exists('renderRequestView')) {
         }
         usort($events, fn($a, $b) => strcmp((string)$a['at'], (string)$b['at']));
 
+
         $st = $pdo->prepare('SELECT * FROM request_comments WHERE request_id = ? AND request_table = ? ORDER BY created_at ASC, id ASC');
         $st->execute([$reqId, $sector]);
         $comments = $st->fetchAll(PDO::FETCH_ASSOC);
@@ -148,26 +156,64 @@ if (!function_exists('renderRequestView')) {
         $fullTable = 'ctd_' . $sector . '_frm';
         $deadline = (!empty($req['date']) && strpos((string)$req['date'], '0000') !== 0) ? date('d/m/Y', strtotime((string)$req['date'])) : 'Sem prazo';
         $priority = (int)($req['priority'] ?? 2);
+
+        // Etapas do pedido (o que todo mundo entende de relance)
+        $shortDate = fn($d) => $d ? date('d/m', strtotime((string)$d)) : '';
+        if ($status === 'N') {
+            $steps = [['Enviado', $shortDate($req['created_at'] ?? '')], ['Recusado', $shortDate($statusAt['Recusada'] ?? '')]];
+            $stepNow = 1;
+        } else {
+            $steps = [
+                ['Enviado', $shortDate($req['created_at'] ?? '')],
+                ['Aprovado', $shortDate($statusAt['Aprovada'] ?? '')],
+                ['Em atendimento', $shortDate($statusAt['Em atendimento'] ?? '')],
+                ['Concluído', $status === 'C' ? $shortDate($statusAt['Concluída'] ?? '') : ''],
+            ];
+            $stepNow = ['P' => 0, 'Y' => 1, 'F' => 1, 'W' => 2, 'C' => 3][$status] ?? 0;
+        }
+
+        // Motivo da recusa fica à vista (vem da conversa)
+        $refuseReason = '';
+        if ($status === 'N') {
+            foreach ($comments as $c) {
+                if (strpos((string)$c['comment'], 'Motivo da recusa: ') === 0) {
+                    $refuseReason = substr((string)$c['comment'], strlen('Motivo da recusa: '));
+                }
+            }
+        }
+        $nowIcon = ['P' => 'fa-hourglass-half', 'Y' => 'fa-thumbs-up', 'F' => 'fa-share-from-square', 'W' => 'fa-gears', 'C' => 'fa-circle-check', 'N' => 'fa-circle-xmark'][$status] ?? 'fa-circle-info';
         ?>
 <article class="request-view request-view--<?= e($context) ?>" <?= $data ?> data-title="<?= e($req['title'] ?? '') ?>">
     <header class="rv-head">
         <div class="rv-head__top">
             <span class="rv-num">Nº <?= $reqId ?></span>
-            <span class="status-pill status-pill--<?= e($status) ?>"><?= e(statusLabel($status)) ?></span>
-            <?php if ($context === 'panel'): ?>
-                <a class="rv-open" href="request_detail?id=<?= $reqId ?>&table=<?= e($sector) ?>">Abrir página <i class="fa-solid fa-up-right-from-square" aria-hidden="true"></i></a>
-            <?php endif; ?>
+            <span class="sector-tag" data-sector="<?= e($sector) ?>"><?= e($sectorName) ?></span>
+            <span class="rv-head__tools">
+                <?php if ($isStaff): ?>
+                    <a class="icon-link" href="print_request.php?id=<?= $reqId ?>&table=<?= e($sector) ?>" target="_blank" rel="noopener" title="Imprimir" aria-label="Imprimir"><i class="fa-solid fa-print" aria-hidden="true"></i></a>
+                <?php endif; ?>
+                <?php if ($context === 'panel'): ?>
+                    <a class="icon-link" href="request_detail?id=<?= $reqId ?>&table=<?= e($sector) ?>" title="Abrir em página inteira" aria-label="Abrir em página inteira"><i class="fa-solid fa-up-right-from-square" aria-hidden="true"></i></a>
+                <?php endif; ?>
+            </span>
         </div>
         <h2 class="rv-title"><?= e($req['title'] ?? 'Sem título') ?></h2>
-        <p class="rv-owner">
-            <span class="sector-tag" data-sector="<?= e(RequestForwardService::areaSlug($pdo, $ownerArea) ?? $sector) ?>"><?= e($ownerLabel) ?></span>
-            <?php if ($ownerSince): ?><span class="muted">cuida desde <?= e(date('d/m', strtotime($ownerSince))) ?></span><?php endif; ?>
-            <?php if ($ownerLabel !== $sectorName): ?><span class="muted">pedido original de <?= e($sectorName) ?></span><?php endif; ?>
-        </p>
+        <ol class="rv-steps<?= $status === 'N' ? ' rv-steps--refused' : '' ?>" aria-label="Etapas do pedido">
+            <?php foreach ($steps as $i => [$label, $when]):
+                $state = $i < $stepNow ? 'done' : ($i === $stepNow ? 'now' : 'next');
+            ?>
+                <li class="rv-step rv-step--<?= $state ?>"<?= $state === 'now' ? ' aria-current="step"' : '' ?>>
+                    <span class="rv-step__dot" aria-hidden="true"><?php if ($state === 'done' || ($state === 'now' && in_array($status, ['C', 'N'], true))): ?><i class="fa-solid <?= $status === 'N' && $i === 1 ? 'fa-xmark' : 'fa-check' ?>"></i><?php endif; ?></span>
+                    <span class="rv-step__label"><?= e($label) ?></span>
+                    <?php if ($when !== '' && $state !== 'next'): ?><span class="rv-step__date"><?= e($when) ?></span><?php endif; ?>
+                </li>
+            <?php endforeach; ?>
+        </ol>
     </header>
 
-    <section class="rv-now" aria-label="Situação agora">
-        <p><?= e($now) ?></p>
+    <section class="rv-now rv-now--<?= e($status) ?>" aria-label="Situação agora">
+        <p class="rv-now__text"><i class="fa-solid <?= e($nowIcon) ?>" aria-hidden="true"></i> <span><?= e($now) ?></span></p>
+        <?php if ($refuseReason !== ''): ?><blockquote class="rv-now__note"><?= nl2br(e($refuseReason)) ?></blockquote><?php endif; ?>
         <div class="rv-actions">
             <?php if ($canApprove): ?>
                 <button type="button" class="btn btn--success" onclick="decideRequest('Y', <?= $reqId ?>, '<?= e($sector) ?>')"><i class="fa-solid fa-check" aria-hidden="true"></i> Aprovar</button>
@@ -181,9 +227,9 @@ if (!function_exists('renderRequestView')) {
             <?php if ($canForward): ?>
                 <button type="button" class="btn" onclick="openForwardWizard(<?= $reqId ?>, '<?= e($sector) ?>')"><i class="fa-solid fa-share-from-square" aria-hidden="true"></i> Encaminhar</button>
             <?php endif; ?>
-            <?php if ($canReopen || $canPriority || $isStaff): ?>
+            <?php if ($canReopen || $canPriority): ?>
                 <details class="rv-more">
-                    <summary class="btn btn--ghost">Mais ações</summary>
+                    <summary class="btn btn--ghost">Mais opções</summary>
                     <div class="rv-more__menu">
                         <?php if ($canPriority): ?>
                             <label class="field" style="margin:0;">
@@ -197,9 +243,6 @@ if (!function_exists('renderRequestView')) {
                         <?php endif; ?>
                         <?php if ($canReopen): ?>
                             <button type="button" class="btn btn--sm" onclick="requestAct('reset_status', <?= $reqId ?>, '<?= e($fullTable) ?>')"><i class="fa-solid fa-rotate-left" aria-hidden="true"></i> Reabrir</button>
-                        <?php endif; ?>
-                        <?php if ($isStaff): ?>
-                            <a class="btn btn--sm" href="print_request.php?id=<?= $reqId ?>&table=<?= e($sector) ?>" target="_blank" rel="noopener"><i class="fa-solid fa-print" aria-hidden="true"></i> Imprimir</a>
                         <?php endif; ?>
                     </div>
                 </details>
@@ -256,22 +299,20 @@ if (!function_exists('renderRequestView')) {
     <?php endif; ?>
 
     <section class="rv-section" aria-label="O que foi pedido">
-        <dl class="rv-facts">
-            <div><dt>Quem pediu</dt><dd><?= e($req['creator_name'] ?? '—') ?><?= $subdivision ? ', ' . e($subdivision) : '' ?></dd></div>
-            <div><dt>Para quando</dt><dd><?= e($deadline) ?> <?= in_array($status, ['C', 'N'], true) ? '' : requestDeadlineFlag((string)($req['date'] ?? '')) ?></dd></div>
-            <div><dt>Urgência</dt><dd class="<?= $priority >= 3 ? 'prio-tag prio-tag--' . $priority : '' ?>"><?= e(priorityLabel($priority)) ?></dd></div>
-            <div><dt>Pedido em</dt><dd><?= e(date('d/m/Y \à\s H:i', strtotime((string)$req['created_at']))) ?></dd></div>
-        </dl>
+        <h3 class="rv-section__title">O que foi pedido</h3>
         <div class="prose rv-desc"><?= nl2br(e($req['descp'] ?? '')) ?: '<span class="muted">Sem descrição.</span>' ?></div>
-        <?php if ($extra): ?>
-            <dl class="rv-facts rv-facts--extra">
-                <?php foreach ($extra as $label => $value):
-                    $isUrl = preg_match('#^https?://#i', (string)$value);
-                ?>
-                    <div><dt><?= e($label) ?></dt><dd><?= $isUrl ? '<a href="' . e($value) . '" target="_blank" rel="noopener noreferrer">' . e($value) . '</a>' : e($value !== '' ? $value : '—') ?></dd></div>
-                <?php endforeach; ?>
-            </dl>
-        <?php endif; ?>
+        <dl class="rv-facts">
+            <div><dt><i class="fa-regular fa-user" aria-hidden="true"></i> Quem pediu</dt><dd><?= e($req['creator_name'] ?? '—') ?><?php if ($subdivision): ?><small><?= e($subdivision) ?></small><?php endif; ?></dd></div>
+            <div><dt><i class="fa-regular fa-calendar" aria-hidden="true"></i> Para quando</dt><dd><?= e($deadline) ?> <?= in_array($status, ['C', 'N'], true) ? '' : requestDeadlineFlag((string)($req['date'] ?? '')) ?></dd></div>
+            <div><dt><i class="fa-solid fa-gauge-high" aria-hidden="true"></i> Urgência</dt><dd><span class="<?= $priority >= 3 ? 'prio-tag prio-tag--' . $priority : '' ?>"><?= e(priorityLabel($priority)) ?></span></dd></div>
+            <div><dt><i class="fa-solid fa-people-group" aria-hidden="true"></i> Quem atende</dt><dd><?= e($ownerLabel) ?><?php if ($ownerLabel !== $sectorName): ?><small>veio de <?= e($sectorName) ?></small><?php endif; ?></dd></div>
+            <?php foreach ($extra as $label => $value):
+                $isUrl = preg_match('#^https?://#i', (string)$value);
+            ?>
+                <div><dt><?= e($label) ?></dt><dd><?= $isUrl ? '<a href="' . e($value) . '" target="_blank" rel="noopener noreferrer">Abrir arquivo</a>' : e($value !== '' ? $value : '—') ?></dd></div>
+            <?php endforeach; ?>
+        </dl>
+        <p class="rv-created">Pedido em <?= e(date('d/m/Y \à\s H:i', strtotime((string)$req['created_at']))) ?></p>
     </section>
 
     <section class="rv-section chat" aria-label="Conversa sobre o pedido">
@@ -305,7 +346,7 @@ if (!function_exists('renderRequestView')) {
     </section>
 
     <details class="rv-section rv-timeline" <?= $context === 'page' ? 'data-open-desktop' : '' ?>>
-        <summary class="rv-section__title">Linha do tempo <span class="muted">(<?= count($events) ?>)</span></summary>
+        <summary class="rv-section__title">Histórico completo <span class="muted">(<?= count($events) ?>)</span></summary>
         <ol class="timeline">
             <?php foreach ($events as $ev): ?>
                 <li class="<?= e($ev['kind'] ?? '') ?>">

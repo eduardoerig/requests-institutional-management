@@ -1012,3 +1012,100 @@ document.addEventListener('DOMContentLoaded', () => {
         : document.querySelector('[data-queue] .row-item');
     if (first) openInPanel(first.dataset.table, first.dataset.id, first);
 });
+
+// ---------------------------------------------------------------------
+// Escolher vários pedidos e resolver de uma vez (Aprovar, Começar, Concluir)
+// ---------------------------------------------------------------------
+function bulkPicked() {
+    return [...document.querySelectorAll('[data-queue] [data-pick]:checked')].map(i => {
+        const [table, id] = i.value.split(':');
+        return { table, id };
+    });
+}
+
+function updateBulkBar() {
+    const bar = document.querySelector('[data-queue] [data-bulk]');
+    if (!bar) return;
+    const picks = document.querySelectorAll('[data-queue] [data-pick]');
+    const n = bulkPicked().length;
+    bar.hidden = n === 0;
+    bar.querySelector('[data-bulk-count]').textContent = n === 1 ? '1 selecionado' : `${n} selecionados`;
+    document.querySelectorAll('[data-queue] [data-pick]').forEach(i => i.closest('.row-wrap')?.classList.toggle('picked', i.checked));
+    const all = document.querySelector('[data-queue] [data-pick-all]');
+    if (all) {
+        all.checked = n > 0 && n === picks.length;
+        all.indeterminate = n > 0 && n < picks.length;
+    }
+    document.body.classList.toggle('has-bulk', n > 0);
+}
+
+document.addEventListener('change', (e) => {
+    if (e.target.matches('[data-pick-all]')) {
+        document.querySelectorAll('[data-queue] [data-pick]').forEach(i => { i.checked = e.target.checked; });
+    }
+    if (e.target.matches('[data-pick], [data-pick-all]')) updateBulkBar();
+});
+
+document.addEventListener('click', async (e) => {
+    if (e.target.closest('[data-bulk-clear]')) {
+        document.querySelectorAll('[data-queue] [data-pick]').forEach(i => { i.checked = false; });
+        updateBulkBar();
+        return;
+    }
+    const btn = e.target.closest('[data-bulk-action]');
+    if (!btn) return;
+    const items = bulkPicked();
+    if (!items.length) return;
+    const action = btn.dataset.bulkAction;
+    const n = items.length;
+    const plural = n === 1 ? 'o pedido' : `os ${n} pedidos`;
+
+    let reason = '';
+    if (action === 'refuse') {
+        reason = await showConfirm({
+            title: `Recusar ${n === 1 ? '1 pedido' : n + ' pedidos'}`,
+            message: 'Cada solicitante recebe o motivo abaixo.',
+            type: 'error', confirmLabel: 'Recusar', isDanger: true,
+            input: { label: 'Motivo da recusa *', placeholder: 'Ex.: pedido repetido, já foi atendido', required: true }
+        });
+        if (reason === false) return;
+    } else {
+        const texts = {
+            approve: [`Aprovar ${plural}?`, 'Cada pedido vai para o setor responsável.', 'Aprovar', 'success'],
+            start: [`Começar ${plural}?`, 'Os solicitantes são avisados que o atendimento começou.', 'Começar', 'info'],
+            finish: [`Concluir ${plural}?`, 'Os solicitantes são avisados que o pedido foi atendido.', 'Concluir', 'success'],
+        }[action];
+        if (n > 1 || action === 'finish') {
+            const ok = await showConfirm({ title: texts[0], message: texts[1], confirmLabel: texts[2], type: texts[3] });
+            if (!ok) return;
+        }
+    }
+
+    const bar = btn.closest('[data-bulk]');
+    const count = bar.querySelector('[data-bulk-count]');
+    bar.querySelectorAll('button').forEach(b => { b.disabled = true; });
+    const verb = { approve: 'Aprovando', refuse: 'Recusando', start: 'Começando', finish: 'Concluindo' }[action];
+
+    let ok = 0;
+    const errors = [];
+    for (const [i, item] of items.entries()) {
+        count.textContent = `${verb} ${i + 1} de ${n}...`;
+        let data;
+        if (action === 'approve' || action === 'refuse') {
+            data = await postForm('config/aprovRequest.php', { action: 'post', id: item.id, table: item.table, value: action === 'approve' ? 'Y' : 'N', reason });
+        } else {
+            data = await postForm('api/request_actions.php', { id: item.id, table: `ctd_${item.table}_frm`, action: action === 'start' ? 'start_progress' : 'finish' });
+        }
+        if (data && data.success) ok++;
+        else errors.push(`nº ${item.id}: ${(data && data.message) || 'sem conexão'}`);
+    }
+
+    const done = { approve: ['aprovado', 'aprovados'], refuse: ['recusado', 'recusados'], start: ['em atendimento', 'em atendimento'], finish: ['concluído', 'concluídos'] }[action];
+    if (!errors.length) {
+        showToast(n === 1 ? `Pedido ${done[0]}.` : `${ok} pedidos ${done[1]}.`, 'success');
+    } else {
+        showToast(`${ok} de ${n} deram certo. Não foi possível: ${errors.join('; ')}`, 'error');
+    }
+    document.body.classList.remove('has-bulk');
+    refreshAfterChange();
+});
