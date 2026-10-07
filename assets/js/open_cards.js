@@ -5,17 +5,16 @@ function bindPopUpRequests() {
 
     cards.forEach(card => {
         card.addEventListener("click", async (e) => {
-            // Evitar que este script global rode na página de "Minhas Requisições"
-            // pois lá existe uma lógica específica de solicitante.
-            if (window.location.href.includes('myRequests')) {
+            // Sem painel lateral (celular ou lista do solicitante): o link abre a página do pedido
+            if (!modalReq || window.innerWidth < 900 || card.dataset.group) {
                 return;
             }
 
             e.preventDefault();
 
             // Set active state on the card
-            cards.forEach(c => c.classList.remove('active'));
-            card.classList.add('active');
+            cards.forEach(c => c.classList.remove('selected'));
+            card.classList.add('selected');
 
             // Se o modal já estiver aberto, dar um fade out rápido para trocar os dados
             if (modalReq && modalReq.style.display === 'flex') {
@@ -54,7 +53,7 @@ function bindPopUpRequests() {
                     if(rtypeEl) rtypeEl.value = data.data.table;
 
                     if (modalReq) {
-                        modalReq.className = "modal_req_embedded " + data.data.color;
+                        modalReq.className = "modal_req_embedded";
                         modalReq.style.display = "flex";
                         
                         // Animação suave de entrada ou volta de opacidade
@@ -82,10 +81,6 @@ function bindPopUpRequests() {
                         forwardActions.dataset.forwardId = isForwarded ? card.dataset.forwardId : '';
                     }
 
-                    // Celular: leva o usuário até o painel com os botões
-                    if (window.innerWidth <= 900 && modalReq) {
-                        modalReq.scrollIntoView({ behavior: 'smooth', block: 'start' });
-                    }
                 }
             } catch (err) {
                 if (typeof showToast === 'function') showToast('Não foi possível abrir o pedido. Tente de novo.', 'error');

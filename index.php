@@ -33,42 +33,47 @@ if ($logged && $force_reset === 1) {
         exit;
     }
 }
+
+$page = $requestedPage;
+$currentStatusParam = $_GET['status'] ?? '';
+$isGestorShell = isGestorRole($role);
+$pageTitles = [
+    'home' => $currentStatusParam === 'C' ? 'Concluídas' : 'Painel',
+    'new_request' => 'Nova requisição',
+    'myRequests' => 'Minhas requisições',
+    'approve' => 'Aprovar pedidos',
+    'approved' => $isGestorShell ? 'Para atender' : 'Aprovadas',
+    'inWork' => 'Em atendimento',
+    'myAccount' => 'Minha conta',
+    'accounts' => 'Usuários e setores',
+    'request_detail' => 'Requisição',
+    'ajuda' => 'Como usar',
+];
+$pageTitle = $pageTitles[$page] ?? 'SisReq';
+$roleClass = preg_replace('/[^a-z_]/', '', (string)$role);
+$pageClass = preg_replace('/[^a-zA-Z_]/', '', (string)$page);
 ?>
 <!DOCTYPE html>
 <html lang="pt-br">
 
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
     <base href="<?= e($basePath) ?>">
-    <meta name="theme-color" content="#111827">
+    <meta name="theme-color" content="#26252B">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Atkinson+Hyperlegible+Mono:wght@500;700&family=Atkinson+Hyperlegible+Next:wght@400;600;700;800&display=swap">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.2/css/all.min.css" crossorigin="anonymous" referrerpolicy="no-referrer">
     <link rel="icon" href="assets/img/LogoFavConSisreq.png">
-    <link rel="stylesheet" href="assets/css/style.css?v=<?php echo $assetVersion; ?>">
-    <link rel="stylesheet" href="assets/css/fase3.css?v=<?php echo $assetVersion; ?>">
-    <link rel="stylesheet" href="assets/css/notifications.css?v=<?php echo $assetVersion; ?>">
-    <link rel="stylesheet" href="assets/css/mobile.css?v=<?php echo $assetVersion; ?>">
-    <link rel="stylesheet" href="assets/css/ux.css?v=<?php echo $assetVersion; ?>">
-    <title>SisReq — Gestão de Requisições</title>
+    <link rel="stylesheet" href="assets/css/app.css?v=<?php echo $assetVersion; ?>">
+    <title><?= e($logged ? $pageTitle . ' | SisReq' : 'Entrar | SisReq') ?></title>
 </head>
 
-<body>
+<body class="<?= $logged ? 'role-' . e($roleClass) . ' page-' . e($pageClass) : 'page-login' ?>">
     <script>
         window.CSRF_TOKEN = "<?= htmlspecialchars($csrfToken, ENT_QUOTES, 'UTF-8') ?>";
     </script>
-    <?php
-    if ($logged) {
-        echo '<main>';
-        include "components/asideBar.php";
-        echo '<div class="sidebar-backdrop" id="sidebar-backdrop"></div>';
-        echo '<div class="page-content-wrapper">';
-    } else {
-        echo '<div class="login-wrapper">';
-    }
-    ?>
-
-
-
     <script>
         // Global Modal Functionality (Attached to window for global access)
         // input: { label, placeholder, required } -> resolve com o texto digitado (ou false se cancelar)
@@ -174,114 +179,121 @@ if ($logged && $force_reset === 1) {
             });
         };
     </script>
-        <?php if ($logged): ?>
-        <header class="top-bar">
-            <div class="top-bar-left">
-                <button class="menu-toggle" id="mobile-menu-btn" aria-label="Abrir menu">
-                    <i class="fa-solid fa-bars"></i>
-                </button>
-            </div>
-            <div class="top-bar-logo-mobile">
-                <img src="assets/img/LogoFavConSisreq.png" alt="SisReq Logo" class="topbar-logo-img">
-            </div>
-            
-            <div class="top-bar-right">
-                <div class="notification-wrapper" id="notif-btn" role="button" tabindex="0" aria-label="Avisos">
+
+<?php if ($page === 'logout'): ?>
+    <?php session_unset(); session_destroy(); ?>
+    <script>location.href = "login";</script>
+<?php elseif (!$logged || $page === 'login'): ?>
+    <?php include "pages/login.php"; ?>
+<?php else: ?>
+    <?php
+    $role_labels = [
+        'admin' => 'Administrador', 'adm' => 'Administrador', 'coord' => 'Coordenação',
+        'adm_sub' => 'Coordenação ' . ($_SESSION['subdivision_name'] ?? ''),
+        'gestor' => 'Setor de TI', 'ti' => 'Setor de TI', 'xerox' => 'Setor de Reprografia',
+        'service' => 'Setor de Manutenção', 'shop' => 'Setor de Compras',
+        'mkt' => 'Setor de Marketing', 'marketing' => 'Setor de Marketing',
+        'solicitante' => 'Solicitante'
+    ];
+    $firstName = explode(' ', trim((string)($_SESSION['name'] ?? 'Usuário')))[0];
+    ?>
+    <div class="app-shell">
+        <?php include "components/asideBar.php"; ?>
+        <div class="sidebar-backdrop" id="sidebar-backdrop"></div>
+
+        <header class="topbar">
+            <a class="topbar__brand" href="<?= $role === 'solicitante' ? 'myRequests' : 'home' ?>" aria-label="Início">
+                <img src="assets/img/LogoFavConSisreq.png" alt="">
+            </a>
+            <p class="topbar__title"><?= e($page === 'myRequests' && $role === 'solicitante' ? 'Olá, ' . $firstName : $pageTitle) ?></p>
+            <div class="topbar__actions">
+                <div class="notification-wrapper icon-btn" id="notif-btn" role="button" tabindex="0" aria-label="Avisos" aria-haspopup="true">
                     <i class="fa-solid fa-bell" aria-hidden="true"></i>
                     <span class="notif-badge" id="notif-badge" style="display:none;">0</span>
-                    
-                    <div class="notif-dropdown" id="notif-dropdown">
+                    <div class="notif-dropdown" id="notif-dropdown" role="dialog" aria-label="Avisos">
                         <div class="notif-header">
-                            <span>Notificações</span>
-                            <button onclick="markAllRead()">Marcar como lidas</button>
+                            <span>Avisos</span>
+                            <button type="button" onclick="markAllRead()">Marcar todos como lidos</button>
                         </div>
                         <div class="notif-body" id="notif-body">
-                            <div class="notif-empty">Nenhuma notificação nova</div>
+                            <div class="notif-empty">Nenhum aviso novo</div>
                         </div>
                     </div>
                 </div>
-                
-                <div class="user-profile">
-                    <span class="user-name"><?= e($_SESSION['name'] ?? 'Usuário') ?></span>
-                    <?php 
-                    $role_labels = [
-                        'admin' => 'Administrador', 'adm' => 'Administrador', 'coord' => 'Coordenação',
-                        'adm_sub' => 'Coordenação ' . ($_SESSION['subdivision_name'] ?? ''),
-                        'gestor' => 'Setor de TI', 'ti' => 'Setor de TI', 'xerox' => 'Setor de Reprografia',
-                        'service' => 'Setor de Manutenção', 'shop' => 'Setor de Compras',
-                        'mkt' => 'Setor de Marketing', 'marketing' => 'Setor de Marketing',
-                        'solicitante' => 'Solicitante'
-                    ];
-                    ?>
-                    <span class="user-role"><?= e($role_labels[$role] ?? strtoupper($role)) ?></span>
-                </div>
+                <a class="user-chip" href="myAccount">
+                    <strong><?= e($_SESSION['name'] ?? 'Usuário') ?></strong>
+                    <span><?= e($role_labels[$role] ?? $role) ?></span>
+                </a>
             </div>
         </header>
-        <?php endif; ?>
-        
-        <?php
-        $page = isset($url[0]) && $url[0] !== '' ? $url[0] : "home";
 
-        if ($page === "logout") {
-            session_unset();
-            session_destroy();
-            echo '<script>location.href = "login";</script>';
-        } else if ($page === "login" || !$logged) {
-            include "pages/login.php";
-        } else if ($page === "home" && $logged) {
-            include "pages/home.php";
-        } else if ($page === "new_request" && $logged) {
-            include "pages/new_request.php";
-        } else if ($page === "approve" && $logged) {
-            include "pages/approve.php";
-        } else if ($page === "approved" && $logged) {
-            include "pages/approved.php";
-        } else if ($page === "inWork" && $logged) {
-            include "pages/inWork.php";
-        } else if ($page === "myRequests" && $logged) {
-            include "pages/myRequests.php";
-        } else if ($page === "myAccount" && $logged) {
-            include "pages/myAccount.php";
-        } else if ($page === "accounts" && $logged) {
-            include "pages/accounts.php";
-        } else if ($page === "request_detail" && $logged) {
-            include "pages/request_detail.php";
-        } else if ($page === "ajuda" && $logged) {
-            include "pages/ajuda.php";
+        <main class="app-main" id="conteudo">
+            <?php
+            $routes = [
+                'home' => 'pages/home.php',
+                'new_request' => 'pages/new_request.php',
+                'approve' => 'pages/approve.php',
+                'approved' => 'pages/approved.php',
+                'inWork' => 'pages/inWork.php',
+                'myRequests' => 'pages/myRequests.php',
+                'myAccount' => 'pages/myAccount.php',
+                'accounts' => 'pages/accounts.php',
+                'request_detail' => 'pages/request_detail.php',
+                'ajuda' => 'pages/ajuda.php',
+            ];
+            include $routes[$page] ?? 'pages/home.php';
+            ?>
+        </main>
+
+        <?php
+        // Barra inferior do celular: o que cada perfil mais usa ("Novo" sempre no centro)
+        if ($role === 'solicitante') {
+            $bottomItems = [
+                ['myRequests', 'fa-folder-open', 'Pedidos'],
+                ['ajuda', 'fa-circle-question', 'Ajuda'],
+                ['new_request', 'fa-plus', 'Novo'],
+                ['myAccount', 'fa-user', 'Conta'],
+            ];
+        } elseif ($isGestorShell) {
+            $bottomItems = [
+                ['approved', 'fa-inbox', 'Atender'],
+                ['inWork', 'fa-gears', 'Andamento'],
+                ['new_request', 'fa-plus', 'Novo'],
+                ['myRequests', 'fa-folder-open', 'Meus'],
+            ];
         } else {
-            include "pages/home.php"; // Fallback
+            $bottomItems = [
+                ['approve', 'fa-clipboard-check', 'Aprovar'],
+                ['home', 'fa-chart-simple', 'Painel'],
+                ['new_request', 'fa-plus', 'Novo'],
+                ['myRequests', 'fa-folder-open', 'Meus'],
+            ];
         }
         ?>
+        <nav class="bottom-nav" aria-label="Navegação principal">
+            <?php foreach ($bottomItems as [$href, $icon, $label]):
+                $isNew = $href === 'new_request';
+                $active = $page === $href;
+            ?>
+                <a href="<?= e($href) ?>" class="bottom-nav__item<?= $isNew ? ' bottom-nav__new' : '' ?><?= $active ? ' is-active' : '' ?>"<?= $active ? ' aria-current="page"' : '' ?>>
+                    <i class="fa-solid <?= e($icon) ?>" aria-hidden="true"></i>
+                    <span><?= e($label) ?></span>
+                    <?php if ($href === 'approve' && !empty($badge_pendentes)): ?><span class="sidebar-badge"><?= (int)$badge_pendentes ?></span><?php endif; ?>
+                    <?php if ($href === 'approved' && !empty($badge_aprovadas)): ?><span class="sidebar-badge"><?= (int)$badge_aprovadas ?></span><?php endif; ?>
+                </a>
+            <?php endforeach; ?>
+            <button type="button" class="bottom-nav__item" id="mobile-menu-btn" aria-label="Mais opções">
+                <i class="fa-solid fa-bars" aria-hidden="true"></i>
+                <span>Mais</span>
+            </button>
+        </nav>
     </div>
-    <div class="toast"></div>
+<?php endif; ?>
+
+    <div class="toast" role="status" aria-live="polite"></div>
     <div class="loading-overlay">
-        <div class="spinner"></div>
+        <div class="spinner" aria-label="Carregando"></div>
     </div>
-    <?php
-    if ($logged) {
-        $is_solicitante = ($role === 'solicitante');
-        ?>
-        <?php if($is_solicitante): ?>
-        <!-- Mobile Bottom Nav -->
-        <div class="mobile-bottom-nav">
-            <a href="myRequests" class="nav-item <?= ($page == 'home' || $page == 'myRequests') ? 'active' : '' ?>">
-                <i class="fa-solid fa-folder-open"></i>
-                <span>Requisições</span>
-            </a>
-            <a href="new_request" class="nav-item nav-new <?= ($page == 'new_request') ? 'active' : '' ?>">
-                <i class="fa-solid fa-plus"></i>
-                <span>Nova</span>
-            </a>
-            <a href="myAccount" class="nav-item <?= ($page == 'myAccount') ? 'active' : '' ?>">
-                <i class="fa-solid fa-user"></i>
-                <span>Perfil</span>
-            </a>
-        </div>
-        <?php endif; ?>
-        <?php
-        echo '</main>';
-    }
-    ?>
     <script src="assets/js/script.js?v=<?php echo $assetVersion; ?>"></script>
     <script src="assets/js/filter.js?v=<?php echo $assetVersion; ?>"></script>
     <script src="assets/js/open_cards.js?v=<?php echo $assetVersion; ?>"></script>
@@ -292,29 +304,29 @@ if ($logged && $force_reset === 1) {
             <div class="forward-modal-header">
                 <i class="fa-solid fa-share-from-square"></i>
                 <div>
-                    <h3>Repassar Requisição</h3>
-                    <p>Selecione o setor de destino e adicione uma observação</p>
+                    <h3>Encaminhar a outro setor</h3>
+                    <p>O outro setor recebe o pedido e decide se assume o atendimento.</p>
                 </div>
             </div>
 
             <div class="forward-form-group">
-                <label for="forwardAreaSelect"><i class="fa-solid fa-building" style="margin-right:6px;"></i>Setor de Destino</label>
+                <label for="forwardAreaSelect">Para qual setor?</label>
                 <select id="forwardAreaSelect">
                     <option value="">Carregando setores...</option>
                 </select>
             </div>
 
             <div class="forward-form-group">
-                <label for="forwardObservation"><i class="fa-solid fa-message" style="margin-right:6px;"></i>Observação (opcional)</label>
+                <label for="forwardObservation">Explique o motivo <small>(opcional)</small></label>
                 <textarea id="forwardObservation" placeholder="Explique o motivo do repasse ou adicione orientações para o outro setor..."></textarea>
             </div>
 
             <div class="forward-actions">
                 <button class="btn-forward btn-forward-confirm" id="forwardConfirmBtn" onclick="confirmForward()">
-                    <i class="fa-solid fa-paper-plane"></i> Confirmar Repasse
+                    <i class="fa-solid fa-paper-plane"></i> Encaminhar
                 </button>
                 <button class="btn-forward btn-forward-cancel" onclick="closeForwardModal()">
-                    <i class="fa-solid fa-xmark"></i> Cancelar
+                    Cancelar
                 </button>
             </div>
         </div>
@@ -362,7 +374,7 @@ if ($logged && $force_reset === 1) {
             const select = document.getElementById('forwardAreaSelect');
 
             if (data.success && data.data.length > 0) {
-                select.innerHTML = '<option value="">— Selecione o setor —</option>';
+                select.innerHTML = '<option value="">Escolha o setor</option>';
                 data.data.forEach(area => {
                     select.add(new Option(area.label, area.id));
                 });
@@ -390,7 +402,7 @@ if ($logged && $force_reset === 1) {
 
         const confirmBtn = document.getElementById('forwardConfirmBtn');
         confirmBtn.disabled = true;
-        confirmBtn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Repassando...';
+        confirmBtn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Encaminhando...';
 
         try {
             const formData = new URLSearchParams();
@@ -418,7 +430,7 @@ if ($logged && $force_reset === 1) {
             showToast('Falha na comunicação com o servidor.', 'error');
         } finally {
             confirmBtn.disabled = false;
-            confirmBtn.innerHTML = '<i class="fa-solid fa-paper-plane"></i> Confirmar Repasse';
+            confirmBtn.innerHTML = '<i class="fa-solid fa-paper-plane"></i> Encaminhar';
         }
     }
 
@@ -433,14 +445,14 @@ if ($logged && $force_reset === 1) {
 
     async function handleForwardAction(action, forwardId) {
         const messages = {
-            'accept': 'Deseja ACEITAR este repasse? Você será responsável pelo atendimento.',
-            'refuse': 'Deseja RECUSAR este repasse? A requisição voltará ao setor de origem.',
-            'complete': 'Deseja CONCLUIR esta requisição via repasse?'
+            'accept': 'Assumir este pedido? Seu setor passa a ser responsável pelo atendimento.',
+            'refuse': 'Recusar este encaminhamento? O pedido volta para o setor que encaminhou.',
+            'complete': 'Marcar este pedido como concluído?'
         };
 
         if (messages[action]) {
             const confirmed = await showConfirm({
-                title: 'Confirmar Repasse',
+                title: 'Encaminhamento',
                 message: messages[action],
                 type: 'warning',
                 confirmLabel: 'Confirmar'
@@ -480,7 +492,7 @@ if ($logged && $force_reset === 1) {
     </script>
 
     <!-- Global Modal Structure (Moved to end for correct stacking) -->
-    <div id="globalModal" class="modal-overlay" style="z-index: 10001;">
+    <div id="globalModal" class="modal-overlay" role="dialog" aria-modal="true" aria-labelledby="gModalTitle">
         <div class="modal-card">
             <div id="gModalIcon" class="modal-icon">
                 <i class="fa-solid"></i>

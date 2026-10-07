@@ -111,25 +111,27 @@ $menuItem = function (string $href, string $icon, string $label, int $badge = 0,
         . '<i class="fa-solid ' . e($icon) . '" aria-hidden="true"></i><span>' . e($label) . '</span>' . $badgeHtml . '</a>';
 };
 ?>
-<aside id="main-sidebar">
-    <div class="logo-container">
-        <img src="assets/img/LogoFavConSisreq.png" alt="SisReq" class="logo">
-    </div>
+<aside id="main-sidebar" class="sidebar" aria-label="Menu">
+    <div class="sidebar__grip" aria-hidden="true"></div>
+    <a class="sidebar__brand" href="<?= $role === 'solicitante' ? 'myRequests' : 'home' ?>">
+        <img src="assets/img/LogoFavConSisreq.png" alt="">
+        <span>SisReq</span>
+    </a>
     <nav aria-label="Menu principal">
-        <?= $menuItem('new_request', 'fa-plus', 'Nova requisição', 0, '', $currentPage === 'new_request') ?>
+        <a href="new_request" class="menu-link menu-link--new<?= $currentPage === 'new_request' ? ' is-active' : '' ?>"><i class="fa-solid fa-plus" aria-hidden="true"></i><span>Nova requisição</span></a>
         <?= $menuItem('myRequests', 'fa-folder-open', 'Minhas requisições', 0, '', $currentPage === 'myRequests') ?>
 
         <?php if ($canApprove || $canManage): ?>
             <p class="menu-section">Trabalho</p>
             <?php if ($canApprove): ?>
-                <?= $menuItem('approve', 'fa-clipboard-check', 'Aprovar pedidos', (int)$badge_pendentes, 'pending-badge', $currentPage === 'approve') ?>
+                <?= $menuItem('approve', 'fa-clipboard-check', 'Aprovar pedidos', (int)$badge_pendentes, '', $currentPage === 'approve') ?>
             <?php endif; ?>
             <?php if ($canManage): ?>
-                <?= $menuItem('approved', 'fa-inbox', $isGestor ? 'Para atender' : 'Aprovadas', (int)$badge_aprovadas, 'approved-badge', $currentPage === 'approved') ?>
-                <?= $menuItem('inWork', 'fa-gears', 'Em atendimento', (int)$badge_andamento, 'progress-badge', $currentPage === 'inWork') ?>
+                <?= $menuItem('approved', 'fa-inbox', $isGestor ? 'Para atender' : 'Aprovadas', (int)$badge_aprovadas, '', $currentPage === 'approved') ?>
+                <?= $menuItem('inWork', 'fa-gears', 'Em atendimento', (int)$badge_andamento, '', $currentPage === 'inWork') ?>
                 <?= $menuItem('home?status=C', 'fa-check-double', 'Concluídas', 0, '', $currentPage === 'home' && $currentStatus === 'C') ?>
             <?php endif; ?>
-            <?= $menuItem('home', 'fa-chart-pie', 'Painel geral', 0, '', $currentPage === 'home' && $currentStatus === '') ?>
+            <?= $menuItem('home', 'fa-chart-simple', 'Painel', 0, '', $currentPage === 'home' && $currentStatus === '') ?>
         <?php endif; ?>
 
         <p class="menu-section">Conta</p>
@@ -141,8 +143,6 @@ $menuItem = function (string $href, string $icon, string $label, int $badge = 0,
         <a href="#" class="menu-link logout" id="btn_logout"><i class="fa-solid fa-arrow-right-from-bracket" aria-hidden="true"></i><span>Sair</span></a>
     </nav>
     <footer>
-        <div class="copy">
-            <p>SisReq © 2026</p>
-        </div>
+        <p>SisReq &copy; 2026</p>
     </footer>
 </aside>

@@ -445,54 +445,37 @@ function ensureUserAreaForRole(PDO $pdo, int $userId, string $role): void
 }
 
 /**
- * Retorna o badge formatado e destacado do prazo de entrega
+ * Selo do prazo pedido, em texto simples ("Atrasada", "Hoje", "Amanhã", "Faltam 3 dias").
  */
-function getPrazoBadge(?string $rawDate, string $status = 'P'): string {
-    if (empty($rawDate) || $rawDate === '0000-00-00' || $rawDate === '0000-00-00 00:00:00') {
-        return '<span class="prazo-badge prazo-sem-prazo" style="display:inline-flex; align-items:center; gap:4px; font-size:0.7rem; color:#94a3b8;"><i class="fa-regular fa-calendar-times"></i> Sem prazo</span>';
+function getPrazoBadge(?string $rawDate, string $status = 'P'): string
+{
+    $ts = (!empty($rawDate) && strpos((string)$rawDate, '0000-00-00') !== 0) ? strtotime((string)$rawDate) : false;
+    if (!$ts) {
+        return '<span class="prazo-badge prazo-sem-prazo">Sem prazo</span>';
     }
 
-    $deadlineTs = strtotime($rawDate);
-    if (!$deadlineTs) {
-        return '<span class="prazo-badge prazo-sem-prazo" style="display:inline-flex; align-items:center; gap:4px; font-size:0.7rem; color:#94a3b8;"><i class="fa-regular fa-calendar-times"></i> Sem prazo</span>';
-    }
-
-    $deadlineDate = date('Y-m-d', $deadlineTs);
-    $todayDate = date('Y-m-d');
-    $tomorrowDate = date('Y-m-d', strtotime('+1 day'));
-
-    $displayDate = date('d/m/Y', $deadlineTs);
-
-    // Se já estiver concluída ou rejeitada/cancelada, mostramos a data normal neutra
+    $date = date('Y-m-d', $ts);
+    $display = date('d/m', $ts);
     $st = strtoupper(trim($status));
-    if ($st === 'C' || $st === 'N' || $st === 'R') {
-        return '<span class="prazo-badge prazo-concluido" style="display:inline-flex; align-items:center; gap:4px; color:#64748b; font-size:0.74rem; font-weight:500;">'
-             . '<i class="fa-regular fa-calendar-check"></i> ' . $displayDate . '</span>';
+
+    if (in_array($st, ['C', 'N'], true)) {
+        return '<span class="prazo-badge prazo-encerrado"><i class="fa-regular fa-calendar" aria-hidden="true"></i> Prazo ' . $display . '</span>';
     }
 
-    if ($deadlineDate < $todayDate) {
-        // Vencida / Atrasada
-        return '<span class="prazo-badge prazo-atrasado" style="display:inline-flex; align-items:center; gap:4px; background:#fff1f2; color:#be123c; border:1px solid #fecdd3; padding:2px 6px; border-radius:4px; font-size:0.72rem; font-weight:700;" title="Atrasada">'
-             . '<i class="fa-solid fa-triangle-exclamation"></i> Vencido (' . $displayDate . ')</span>';
-    } elseif ($deadlineDate === $todayDate) {
-        // Vence Hoje
-        return '<span class="prazo-badge prazo-hoje" style="display:inline-flex; align-items:center; gap:4px; background:#fffbeb; color:#d97706; border:1px solid #fde68a; padding:2px 6px; border-radius:4px; font-size:0.72rem; font-weight:700;" title="Vence hoje">'
-             . '<i class="fa-solid fa-clock"></i> Hoje (' . $displayDate . ')</span>';
-    } elseif ($deadlineDate === $tomorrowDate) {
-        // Falta 1 dia (Amanhã)
-        return '<span class="prazo-badge prazo-amanha" style="display:inline-flex; align-items:center; gap:4px; background:#fef3c7; color:#b45309; border:1px solid #fde68a; padding:2px 6px; border-radius:4px; font-size:0.72rem; font-weight:700;" title="Falta 1 dia">'
-             . '<i class="fa-solid fa-hourglass-half"></i> Amanhã (' . $displayDate . ')</span>';
-    } else {
-        // Futuro (Mais de 1 dia)
-        $diffDays = (int)ceil((strtotime($deadlineDate) - strtotime($todayDate)) / 86400);
-        if ($diffDays <= 3) {
-            // Próximo (2 ou 3 dias restantes) - Alerta amigável
-            return '<span class="prazo-badge prazo-proximo" style="display:inline-flex; align-items:center; gap:4px; background:#ecfdf5; color:#047857; border:1px solid #a7f3d0; padding:2px 6px; border-radius:4px; font-size:0.72rem; font-weight:700;" title="Restam ' . $diffDays . ' dias">'
-                 . '<i class="fa-regular fa-calendar-check"></i> ' . $diffDays . ' dias (' . $displayDate . ')</span>';
-        } else {
-            // No prazo normal
-            return '<span class="prazo-badge prazo-futuro" style="display:inline-flex; align-items:center; gap:4px; color:#475569; font-size:0.74rem; font-weight:500;">'
-                 . '<i class="fa-regular fa-calendar"></i> ' . $displayDate . '</span>';
-        }
+    $today = date('Y-m-d');
+    $days = (int)round((strtotime($date) - strtotime($today)) / 86400);
+
+    if ($days < 0) {
+        return '<span class="prazo-badge prazo-atrasado"><i class="fa-solid fa-triangle-exclamation" aria-hidden="true"></i> Atrasada (era ' . $display . ')</span>';
     }
+    if ($days === 0) {
+        return '<span class="prazo-badge prazo-hoje"><i class="fa-solid fa-clock" aria-hidden="true"></i> Vence hoje</span>';
+    }
+    if ($days === 1) {
+        return '<span class="prazo-badge prazo-hoje"><i class="fa-regular fa-clock" aria-hidden="true"></i> Vence amanhã</span>';
+    }
+    if ($days <= 3) {
+        return '<span class="prazo-badge prazo-proximo"><i class="fa-regular fa-calendar" aria-hidden="true"></i> Faltam ' . $days . ' dias (' . $display . ')</span>';
+    }
+    return '<span class="prazo-badge prazo-futuro"><i class="fa-regular fa-calendar" aria-hidden="true"></i> Até ' . $display . '</span>';
 }
