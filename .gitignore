@@ -41,6 +41,10 @@ arquivos/
 
 # Database Backups & Dumps
 *.sql
+# Estrutura do banco e migrações são versionadas (só os backups ficam fora)
+!database/schema.sql
+!database/migrations/*.sql
+database/backups/
 *.sqlite
 *.sqlite3
 *.db
