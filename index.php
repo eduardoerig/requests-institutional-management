@@ -14,6 +14,17 @@ $basePath = rtrim(str_replace(chr(92), '/', dirname($_SERVER['SCRIPT_NAME'])), '
 
 // Solicitante não tem painel: vai direto para as próprias requisições
 $requestedPage = (isset($url[0]) && $url[0] !== '') ? $url[0] : 'home';
+// Filas antigas viraram abas da Caixa do setor
+$legacyQueues = ['approved' => 'novos', 'inWork' => 'andamento'];
+if ($logged && isset($legacyQueues[$requestedPage]) && $force_reset !== 1) {
+    header('Location: inbox?tab=' . $legacyQueues[$requestedPage]);
+    exit;
+}
+// Setores trabalham pela Caixa; o Painel é da coordenação e da administração
+if ($logged && isGestorRole($role) && $requestedPage === 'home' && $force_reset !== 1) {
+    header('Location: inbox' . (($_GET['status'] ?? '') === 'C' ? '?tab=concluidos' : ''));
+    exit;
+}
 if ($logged && $role === 'solicitante' && $requestedPage === 'home' && $force_reset !== 1) {
     header('Location: myRequests');
     exit;
@@ -42,8 +53,7 @@ $pageTitles = [
     'new_request' => 'Nova requisição',
     'myRequests' => 'Minhas requisições',
     'approve' => 'Aprovar pedidos',
-    'approved' => $isGestorShell ? 'Para atender' : 'Aprovadas',
-    'inWork' => 'Em atendimento',
+    'inbox' => isGlobalAdminRole($role) ? 'Caixa dos setores' : 'Caixa do setor',
     'myAccount' => 'Minha conta',
     'accounts' => 'Usuários e setores',
     'request_detail' => 'Requisição',
@@ -233,8 +243,7 @@ $pageClass = preg_replace('/[^a-zA-Z_]/', '', (string)$page);
                 'home' => 'pages/home.php',
                 'new_request' => 'pages/new_request.php',
                 'approve' => 'pages/approve.php',
-                'approved' => 'pages/approved.php',
-                'inWork' => 'pages/inWork.php',
+                'inbox' => 'pages/inbox.php',
                 'myRequests' => 'pages/myRequests.php',
                 'myAccount' => 'pages/myAccount.php',
                 'accounts' => 'pages/accounts.php',
@@ -256,15 +265,15 @@ $pageClass = preg_replace('/[^a-zA-Z_]/', '', (string)$page);
             ];
         } elseif ($isGestorShell) {
             $bottomItems = [
-                ['approved', 'fa-inbox', 'Atender'],
-                ['inWork', 'fa-gears', 'Andamento'],
-                ['new_request', 'fa-plus', 'Novo'],
+                ['inbox', 'fa-inbox', 'Caixa'],
                 ['myRequests', 'fa-folder-open', 'Meus'],
+                ['new_request', 'fa-plus', 'Novo'],
+                ['ajuda', 'fa-circle-question', 'Ajuda'],
             ];
         } else {
             $bottomItems = [
                 ['approve', 'fa-clipboard-check', 'Aprovar'],
-                ['home', 'fa-chart-simple', 'Painel'],
+                isGlobalAdminRole($role) ? ['inbox', 'fa-inbox', 'Caixa'] : ['home', 'fa-chart-simple', 'Painel'],
                 ['new_request', 'fa-plus', 'Novo'],
                 ['myRequests', 'fa-folder-open', 'Meus'],
             ];
@@ -279,7 +288,7 @@ $pageClass = preg_replace('/[^a-zA-Z_]/', '', (string)$page);
                     <i class="fa-solid <?= e($icon) ?>" aria-hidden="true"></i>
                     <span><?= e($label) ?></span>
                     <?php if ($href === 'approve' && !empty($badge_pendentes)): ?><span class="sidebar-badge"><?= (int)$badge_pendentes ?></span><?php endif; ?>
-                    <?php if ($href === 'approved' && !empty($badge_aprovadas)): ?><span class="sidebar-badge"><?= (int)$badge_aprovadas ?></span><?php endif; ?>
+                    <?php if ($href === 'inbox' && !empty($badge_inbox)): ?><span class="sidebar-badge"><?= (int)$badge_inbox ?></span><?php endif; ?>
                 </a>
             <?php endforeach; ?>
             <button type="button" class="bottom-nav__item" id="mobile-menu-btn" aria-label="Mais opções">
@@ -295,200 +304,145 @@ $pageClass = preg_replace('/[^a-zA-Z_]/', '', (string)$page);
         <div class="spinner" aria-label="Carregando"></div>
     </div>
     <script src="assets/js/script.js?v=<?php echo $assetVersion; ?>"></script>
-    <script src="assets/js/filter.js?v=<?php echo $assetVersion; ?>"></script>
-    <script src="assets/js/open_cards.js?v=<?php echo $assetVersion; ?>"></script>
 
-    <!-- Modal de Repasse de Requisições (Fase 5) -->
-    <div class="forward-overlay" id="forwardOverlay">
-        <div class="forward-modal">
-            <div class="forward-modal-header">
-                <i class="fa-solid fa-share-from-square"></i>
+    <!-- Encaminhar: como, para quem, mensagem, resumo -->
+    <div class="modal-overlay fw" id="forwardWizard" role="dialog" aria-modal="true" aria-labelledby="fwTitle" hidden>
+        <form class="modal-card fw__card" id="fwForm" novalidate>
+            <header class="fw__head">
                 <div>
-                    <h3>Encaminhar a outro setor</h3>
-                    <p>O outro setor recebe o pedido e decide se assume o atendimento.</p>
+                    <h3 id="fwTitle">Encaminhar pedido</h3>
+                    <p class="fw__req" id="fwReq"></p>
                 </div>
+                <button type="button" class="fw__close" data-fw-close aria-label="Fechar"><i class="fa-solid fa-xmark" aria-hidden="true"></i></button>
+            </header>
+
+            <fieldset class="fw__step">
+                <legend class="fw__legend"><span>1</span> Como encaminhar?</legend>
+                <div class="fw__choices">
+                    <label class="fw__choice">
+                        <input type="radio" name="mode" value="transfer" required>
+                        <span><strong><i class="fa-solid fa-right-left" aria-hidden="true"></i> Transferir</strong>O outro setor passa a cuidar do pedido.</span>
+                    </label>
+                    <label class="fw__choice">
+                        <input type="radio" name="mode" value="help" required>
+                        <span><strong><i class="fa-solid fa-handshake-angle" aria-hidden="true"></i> Pedir ajuda</strong>O outro setor faz uma parte e devolve para você.</span>
+                    </label>
+                </div>
+            </fieldset>
+
+            <fieldset class="fw__step">
+                <legend class="fw__legend"><span>2</span> Para qual setor?</legend>
+                <div class="fw__choices fw__choices--areas" id="fwAreas"><p class="fw__hint">Carregando setores...</p></div>
+            </fieldset>
+
+            <div class="fw__step">
+                <label for="fwMessage" class="fw__legend"><span>3</span> O que o outro setor precisa saber ou fazer?</label>
+                <textarea id="fwMessage" name="message" rows="3" maxlength="1000" required placeholder="Ex.: o projetor da sala 12 não liga, já trocamos o cabo."></textarea>
+                <p class="fw__hint" id="fwCount">Mínimo de 10 letras.</p>
             </div>
 
-            <div class="forward-form-group">
-                <label for="forwardAreaSelect">Para qual setor?</label>
-                <select id="forwardAreaSelect">
-                    <option value="">Carregando setores...</option>
-                </select>
+            <p class="fw__summary" id="fwSummary" aria-live="polite">Escolha como e para qual setor.</p>
+            <div class="fw__actions">
+                <button type="button" class="btn btn--ghost" data-fw-close>Cancelar</button>
+                <button type="submit" class="btn btn--primary" id="fwSubmit" disabled><i class="fa-solid fa-paper-plane" aria-hidden="true"></i> Encaminhar</button>
             </div>
-
-            <div class="forward-form-group">
-                <label for="forwardObservation">Explique o motivo <small>(opcional)</small></label>
-                <textarea id="forwardObservation" placeholder="Explique o motivo do repasse ou adicione orientações para o outro setor..."></textarea>
-            </div>
-
-            <div class="forward-actions">
-                <button class="btn-forward btn-forward-confirm" id="forwardConfirmBtn" onclick="confirmForward()">
-                    <i class="fa-solid fa-paper-plane"></i> Encaminhar
-                </button>
-                <button class="btn-forward btn-forward-cancel" onclick="closeForwardModal()">
-                    Cancelar
-                </button>
-            </div>
-        </div>
+        </form>
     </div>
 
     <script>
-    // ============================================
-    // LÓGICA DO MODAL DE REPASSE (Fase 5)
-    // ============================================
+    // Janela de encaminhar (usada pela visão do pedido: página ou painel da Caixa)
+    (function () {
+        const wiz = document.getElementById('forwardWizard');
+        if (!wiz) return;
+        const form = document.getElementById('fwForm');
+        const areasBox = document.getElementById('fwAreas');
+        const msg = document.getElementById('fwMessage');
+        const submit = document.getElementById('fwSubmit');
+        const summary = document.getElementById('fwSummary');
+        const placeholders = {
+            transfer: 'Ex.: isso é com vocês: troca de lâmpadas da sala 12, não é da TI.',
+            help: 'Ex.: precisamos de 2 cabos HDMI para terminar a instalação na sala 12.'
+        };
+        let current = null;
 
-    let forwardAreasLoaded = false;
-
-    // Abre o modal de repasse e carrega os setores disponíveis
-    function openForwardModal() {
-        const rid = document.querySelector('.Rid');
-        const rtype = document.querySelector('.Rtype');
-
-        if (!rid || !rid.value || !rtype || !rtype.value) {
-            showToast('Selecione uma requisição primeiro.', 'info');
-            return;
+        function update() {
+            const mode = form.mode.value;
+            const area = form.querySelector('input[name="area"]:checked');
+            const len = msg.value.trim().length;
+            if (mode) msg.placeholder = placeholders[mode];
+            document.getElementById('fwCount').textContent = len >= 10 ? 'Pronto.' : 'Mínimo de 10 letras (faltam ' + (10 - len) + ').';
+            const verb = mode === 'help' ? 'Pedir ajuda a' : 'Transferir o pedido para';
+            summary.textContent = mode && area
+                ? verb + ' ' + area.dataset.label + '.' + (mode === 'help' ? ' Seu setor continua responsável.' : ' Eles precisam aceitar.')
+                : 'Escolha como e para qual setor.';
+            submit.disabled = !(mode && area && len >= 10);
         }
 
-        const overlay = document.getElementById('forwardOverlay');
-        overlay.style.display = 'flex';
-        setTimeout(() => overlay.classList.add('show'), 10);
-
-        // Carregar setores do backend (apenas na primeira vez ou se necessário)
-        if (!forwardAreasLoaded) {
-            loadForwardAreas();
+        function close() {
+            wiz.classList.remove('show');
+            wiz.hidden = true;
+            current = null;
         }
-    }
 
-    // Fecha o modal de repasse
-    function closeForwardModal() {
-        const overlay = document.getElementById('forwardOverlay');
-        overlay.classList.remove('show');
-        setTimeout(() => { overlay.style.display = 'none'; }, 300);
-    }
-
-    // Carrega os setores disponíveis via API
-    async function loadForwardAreas() {
-        try {
-            const response = await fetch('api/request_forwards.php?action=areas');
-            const data = await response.json();
-            const select = document.getElementById('forwardAreaSelect');
-
-            if (data.success && data.data.length > 0) {
-                select.innerHTML = '<option value="">Escolha o setor</option>';
-                data.data.forEach(area => {
-                    select.add(new Option(area.label, area.id));
+        window.openForwardWizard = async function (id, table) {
+            current = { id: id, table: table };
+            form.reset();
+            const view = document.querySelector('.request-view[data-id="' + id + '"][data-table="' + table + '"]');
+            const title = view && view.querySelector('.rv-title') ? view.querySelector('.rv-title').textContent.trim() : '';
+            document.getElementById('fwReq').textContent = 'Nº ' + id + (title ? ' · ' + title : '');
+            areasBox.innerHTML = '<p class="fw__hint">Carregando setores...</p>';
+            update();
+            wiz.hidden = false;
+            requestAnimationFrame(() => wiz.classList.add('show'));
+            form.querySelector('input[name="mode"]').focus();
+            try {
+                const response = await fetch('api/request_forwards.php?action=areas&id=' + encodeURIComponent(id) + '&table=' + encodeURIComponent(table));
+                const data = await response.json();
+                if (!data.success || !data.data.length) {
+                    areasBox.innerHTML = '<p class="fw__hint">Nenhum outro setor disponível.</p>';
+                    return;
+                }
+                areasBox.innerHTML = '';
+                data.data.forEach(a => {
+                    const label = document.createElement('label');
+                    label.className = 'fw__choice fw__choice--area';
+                    label.innerHTML = '<input type="radio" name="area" required><span><strong></strong></span>';
+                    const input = label.querySelector('input');
+                    input.value = a.id;
+                    input.dataset.label = a.label;
+                    label.querySelector('strong').textContent = a.label;
+                    areasBox.appendChild(label);
                 });
-                forwardAreasLoaded = true;
-            } else {
-                select.innerHTML = '<option value="">Nenhum setor disponível</option>';
+            } catch (err) {
+                areasBox.innerHTML = '<p class="fw__hint">Não foi possível carregar os setores. Feche e tente de novo.</p>';
             }
-        } catch (err) {
-            console.error('Erro ao carregar setores:', err);
-            document.getElementById('forwardAreaSelect').innerHTML = '<option value="">Erro ao carregar</option>';
-        }
-    }
-
-    // Confirma e envia o repasse
-    async function confirmForward() {
-        const rid = document.querySelector('.Rid')?.value;
-        const rtype = document.querySelector('.Rtype')?.value;
-        const toAreaId = document.getElementById('forwardAreaSelect').value;
-        const observation = document.getElementById('forwardObservation').value.trim();
-
-        if (!toAreaId) {
-            showToast('Selecione o setor de destino.', 'error');
-            return;
-        }
-
-        const confirmBtn = document.getElementById('forwardConfirmBtn');
-        confirmBtn.disabled = true;
-        confirmBtn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Encaminhando...';
-
-        try {
-            const formData = new URLSearchParams();
-            formData.append('action', 'forward');
-            formData.append('id', rid);
-            formData.append('table', rtype);
-            formData.append('to_area_id', toAreaId);
-            formData.append('observation', observation);
-
-            const response = await fetch('api/request_forwards.php', {
-                method: 'POST',
-                body: attachCsrfToken(formData)
-            });
-            const data = await response.json();
-
-            if (data.success) {
-                showToast(data.message, 'success');
-                closeForwardModal();
-                setTimeout(() => location.reload(), 1200);
-            } else {
-                showToast(data.message, 'error');
-            }
-        } catch (err) {
-            console.error('Erro ao repassar:', err);
-            showToast('Falha na comunicação com o servidor.', 'error');
-        } finally {
-            confirmBtn.disabled = false;
-            confirmBtn.innerHTML = '<i class="fa-solid fa-paper-plane"></i> Encaminhar';
-        }
-    }
-
-    // Fecha o modal ao clicar fora
-    document.getElementById('forwardOverlay')?.addEventListener('click', function(e) {
-        if (e.target === this) closeForwardModal();
-    });
-
-    // ============================================
-    // AÇÕES DE REPASSE (Aceitar / Recusar / Concluir)
-    // ============================================
-
-    async function handleForwardAction(action, forwardId) {
-        const messages = {
-            'accept': 'Assumir este pedido? Seu setor passa a ser responsável pelo atendimento.',
-            'refuse': 'Recusar este encaminhamento? O pedido volta para o setor que encaminhou.',
-            'complete': 'Marcar este pedido como concluído?'
         };
 
-        if (messages[action]) {
-            const confirmed = await showConfirm({
-                title: 'Encaminhamento',
-                message: messages[action],
-                type: 'warning',
-                confirmLabel: 'Confirmar'
+        form.addEventListener('input', update);
+        form.addEventListener('change', update);
+        wiz.addEventListener('click', e => { if (e.target === wiz || e.target.closest('[data-fw-close]')) close(); });
+        document.addEventListener('keydown', e => { if (e.key === 'Escape' && !wiz.hidden) close(); });
+
+        form.addEventListener('submit', async (e) => {
+            e.preventDefault();
+            update();
+            if (submit.disabled || !current) return;
+            submit.disabled = true;
+            const data = await postForm('api/request_forwards.php', {
+                action: 'forward', id: current.id, table: current.table,
+                mode: form.mode.value,
+                to_area_id: form.querySelector('input[name="area"]:checked').value,
+                message: msg.value.trim()
             });
-            if (!confirmed) return;
-        }
-
-        const overlay = document.querySelector('.loading-overlay');
-        if (overlay) overlay.style.display = 'flex';
-
-        let keepOverlayUntilReload = false;
-        try {
-            const formData = new URLSearchParams();
-            formData.append('action', action);
-            formData.append('forward_id', forwardId);
-
-            const response = await fetch('api/request_forwards.php', {
-                method: 'POST',
-                body: attachCsrfToken(formData)
-            });
-            const data = await response.json();
-
+            submit.disabled = false;
+            if (!data) return;
+            showToast(data.message, data.success ? 'success' : 'error');
             if (data.success) {
-                showToast(data.message, 'success');
-                keepOverlayUntilReload = true;
-                setTimeout(() => location.reload(), 700);
-            } else {
-                showToast(data.message, 'error');
+                close();
+                refreshAfterChange();
             }
-        } catch (err) {
-            console.error('Erro na ação de repasse:', err);
-            showToast('Falha na comunicação com o servidor.', 'error');
-        } finally {
-            if (overlay && !keepOverlayUntilReload) overlay.style.display = 'none';
-        }
-    }
+        });
+    })();
     </script>
 
     <!-- Global Modal Structure (Moved to end for correct stacking) -->

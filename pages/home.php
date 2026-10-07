@@ -68,26 +68,6 @@ $stats = $data['stats'];
 
 extract($stats); // Extracts variables like $total, $pendentes, $emAndamento, $repassadas, etc.
 
-// Ajustar contagem para incluir repasses
-if ($isAdmin || $isAdmSub) {
-    // Admin vê todas as Repassadas (F - que são pendentes) no seu escopo como "Aprovadas" (Aguardando Aceite)
-    $aprovadas += ($repassadas ?? 0);
-} else {
-    require_once __DIR__ . '/../classes/RequestForwardService.php';
-    
-    // Repasses pendentes (aguardando aceite do gestor) vão para Aprovadas
-    $pendingFwds = RequestForwardService::getPendingForwards($pdo, $user_id, 'pending');
-    if ($pendingFwds['success']) {
-        $aprovadas += count($pendingFwds['data']);
-    }
-    
-    // Repasses aceitos (em atendimento pelo gestor) vão para Em Andamento
-    $acceptedFwds = RequestForwardService::getPendingForwards($pdo, $user_id, 'accepted');
-    if ($acceptedFwds['success']) {
-        $emAndamento += count($acceptedFwds['data']);
-    }
-}
-
 // Busca e data filtram no servidor (resultado vale para TODAS as requisições, não só as da tela)
 $searchTerm = mb_substr(trim((string)($_GET['q'] ?? '')), 0, 100);
 $searchDate = preg_match('/^\d{4}-\d{2}-\d{2}$/', (string)($_GET['data'] ?? '')) ? $_GET['data'] : '';
@@ -132,6 +112,7 @@ $pipeline = [
     'Y' => [$isGestor ? 'Para atender' : 'Aprovadas', $aprovadas ?? 0],
     'W' => ['Em atendimento', $emAndamento ?? 0],
     'C' => ['Concluídas', $concluidas ?? 0],
+    'F' => ['Encaminhadas', $repassadas ?? 0],
     'N' => ['Recusadas', $recusadas ?? 0],
 ];
 if ($isGestor) {

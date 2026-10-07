@@ -59,8 +59,9 @@ final class Client
         }
         $body = (string)curl_exec($ch);
         $status = (int)curl_getinfo($ch, CURLINFO_HTTP_CODE);
+        $location = (string)curl_getinfo($ch, CURLINFO_REDIRECT_URL);
         curl_close($ch);
-        return ['status' => $status, 'body' => $body, 'json' => json_decode($body, true)];
+        return ['status' => $status, 'body' => $body, 'json' => json_decode($body, true), 'headers' => $location];
     }
 
     public function get(string $path): array
@@ -130,8 +131,8 @@ $future = date('Y-m-d', strtotime('+5 days'));
 // ------------------------------------------------------------------
 section('1. Acesso sem login');
 $anon = new Client($baseUrl);
-foreach (['config/filter.php', 'api/get_notifications.php', 'api/get_request_details.php?id=1&table=ti', 'api/export_requests.php', 'print_request.php?id=1&table=ti'] as $path) {
-    $res = $path === 'config/filter.php' ? $anon->request('POST', $path, ['action' => 'post']) : $anon->get($path);
+foreach (['api/request_view.php?id=1&table=ti', 'api/request_forwards.php?action=areas', 'api/get_notifications.php', 'api/get_request_details.php?id=1&table=ti', 'api/export_requests.php', 'print_request.php?id=1&table=ti'] as $path) {
+    $res = $anon->get($path);
     check("sem login bloqueia $path", $res['status'] === 401, snippet($res));
 }
 $res = $anon->get('home');
@@ -215,9 +216,11 @@ check('título com HTML aparece escapado no detalhe', !str_contains($res['body']
 section('6. Quem pode ver');
 $res = $shop->get("api/get_request_details.php?id=$reqId&table=ti");
 check('gestor de outro setor não vê requisição de TI', ($res['json']['success'] ?? true) === false, snippet($res));
-$res = $ti->post('config/getRequest.php', ['action' => 'get', 'id' => $reqId, 'table' => 'ti']);
-check('gestor TI vê a requisição', ($res['json']['success'] ?? false) === true);
-check('resposta não contém hash de senha', !str_contains($res['body'], 'password') && !str_contains($res['body'], '$2y$'));
+$res = $ti->get("api/request_view.php?id=$reqId&table=ti");
+check('gestor TI vê a requisição no painel', $res['status'] === 200 && str_contains($res['body'], 'request-view'), 'HTTP ' . $res['status']);
+check('painel não contém hash de senha', !str_contains($res['body'], 'password') && !str_contains($res['body'], '$2y$'));
+$res = $shop->get("api/request_view.php?id=$reqId&table=ti");
+check('painel bloqueado para outro setor', $res['status'] === 403, 'HTTP ' . $res['status']);
 $res = $shop->get("print_request.php?id=$reqId&table=ti");
 check('impressão bloqueada para quem não pode ver', $res['status'] === 403, 'HTTP ' . $res['status']);
 
@@ -271,40 +274,110 @@ $left = $pdo->query("SELECT COUNT(*) FROM request_history WHERE request_id = $ca
 check('cancelamento não deixa histórico órfão', (int)$left === 0);
 
 // ------------------------------------------------------------------
-section('11. Encaminhar para outro setor');
+section('11. Encaminhar: transferir');
 $res = $sol->post('config/addRequest.php', ['title' => 'Teste repasse'] + $base);
 $fwdReqId = (int)($res['json']['id'] ?? 0);
 $createdIds[] = ['ti', $fwdReqId];
 $apr->post('config/aprovRequest.php', ['action' => 'post', 'id' => $fwdReqId, 'table' => 'ti', 'value' => 'Y']);
 $ti->post('api/request_actions.php', ['id' => $fwdReqId, 'table' => 'ctd_ti_frm', 'action' => 'start_progress']);
 $shopAreaId = (int)$pdo->query("SELECT id FROM ctd_area WHERE LOWER(title) IN ('shop', 'compras') LIMIT 1")->fetchColumn();
+$lastFwd = fn() => (int)$pdo->query("SELECT id FROM request_forwards WHERE request_id = $fwdReqId AND request_table = 'ti' ORDER BY id DESC LIMIT 1")->fetchColumn();
+$reqStatus = fn() => (string)$pdo->query("SELECT status FROM ctd_ti_frm WHERE id = $fwdReqId")->fetchColumn();
+$fwd = fn(array $extra) => $ti->post('api/request_forwards.php', $extra + ['action' => 'forward', 'id' => $fwdReqId, 'table' => 'ti', 'to_area_id' => $shopAreaId, 'mode' => 'transfer', 'message' => 'Isso é com Compras, precisa comprar a peça.']);
 
-$res = $ti->post('api/request_forwards.php', ['action' => 'forward', 'id' => $fwdReqId, 'table' => 'ti', 'to_area_id' => $shopAreaId, 'observation' => 'Precisa comprar peça']);
-check('TI encaminha para Compras', ($res['json']['success'] ?? false) === true, snippet($res));
-$fwdId = (int)$pdo->query("SELECT id FROM request_forwards WHERE request_id = $fwdReqId AND request_table = 'ti' ORDER BY id DESC LIMIT 1")->fetchColumn();
+$res = $fwd(['message' => 'curto']);
+check('encaminhar sem explicar é bloqueado', ($res['json']['success'] ?? true) === false);
+$res = $fwd(['mode' => 'qualquer']);
+check('modo inválido é bloqueado', ($res['json']['success'] ?? true) === false);
+$res = $shop->post('api/request_forwards.php', ['action' => 'forward', 'id' => $fwdReqId, 'table' => 'ti', 'to_area_id' => $shopAreaId, 'mode' => 'transfer', 'message' => 'Compras tentando encaminhar algo que não é dela']);
+check('setor que não é responsável não encaminha', ($res['json']['success'] ?? true) === false);
+
+$res = $fwd([]);
+check('TI transfere para Compras', ($res['json']['success'] ?? false) === true, snippet($res));
+$fwdId = $lastFwd();
+check('pedido fica Encaminhada enquanto aguarda aceite', $reqStatus() === 'F', $reqStatus());
+$notif = $pdo->query("SELECT COUNT(*) FROM notifications WHERE user_id = $solId AND link = 'request_detail?id=$fwdReqId&table=ti'")->fetchColumn();
+check('solicitante é avisado da transferência', (int)$notif >= 1);
+$res = $fwd(['message' => 'Segundo envio com o primeiro ainda aberto']);
+check('encaminhar de novo com um aberto é bloqueado', ($res['json']['success'] ?? true) === false);
 $res = $sol->post('api/request_forwards.php', ['action' => 'accept', 'forward_id' => $fwdId]);
 check('solicitante não aceita encaminhamento', ($res['json']['success'] ?? true) === false);
-$res = $shop->post('api/request_forwards.php', ['action' => 'refuse', 'forward_id' => $fwdId]);
-check('Compras recusa', ($res['json']['success'] ?? false) === true, snippet($res));
-$status = $pdo->query("SELECT status FROM ctd_ti_frm WHERE id = $fwdReqId")->fetchColumn();
-check('recusa devolve para Em atendimento', $status === 'W', (string)$status);
-$res = $shop->post('api/request_forwards.php', ['action' => 'refuse', 'forward_id' => $fwdId]);
+$res = $shop->post('api/request_forwards.php', ['action' => 'refuse', 'forward_id' => $fwdId, 'reason' => '']);
+check('recusar sem motivo é bloqueado', ($res['json']['success'] ?? true) === false);
+$res = $shop->post('api/request_forwards.php', ['action' => 'refuse', 'forward_id' => $fwdId, 'reason' => 'Não é com Compras']);
+check('Compras recusa com motivo', ($res['json']['success'] ?? false) === true, snippet($res));
+check('recusa devolve para Em atendimento', $reqStatus() === 'W', $reqStatus());
+$note = $pdo->query("SELECT response_note FROM request_forwards WHERE id = $fwdId")->fetchColumn();
+check('motivo da recusa fica registrado', $note === 'Não é com Compras', (string)$note);
+$res = $shop->post('api/request_forwards.php', ['action' => 'refuse', 'forward_id' => $fwdId, 'reason' => 'De novo não']);
 check('recusar duas vezes é bloqueado', ($res['json']['success'] ?? true) === false);
 
-$ti->post('api/request_forwards.php', ['action' => 'forward', 'id' => $fwdReqId, 'table' => 'ti', 'to_area_id' => $shopAreaId, 'observation' => 'Agora sim']);
-$fwdId = (int)$pdo->query("SELECT id FROM request_forwards WHERE request_id = $fwdReqId AND request_table = 'ti' ORDER BY id DESC LIMIT 1")->fetchColumn();
+$fwd(['message' => 'Mandando de novo para cancelar']);
+$fwdId = $lastFwd();
+$res = $shop->post('api/request_forwards.php', ['action' => 'cancel', 'forward_id' => $fwdId]);
+check('destino não cancela o envio', ($res['json']['success'] ?? true) === false);
+$res = $ti->post('api/request_forwards.php', ['action' => 'cancel', 'forward_id' => $fwdId]);
+check('TI cancela envio pendente', ($res['json']['success'] ?? false) === true, snippet($res));
+check('cancelar devolve para Em atendimento', $reqStatus() === 'W', $reqStatus());
+
+$fwd(['message' => 'Agora sim, comprar a peça para a sala 12']);
+$fwdId = $lastFwd();
+$res = $shop->get("api/request_view.php?id=$fwdReqId&table=ti");
+check('Compras vê o pedido que chegou', $res['status'] === 200 && str_contains($res['body'], 'Agora sim'), 'HTTP ' . $res['status']);
 $res = $shop->post('api/request_forwards.php', ['action' => 'accept', 'forward_id' => $fwdId]);
-check('Compras aceita', ($res['json']['success'] ?? false) === true, snippet($res));
-$res = $shop->get("api/get_request_details.php?id=$fwdReqId&table=ti");
-check('Compras passa a ver o pedido encaminhado', ($res['json']['success'] ?? false) === true, snippet($res));
-$res = $shop->post('api/request_forwards.php', ['action' => 'complete', 'forward_id' => $fwdId]);
+check('Compras aceita a transferência', ($res['json']['success'] ?? false) === true, snippet($res));
+check('aceite volta o pedido para Em atendimento', $reqStatus() === 'W', $reqStatus());
+$res = $ti->post('api/request_actions.php', ['id' => $fwdReqId, 'table' => 'ctd_ti_frm', 'action' => 'finish']);
+check('TI não conclui depois de transferir', ($res['json']['success'] ?? true) === false);
+$res = $sol->get("request_detail?id=$fwdReqId&table=ti");
+check('solicitante não vê a mensagem interna', $res['status'] === 200 && !str_contains($res['body'], 'Agora sim, comprar'));
+$res = $shop->post('api/request_actions.php', ['id' => $fwdReqId, 'table' => 'ctd_ti_frm', 'action' => 'finish']);
 check('Compras conclui', ($res['json']['success'] ?? false) === true, snippet($res));
-$status = $pdo->query("SELECT status FROM ctd_ti_frm WHERE id = $fwdReqId")->fetchColumn();
-check('pedido encaminhado termina Concluída', $status === 'C', (string)$status);
+check('pedido transferido termina Concluída', $reqStatus() === 'C', $reqStatus());
+
+// ------------------------------------------------------------------
+section('11b. Encaminhar: pedir ajuda');
+$res = $sol->post('config/addRequest.php', ['title' => 'Teste ajuda'] + $base);
+$helpReqId = (int)($res['json']['id'] ?? 0);
+$createdIds[] = ['ti', $helpReqId];
+$apr->post('config/aprovRequest.php', ['action' => 'post', 'id' => $helpReqId, 'table' => 'ti', 'value' => 'Y']);
+$ti->post('api/request_actions.php', ['id' => $helpReqId, 'table' => 'ctd_ti_frm', 'action' => 'start_progress']);
+$res = $ti->post('api/request_forwards.php', ['action' => 'forward', 'id' => $helpReqId, 'table' => 'ti', 'to_area_id' => $shopAreaId, 'mode' => 'help', 'message' => 'Precisamos de 2 cabos HDMI para terminar.']);
+check('TI pede ajuda a Compras', ($res['json']['success'] ?? false) === true, snippet($res));
+$helpFwd = (int)$pdo->query("SELECT id FROM request_forwards WHERE request_id = $helpReqId AND request_table = 'ti' ORDER BY id DESC LIMIT 1")->fetchColumn();
+$helpStatus = fn() => (string)$pdo->query("SELECT status FROM ctd_ti_frm WHERE id = $helpReqId")->fetchColumn();
+check('pedir ajuda não muda a situação', $helpStatus() === 'W', $helpStatus());
+$res = $ti->post('api/request_actions.php', ['id' => $helpReqId, 'table' => 'ctd_ti_frm', 'action' => 'finish']);
+check('não conclui com ajuda em aberto', ($res['json']['success'] ?? true) === false);
+$res = $shop->post('api/request_forwards.php', ['action' => 'accept', 'forward_id' => $helpFwd]);
+check('Compras aceita ajudar', ($res['json']['success'] ?? false) === true, snippet($res));
+$res = $shop->post('api/request_actions.php', ['id' => $helpReqId, 'table' => 'ctd_ti_frm', 'action' => 'finish']);
+check('quem ajuda não conclui o pedido', ($res['json']['success'] ?? true) === false);
+$res = $shop->post('api/request_forwards.php', ['action' => 'return', 'forward_id' => $helpFwd, 'note' => '']);
+check('devolver sem retorno é bloqueado', ($res['json']['success'] ?? true) === false);
+$res = $shop->post('api/request_forwards.php', ['action' => 'return', 'forward_id' => $helpFwd, 'note' => 'Cabos comprados, estão na secretaria.']);
+check('Compras devolve com retorno', ($res['json']['success'] ?? false) === true, snippet($res));
+$res = $ti->post('api/request_actions.php', ['id' => $helpReqId, 'table' => 'ctd_ti_frm', 'action' => 'finish']);
+check('TI conclui depois do retorno', ($res['json']['success'] ?? false) === true, snippet($res));
+
+// ------------------------------------------------------------------
+section('11c. Caixa do setor');
+require_once dirname(__DIR__) . '/classes/RequestInbox.php';
+$tiAreaId = (int)$pdo->query("SELECT id FROM ctd_area WHERE LOWER(title) = 'ti' LIMIT 1")->fetchColumn();
+$inbox = RequestInbox::build($pdo, [$tiAreaId]);
+$mismatch = [];
+foreach ($inbox['tabs'] as $tab => $rows) {
+    if (count($rows) !== $inbox['counts'][$tab]) $mismatch[] = $tab;
+}
+check('contadores das abas batem com as listas', !$mismatch, implode(', ', $mismatch));
+$res = $ti->get('inbox?tab=enviados');
+check('aba Enviados mostra a transferência da TI', $res['status'] === 200 && str_contains($res['body'], 'Teste repasse'), 'HTTP ' . $res['status']);
+$res = $ti->get('approved');
+check('rota antiga leva para a Caixa', $res['status'] === 302 && str_contains($res['headers'] ?? '', 'inbox'), 'HTTP ' . $res['status']);
 
 // ------------------------------------------------------------------
 section('12. Todas as páginas abrem para cada perfil');
-$pages = ['home', 'new_request', 'myRequests', 'approve', 'approved', 'inWork', 'myAccount', 'accounts', 'ajuda', "request_detail?id=$reqId&table=ti", 'home?status=C', 'home?q=teste'];
+$pages = ['home', 'new_request', 'myRequests', 'approve', 'inbox', 'inbox?tab=concluidos', 'myAccount', 'accounts', 'ajuda', "request_detail?id=$reqId&table=ti", 'home?status=C', 'home?q=teste'];
 foreach (['solicitante' => $sol, 'coordenação' => $apr, 'gestor TI' => $ti, 'admin' => $adm] as $who => $client) {
     $broken = [];
     foreach ($pages as $page) {
@@ -323,7 +396,7 @@ section('13. Limpeza');
 // O banco remoto fecha conexões ociosas: reconecta antes de limpar
 require dirname(__DIR__) . '/config/conn.php';
 // Inclui sobras de rodadas anteriores interrompidas
-$leftovers = $pdo->query("SELECT 'ti' AS t, id FROM ctd_ti_frm WHERE created_by = $solId AND title IN ('Teste automático <script>x</script>', 'Para cancelar', 'Teste repasse')")->fetchAll(PDO::FETCH_NUM);
+$leftovers = $pdo->query("SELECT 'ti' AS t, id FROM ctd_ti_frm WHERE created_by = $solId AND title IN ('Teste automático <script>x</script>', 'Para cancelar', 'Teste repasse', 'Teste ajuda')")->fetchAll(PDO::FETCH_NUM);
 foreach ($leftovers as $row) {
     $createdIds[] = [$row[0], (int)$row[1]];
 }

@@ -81,4 +81,43 @@ if (!function_exists('renderRequestCard')) {
             . '</span>'
             . '</a>';
     }
+
+    /**
+     * Linha compacta das filas de trabalho: número, título, quem pediu, prazo e no máximo um aviso.
+     * $note: frase curta sobre encaminhamento (opcional).
+     */
+    function renderRequestRow(array $row, string $note = '', string $noteKind = ''): string
+    {
+        $id = (int)($row['id'] ?? 0);
+        $sector = str_replace(['ctd_', '_frm'], '', strtolower(trim((string)($row['table'] ?? ''))));
+        $status = strtoupper(trim((string)($row['st_raw'] ?? $row['status'] ?? 'P'))) ?: 'P';
+        $priority = (int)($row['priority'] ?? 2);
+        $link = 'request_detail?id=' . $id . '&table=' . urlencode($sector);
+
+        // Um aviso só, o mais importante
+        $flag = '';
+        $date = (string)($row['date'] ?? '');
+        if (!in_array($status, ['C', 'N'], true) && $date !== '' && strpos($date, '0000') !== 0) {
+            $days = (int)round((strtotime(date('Y-m-d', strtotime($date))) - strtotime(date('Y-m-d'))) / 86400);
+            if ($days < 0) $flag = '<span class="flag flag--bad">Atrasada</span>';
+            elseif ($days === 0) $flag = '<span class="flag flag--warn">Vence hoje</span>';
+            elseif ($days === 1) $flag = '<span class="flag flag--warn">Vence amanhã</span>';
+        }
+        if ($flag === '' && $priority === 4) $flag = '<span class="flag flag--bad">Crítica</span>';
+        elseif ($flag === '' && $priority === 3) $flag = '<span class="flag flag--warn">Urgente</span>';
+
+        $who = $row['solicitor_name_formatted'] ?? $row['solicitor_name'] ?? '';
+        $deadline = ($date !== '' && strpos($date, '0000') !== 0) ? 'até ' . date('d/m', strtotime($date)) : 'sem prazo';
+        $meta = '<span>' . e(requestSectorName($sector)) . '</span><span>' . e($who) . '</span><span>' . $deadline . '</span>';
+
+        return '<a class="row-item card_req" href="' . e($link) . '" data-id="' . $id . '" data-table="' . e($sector) . '" data-sector="' . e($sector) . '">'
+            . '<span class="row-item__num">' . $id . '</span>'
+            . '<span class="row-item__body">'
+            .   '<span class="row-item__title">' . e($row['title'] ?? 'Sem título') . '</span>'
+            .   '<span class="row-item__meta">' . $meta . '</span>'
+            .   ($note !== '' ? '<span class="row-item__note' . ($noteKind ? ' row-item__note--' . e($noteKind) : '') . '">' . e($note) . '</span>' : '')
+            . '</span>'
+            . '<span class="row-item__flag">' . $flag . '</span>'
+            . '</a>';
+    }
 }

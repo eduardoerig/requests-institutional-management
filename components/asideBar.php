@@ -13,12 +13,9 @@ $canApprove = $isAdmin || $isAdmSub;
 $currentPage = $page ?? ((isset($url[0]) && $url[0] !== '') ? $url[0] : 'home');
 $currentStatus = $_GET['status'] ?? '';
 
-// Buscar contagens para badges (apenas para gestores/admin)
+// Contadores do menu
 $badge_pendentes = 0;
-$badge_aprovadas = 0;
-$badge_andamento = 0;
-$badge_concluidas = 0;
-$badge_repassadas = 0;
+$badge_inbox = 0;
 
 // Buscar notificações não lidas
 $badge_notifs = 0;
@@ -28,77 +25,14 @@ if ($sidebar_user_id) {
     $badge_notifs = (int)$stmtNotifs->fetchColumn();
 }
 
-if ($canManage || $isAdmSub) {
-    // adm_sub vê todos os setores, filtrados apenas pelas suas subdivisões
-    $managingId = ($isAdmin || $isAdmSub) ? null : $sidebar_user_id;
+if ($canApprove) {
     $subdivisionFilter = $isAdmSub ? ($_SESSION['subdivision_ids'] ?? null) : null;
-    $sidebarData = RequestManager::getRequests($pdo, null, $managingId, null, null, null, 'DESC', [], null, null, $subdivisionFilter);
-    $sidebarStats = $sidebarData['stats'];
-    $badge_pendentes = $sidebarStats['pendentes'] ?? 0;
-    $badge_aprovadas = $sidebarStats['aprovadas'] ?? 0;
-    $badge_concluidas = $sidebarStats['concluidas'] ?? 0;
-
-    // Lógica para "Em Andamento" e "Aprovadas" com repasses deduplicados
-    require_once __DIR__ . '/../classes/RequestForwardService.php';
-    
-    // Obter todas as requisições W e Y nativas
-    $allReqs = $sidebarData['requests'] ?? [];
-    $reqW = array_filter($allReqs, function($r) { return trim(strtoupper($r['st_raw'] ?? '')) === 'W'; });
-    $reqY = array_filter($allReqs, function($r) { return trim(strtoupper($r['st_raw'] ?? '')) === 'Y'; });
-    
-    $dedupCount = function($baseArr, $fwdArr) {
-        $unique = [];
-        foreach ($baseArr as $r) {
-            $cT = str_replace(['ctd_', '_frm'], '', strtolower(trim($r['table'] ?? '')));
-            $key = $cT . '_' . trim($r['id'] ?? '');
-            $unique[$key] = true;
-        }
-        foreach ($fwdArr as $f) {
-            $rd = $f['request_data'] ?? [];
-            if (empty($rd)) continue;
-            // fwdArr pode vir de RequestForwardService (onde tem request_table) 
-            // ou de getForwardsByDestination mapeado
-            $cT = str_replace(['ctd_', '_frm'], '', strtolower(trim($f['request_table'] ?? $f['table'] ?? '')));
-            $reqId = trim($rd['id'] ?? $f['id'] ?? '');
-            if ($reqId) {
-                $key = $cT . '_' . $reqId;
-                $unique[$key] = true;
-            }
-        }
-        return count($unique);
-    };
-
-    if ($isAdmin || $isAdmSub) {
-        // Admin: W e Y + Forwards
-        $fwdW = RequestForwardService::getForwardsByDestination($pdo, 'all', null, null, $subdivisionFilter, 'accepted');
-        $badge_andamento = $dedupCount($reqW, $fwdW);
-        
-        // Mesmo critério da lista "Aprovadas" (pages/approved.php): aprovadas + encaminhamentos aguardando aceite
-        $fwdY = RequestForwardService::getForwardsByDestination($pdo, 'all', null, null, $subdivisionFilter, 'pending');
-        $uniqueAprovadas = [];
-        $allAprovadas = array_merge($reqY, $fwdY);
-        foreach ($allAprovadas as $r) {
-            $cT = str_replace(['ctd_', '_frm'], '', strtolower(trim($r['table'] ?? $r['request_table'] ?? '')));
-            // Para repasses do fwdY, o ID pode estar em request_id ou request_data['id']
-            $reqId = trim($r['id'] ?? $r['request_id'] ?? '');
-            if (!$reqId && isset($r['request_data'])) $reqId = trim($r['request_data']['id'] ?? '');
-            
-            if ($reqId) {
-                $key = $cT . '_' . $reqId;
-                $uniqueAprovadas[$key] = true;
-            }
-        }
-        $badge_aprovadas = count($uniqueAprovadas);
-    } else {
-        // Gestor
-        $pendingFwds = RequestForwardService::getPendingForwards($pdo, $sidebar_user_id, 'pending');
-        $fwdY_data = $pendingFwds['success'] ? $pendingFwds['data'] : [];
-        $badge_aprovadas = $dedupCount($reqY, $fwdY_data);
-        
-        $acceptedFwds = RequestForwardService::getPendingForwards($pdo, $sidebar_user_id, 'accepted');
-        $fwdW_data = $acceptedFwds['success'] ? $acceptedFwds['data'] : [];
-        $badge_andamento = $dedupCount($reqW, $fwdW_data);
-    }
+    $badge_pendentes = (int)(RequestManager::getRequests($pdo, null, null, 'P', null, null, 'DESC', [], null, null, $subdivisionFilter)['stats']['pendentes'] ?? 0);
+}
+if ($canManage) {
+    require_once __DIR__ . '/../classes/RequestInbox.php';
+    $inboxCounts = RequestInbox::build($pdo, RequestInbox::areasForUser($pdo, (int)$sidebar_user_id, $role))['counts'];
+    $badge_inbox = $inboxCounts['novos'] + $inboxCounts['chegaram'];
 }
 ?>
 <?php
@@ -125,11 +59,11 @@ $menuItem = function (string $href, string $icon, string $label, int $badge = 0,
                 <?= $menuItem('approve', 'fa-clipboard-check', 'Aprovar pedidos', (int)$badge_pendentes, '', $currentPage === 'approve') ?>
             <?php endif; ?>
             <?php if ($canManage): ?>
-                <?= $menuItem('approved', 'fa-inbox', $isGestor ? 'Para atender' : 'Aprovadas', (int)$badge_aprovadas, '', $currentPage === 'approved') ?>
-                <?= $menuItem('inWork', 'fa-gears', 'Em atendimento', (int)$badge_andamento, '', $currentPage === 'inWork') ?>
-                <?= $menuItem('home?status=C', 'fa-check-double', 'Concluídas', 0, '', $currentPage === 'home' && $currentStatus === 'C') ?>
+                <?= $menuItem('inbox', 'fa-inbox', $isAdmin ? 'Caixa dos setores' : 'Caixa do setor', (int)$badge_inbox, '', $currentPage === 'inbox') ?>
             <?php endif; ?>
-            <?= $menuItem('home', 'fa-chart-simple', 'Painel', 0, '', $currentPage === 'home' && $currentStatus === '') ?>
+            <?php if ($canApprove): ?>
+                <?= $menuItem('home', 'fa-chart-simple', 'Painel', 0, '', $currentPage === 'home') ?>
+            <?php endif; ?>
         <?php endif; ?>
 
         <p class="menu-section">Conta</p>

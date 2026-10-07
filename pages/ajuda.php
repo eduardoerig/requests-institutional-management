@@ -54,13 +54,13 @@ $isGestorHelp = isGestorRole($roleHelp);
 
     <?php if ($isGestorHelp): ?>
     <section class="panel">
-        <div class="panel__head"><h2>Para atender (setores)</h2></div>
+        <div class="panel__head"><h2>Caixa do setor</h2></div>
         <div class="panel__body">
         <ol class="help-steps">
-            <li><span class="help-num">1</span><div>Em <a href="approved">Para atender</a>, abra o pedido e clique em <strong>Começar atendimento</strong>.</div></li>
+            <li><span class="help-num">1</span><div>Na <a href="inbox">Caixa do setor</a>, aba <strong>Novos</strong>, abra o pedido e clique em <strong>Começar atendimento</strong>.</div></li>
             <li><span class="help-num">2</span><div>Use a conversa do pedido para falar com o solicitante.</div></li>
-            <li><span class="help-num">3</span><div>Ao terminar, clique em <strong>Marcar como concluída</strong>.</div></li>
-            <li><span class="help-num">4</span><div>Se o pedido for de outro setor, use <strong>Encaminhar a outro setor</strong>.</div></li>
+            <li><span class="help-num">3</span><div>Ao terminar, clique em <strong>Concluir</strong>.</div></li>
+            <li><span class="help-num">4</span><div>Se o pedido for de outro setor, use <strong>Encaminhar</strong>: <em>Transferir</em> passa o pedido; <em>Pedir ajuda</em> pede uma parte e volta para vocês.</div></li>
         </ol>
         </div>
     </section>

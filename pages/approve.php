@@ -1,76 +1,81 @@
 <?php
+/**
+ * Aprovar pedidos: lista compacta à esquerda, pedido completo à direita (no celular, a lista abre o pedido).
+ */
 require_once __DIR__ . '/../classes/RequestManager.php';
 require_once __DIR__ . '/../components/request_card.php';
 
 $role = $_SESSION['role'] ?? 'solicitante';
-$user_id = $_SESSION['id'] ?? 0;
-
 $isAdmin = isGlobalAdminRole($role);
 $isAdmSub = ($role === 'adm_sub');
-$isGestor = isGestorRole($role);
-$canApprove = $isAdmin || $isAdmSub; // Admin geral aprova tudo; coordenação aprova a própria subdivisão
 
-if (!$canApprove) {
+if (!$isAdmin && !$isAdmSub) {
     echo '<div class="panel"><div class="empty-big"><i class="fa-solid fa-lock"></i><h2>Sem acesso</h2><p>Somente a coordenação e os administradores aprovam pedidos.</p><a class="btn" href="home"><i class="fa-solid fa-arrow-left"></i> Voltar ao início</a></div></div>';
     return;
 }
 
-$managingId = null; // Admin vê tudo para aprovação
+// Coordenação aprova só a própria subdivisão; admin geral aprova tudo
 $subdivisionFilter = $isAdmSub ? ($_SESSION['subdivision_ids'] ?? null) : null;
+$requests = RequestManager::getRequests($pdo, null, null, 'P', null, null, 'ASC', [], null, null, $subdivisionFilter)['requests'] ?? [];
 
-$data = RequestManager::getRequests($pdo, null, $managingId, 'P', null, null, 'DESC', [], null, null, $subdivisionFilter);
-$requests = $data['requests'] ?? [];
-$totalPendentes = count($requests);
-
-$map = [
-    'mkt' => 'gray',
-    'xerox' => 'blue',
-    'shop' => 'green',
-    'service' => 'yellow',
-    'ti' => 'red',
-];
-
-$sectorNames = [
-    'mkt' => 'MKT',
-    'xerox' => 'Reprografia',
-    'shop' => 'Compras',
-    'service' => 'Manutenção',
-    'ti' => 'TI',
-];
-
-// Pegar setores permitidos para os botões de rádio
-$allowedSectors = [];
-if ($user_id) {
-    $stmtSectors = $pdo->prepare("SELECT LOWER(a.title) FROM ctd_area a JOIN cfg_user_area cua ON a.id = cua.id_area WHERE cua.id_user = ?");
-    $stmtSectors->execute([$user_id]);
-    $allowedSectors = $stmtSectors->fetchAll(PDO::FETCH_COLUMN);
+foreach ($requests as &$r) {
+    $r['table'] = str_replace(['ctd_', '_frm'], '', strtolower((string)($r['table'] ?? '')));
 }
-if (!is_array($allowedSectors)) $allowedSectors = [];
+unset($r);
 
-// Filtro de setor: só setores que aparecem na fila (e, para setores, só os que a pessoa atende)
-$queueSectors = [];
-$hasForwardRows = false;
+$sectors = [];
 foreach ($requests as $r) {
-    $slug = str_replace(['ctd_', '_frm'], '', strtolower((string)($r['table'] ?? '')));
-    if (strtoupper((string)($r['st_raw'] ?? $r['status'] ?? '')) === 'F' || !empty($r['is_forwarded_to_me'])) {
-        $hasForwardRows = true;
-    }
-    if ($slug !== '' && (empty($allowedSectors) || $isAdmin || $isAdmSub || in_array($slug, $allowedSectors, true))) {
-        $queueSectors[$slug] = requestSectorName($slug);
-    }
+    $sectors[$r['table']] = requestSectorName($r['table']);
 }
-ksort($queueSectors);
+asort($sectors);
 
-$queue = [
-    'title' => 'Aprovar pedidos',
-    'subtitle' => $totalPendentes === 0 ? 'Nenhum pedido esperando sua decisão.' : ($totalPendentes === 1 ? '1 pedido esperando sua decisão.' : $totalPendentes . ' pedidos esperando sua decisão.'),
-    'empty' => 'Tudo em dia: nenhum pedido aguardando aprovação.',
-    'panelHint' => 'Clique em um pedido para ver os detalhes e aprovar ou recusar.',
-    'sectors' => $queueSectors,
-    'forwardFilter' => false,
-    'actions' => '<button type="submit" class="btn btn--success" value="Y"><i class="fa-solid fa-check" aria-hidden="true"></i> Aprovar</button>'
-               . '<button type="submit" class="btn btn--danger" value="N"><i class="fa-solid fa-xmark" aria-hidden="true"></i> Recusar</button>',
-    'forwardActions' => false,
-];
+$sector = (string)($_GET['setor'] ?? '');
+$q = mb_substr(trim((string)($_GET['q'] ?? '')), 0, 100);
+$rows = array_values(array_filter($requests, function ($r) use ($sector, $q) {
+    if ($sector !== '' && $r['table'] !== $sector) return false;
+    if ($q === '') return true;
+    $haystack = mb_strtolower(($r['title'] ?? '') . ' #' . ($r['id'] ?? '') . ' ' . ($r['solicitor_name_formatted'] ?? $r['solicitor_name'] ?? ''));
+    return mb_strpos($haystack, mb_strtolower($q)) !== false;
+}));
+$total = count($requests);
+?>
+<div class="page-head">
+    <div class="page-head--hide-mobile">
+        <h1>Aprovar pedidos</h1>
+        <p><?= $total === 0 ? 'Nenhum pedido esperando sua decisão.' : ($total === 1 ? '1 pedido esperando sua decisão.' : $total . ' pedidos esperando sua decisão, do mais antigo para o mais novo.') ?></p>
+    </div>
+    <?php if ($total > 0): ?>
+    <form method="get" action="approve" class="row" role="search" style="flex:1 1 320px; justify-content:flex-end;">
+        <?php if (count($sectors) > 1): ?>
+            <select name="setor" aria-label="Setor" onchange="this.form.submit()" style="width:auto;">
+                <option value="">Todos os setores</option>
+                <?php foreach ($sectors as $slug => $label): ?>
+                    <option value="<?= e($slug) ?>" <?= $sector === $slug ? 'selected' : '' ?>><?= e($label) ?></option>
+                <?php endforeach; ?>
+            </select>
+        <?php endif; ?>
+        <div class="search-box" style="flex:1 1 220px; max-width:360px;">
+            <i class="fas fa-search" aria-hidden="true"></i>
+            <input type="search" name="q" value="<?= e($q) ?>" placeholder="Título, número ou nome" aria-label="Buscar">
+        </div>
+    </form>
+    <?php endif; ?>
+</div>
 
-include __DIR__ . '/../components/queue_view.php';
+<div class="workbench" data-queue>
+    <div class="workbench__list" aria-label="Pedidos aguardando aprovação">
+        <?php if ($q !== '' || $sector !== ''): ?>
+            <p class="result-count"><?= count($rows) ?> de <?= $total ?> <a href="approve">limpar filtros</a></p>
+        <?php endif; ?>
+        <?php if ($rows): ?>
+            <?php foreach ($rows as $row): ?>
+                <?= renderRequestRow($row, !empty($row['subdivision_name']) ? (string)$row['subdivision_name'] : '') ?>
+            <?php endforeach; ?>
+        <?php else: ?>
+            <div class="empty-state"><i class="fa-regular fa-circle-check" aria-hidden="true"></i><p><?= $total === 0 ? 'Tudo em dia: nenhum pedido aguardando aprovação.' : 'Nada encontrado com esses filtros.' ?></p></div>
+        <?php endif; ?>
+    </div>
+    <aside class="workbench__panel" id="requestPanel" aria-live="polite" aria-label="Pedido selecionado">
+        <div class="empty-state"><i class="fa-regular fa-hand-pointer" aria-hidden="true"></i><p>Escolha um pedido na lista para aprovar ou recusar.</p></div>
+    </aside>
+</div>

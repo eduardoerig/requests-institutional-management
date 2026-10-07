@@ -481,10 +481,11 @@ async function globalRequestAction(action, id, table, value = '') {
         if (data.success) {
             showToast(data.message, 'success');
             // Após cancelar, a requisição não existe mais: volta para a lista
-            setTimeout(() => {
-                if (action === 'delete') window.location.href = 'myRequests';
-                else location.reload();
-            }, 1000);
+            if (action === 'delete') {
+                setTimeout(() => { window.location.href = 'myRequests'; }, 900);
+            } else {
+                refreshAfterChange();
+            }
         } else {
             showToast(data.message || 'Não foi possível concluir a ação.', 'error');
         }
@@ -576,4 +577,209 @@ document.addEventListener('DOMContentLoaded', () => {
         span.textContent = text;
         label.appendChild(span);
     });
+});
+
+
+// =====================================================================
+// Pedido: ações a partir da visão única (página ou painel da fila)
+// =====================================================================
+
+async function postForm(url, fields) {
+    const body = new URLSearchParams();
+    Object.entries(fields).forEach(([k, v]) => body.append(k, v ?? ''));
+    try {
+        const response = await fetch(url, { method: 'POST', body: attachCsrfToken(body) });
+        const data = await response.json();
+        if (!data.success && data.redirect) {
+            window.location.href = data.redirect;
+            return null;
+        }
+        return data;
+    } catch (err) {
+        showToast('Sem conexão. Tente de novo.', 'error');
+        return null;
+    }
+}
+
+// Depois de uma ação: no painel da fila, recarrega lista + painel sem sair da tela; na página, recarrega a página
+async function refreshAfterChange() {
+    const queue = document.querySelector('[data-queue]');
+    if (!queue) {
+        setTimeout(() => location.reload(), 700);
+        return;
+    }
+    const selected = queue.querySelector('.row-item.selected');
+    const key = selected ? selected.dataset.table + ':' + selected.dataset.id : null;
+    try {
+        const html = await (await fetch(location.href, { headers: { 'X-Requested-With': 'fetch' } })).text();
+        const doc = new DOMParser().parseFromString(html, 'text/html');
+        const fresh = doc.querySelector('[data-queue]');
+        if (fresh) queue.replaceWith(fresh);
+        document.querySelectorAll('[data-sync]').forEach(el => {
+            const twin = doc.querySelector(`[data-sync="${el.dataset.sync}"]`);
+            if (twin) el.replaceWith(twin);
+        });
+        bindQueue();
+        if (key) {
+            const [table, id] = key.split(':');
+            const row = document.querySelector(`[data-queue] .row-item[data-table="${table}"][data-id="${id}"]`);
+            openInPanel(table, id, row);
+        }
+    } catch (err) {
+        location.reload();
+    }
+}
+
+function requestAct(action, id, table, value = '') {
+    return globalRequestAction(action, id, table, value);
+}
+
+async function decideRequest(value, id, table) {
+    let reason = '';
+    if (value === 'N') {
+        reason = await showConfirm({
+            title: 'Recusar pedido',
+            message: 'O solicitante vai receber o motivo abaixo.',
+            type: 'error', confirmLabel: 'Recusar', isDanger: true,
+            input: { label: 'Motivo da recusa *', placeholder: 'Ex.: falta informar a quantidade', required: true }
+        });
+        if (reason === false) return;
+    } else {
+        const ok = await showConfirm({ title: 'Aprovar pedido', message: 'O pedido vai para o setor responsável começar o atendimento.', type: 'success', confirmLabel: 'Aprovar' });
+        if (!ok) return;
+    }
+    const data = await postForm('config/aprovRequest.php', { action: 'post', id, table, value, reason });
+    if (!data) return;
+    showToast(data.message, data.success ? 'success' : 'error');
+    if (data.success) refreshAfterChange();
+}
+
+async function forwardAct(action, forwardId) {
+    const fields = { action, forward_id: forwardId };
+    if (action === 'accept') {
+        const ok = await showConfirm({ title: 'Aceitar encaminhamento', message: 'Seu setor passa a cuidar desta parte do pedido.', type: 'info', confirmLabel: 'Aceitar' });
+        if (!ok) return;
+    } else if (action === 'refuse') {
+        const reason = await showConfirm({
+            title: 'Recusar encaminhamento', message: 'Quem enviou vai receber o motivo.', type: 'error', confirmLabel: 'Recusar', isDanger: true,
+            input: { label: 'Por que não é com vocês? *', placeholder: 'Ex.: isso é com a Manutenção, não com Compras', required: true }
+        });
+        if (reason === false) return;
+        fields.reason = reason;
+    } else if (action === 'return') {
+        const note = await showConfirm({
+            title: 'Devolver ajuda', message: 'O setor responsável recebe o que você escrever.', type: 'success', confirmLabel: 'Devolver',
+            input: { label: 'O que foi feito? *', placeholder: 'Ex.: compramos 2 cabos HDMI, já estão na secretaria', required: true }
+        });
+        if (note === false) return;
+        fields.note = note;
+    } else if (action === 'cancel') {
+        const ok = await showConfirm({ title: 'Cancelar envio', message: 'O outro setor deixa de ver este encaminhamento.', type: 'warning', confirmLabel: 'Cancelar envio', cancelLabel: 'Voltar' });
+        if (!ok) return;
+    }
+    const data = await postForm('api/request_forwards.php', fields);
+    if (!data) return;
+    showToast(data.message, data.success ? 'success' : 'error');
+    if (data.success) refreshAfterChange();
+}
+
+// ---------------------------------------------------------------------
+// Conversa (funciona em qualquer visão do pedido, inclusive no painel)
+// ---------------------------------------------------------------------
+document.addEventListener('submit', async (e) => {
+    const form = e.target.closest('[data-chat-form]');
+    if (!form) return;
+    e.preventDefault();
+    const textarea = form.querySelector('textarea');
+    const text = textarea.value.trim();
+    if (!text) { textarea.focus(); return; }
+    const btn = form.querySelector('button');
+    btn.disabled = true;
+    const data = await postForm('api/add_comment.php', { id: form.dataset.id, table: form.dataset.table, comment: text });
+    btn.disabled = false;
+    if (data && data.success) {
+        form.reset();
+        textarea.style.height = '';
+        reloadChat(form.closest('.request-view'));
+    } else if (data) {
+        showToast(data.message || 'Não foi possível enviar a mensagem.', 'error');
+    }
+});
+
+document.addEventListener('keydown', (e) => {
+    const area = e.target.closest('[data-chat-form] textarea');
+    if (area && e.key === 'Enter' && !e.shiftKey && window.innerWidth >= 900) {
+        e.preventDefault();
+        area.form.requestSubmit();
+    }
+});
+
+document.addEventListener('input', (e) => {
+    const area = e.target.closest('[data-chat-form] textarea');
+    if (area) { area.style.height = ''; area.style.height = area.scrollHeight + 'px'; }
+});
+
+async function reloadChat(view) {
+    const feed = view && view.querySelector('[data-chat-feed]');
+    if (!feed || document.hidden) return;
+    try {
+        const html = await (await fetch(`api/get_comments.php?id=${feed.dataset.id}&table=${feed.dataset.table}`)).text();
+        if (feed.innerHTML.trim() === html.trim()) return;
+        const atBottom = feed.scrollHeight - feed.scrollTop <= feed.clientHeight + 150;
+        feed.innerHTML = html;
+        if (atBottom) feed.scrollTop = feed.scrollHeight;
+    } catch (err) { /* tenta de novo no próximo ciclo */ }
+}
+
+function initRequestView(root = document) {
+    root.querySelectorAll('[data-chat-feed]').forEach(feed => { feed.scrollTop = feed.scrollHeight; });
+    if (window.innerWidth >= 900) {
+        root.querySelectorAll('.rv-timeline[data-open-desktop]').forEach(d => d.setAttribute('open', ''));
+    }
+}
+
+setInterval(() => document.querySelectorAll('.request-view').forEach(reloadChat), 15000);
+document.addEventListener('DOMContentLoaded', () => initRequestView());
+
+// ---------------------------------------------------------------------
+// Filas (Caixa do setor, Aprovar pedidos): lista à esquerda, pedido à direita
+// ---------------------------------------------------------------------
+async function openInPanel(table, id, row) {
+    const panel = document.getElementById('requestPanel');
+    if (!panel) return false;
+    document.querySelectorAll('[data-queue] .row-item').forEach(r => r.classList.remove('selected'));
+    if (row) row.classList.add('selected');
+    panel.setAttribute('aria-busy', 'true');
+    try {
+        const response = await fetch(`api/request_view.php?id=${encodeURIComponent(id)}&table=${encodeURIComponent(table)}`);
+        panel.innerHTML = await response.text();
+        initRequestView(panel);
+        const url = new URL(location.href);
+        url.searchParams.set('sel', table + ':' + id);
+        history.replaceState(null, '', url);
+    } catch (err) {
+        panel.innerHTML = '<div class="empty-state"><p>Não foi possível abrir o pedido. Tente de novo.</p></div>';
+    }
+    panel.removeAttribute('aria-busy');
+    return true;
+}
+
+function bindQueue() {
+    document.querySelectorAll('[data-queue] .row-item').forEach(row => {
+        row.addEventListener('click', (e) => {
+            if (window.innerWidth < 900 || !document.getElementById('requestPanel')) return; // celular: abre a página do pedido
+            e.preventDefault();
+            openInPanel(row.dataset.table, row.dataset.id, row);
+        });
+    });
+}
+
+document.addEventListener('DOMContentLoaded', () => {
+    bindQueue();
+    if (window.innerWidth < 900) return;
+    const sel = new URL(location.href).searchParams.get('sel');
+    const first = sel
+        ? document.querySelector(`[data-queue] .row-item[data-table="${sel.split(':')[0]}"][data-id="${sel.split(':')[1]}"]`)
+        : document.querySelector('[data-queue] .row-item');
+    if (first) openInPanel(first.dataset.table, first.dataset.id, first);
 });
