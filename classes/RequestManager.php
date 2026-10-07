@@ -16,7 +16,46 @@ class RequestManager {
      * @param array $excludeStatuses - Lista de status a excluir (ex: ['P', 'N'] para gestores)
      * @param int|null $subdivisionId - Filtra por subdivisão específica (para adm_sub)
      */
+    /** Cache dentro da mesma requisição HTTP (menu lateral e página pedem os mesmos dados) */
+    private static $requestCache = [];
+
+    /** Mapa id_user => [nomes, slugs] das subdivisões, carregado uma vez */
+    private static $userSubdivisionMap = null;
+
+    private static function userSubdivisionMap($pdo) {
+        if (self::$userSubdivisionMap === null) {
+            self::$userSubdivisionMap = [];
+            $rows = $pdo->query("
+                SELECT cus.id_user,
+                       GROUP_CONCAT(s.name ORDER BY s.id SEPARATOR ', ') AS names,
+                       GROUP_CONCAT(s.slug ORDER BY s.id SEPARATOR ',') AS slugs
+                FROM cfg_user_subdivision cus
+                JOIN ctd_subdivision s ON s.id = cus.id_subdivision
+                GROUP BY cus.id_user
+            ")->fetchAll(PDO::FETCH_ASSOC);
+            foreach ($rows as $row) {
+                self::$userSubdivisionMap[(int)$row['id_user']] = [$row['names'], $row['slugs']];
+            }
+        }
+        return self::$userSubdivisionMap;
+    }
+
+    public static function clearCache() {
+        self::$requestCache = [];
+        self::$userSubdivisionMap = null;
+    }
+
     public static function getRequests($pdo, $userId = null, $managingUserId = null, $status = null, $specificSector = null, $searchText = null, $order = 'DESC', $excludeStatuses = [], $dateStart = null, $dateEnd = null, $subdivisionId = null) {
+        $cacheKey = md5(serialize(func_get_args() ? array_slice(func_get_args(), 1) : []));
+        if (isset(self::$requestCache[$cacheKey])) {
+            return self::$requestCache[$cacheKey];
+        }
+        $result = self::fetchRequests($pdo, $userId, $managingUserId, $status, $specificSector, $searchText, $order, $excludeStatuses, $dateStart, $dateEnd, $subdivisionId);
+        self::$requestCache[$cacheKey] = $result;
+        return $result;
+    }
+
+    private static function fetchRequests($pdo, $userId, $managingUserId, $status, $specificSector, $searchText, $order, $excludeStatuses, $dateStart, $dateEnd, $subdivisionId) {
         $order = strtoupper($order) === 'ASC' ? 'ASC' : 'DESC';
         $allowedSectors = [];
         if ($managingUserId) {
@@ -60,15 +99,7 @@ class RequestManager {
 
         foreach ($tables as $t) {
             try {
-                $query = "SELECT r.*, u.name as solicitor_name, sub.name as subdivision_name, sub.slug as subdivision_slug,
-                    (SELECT GROUP_CONCAT(s2.name ORDER BY s2.id SEPARATOR ', ')
-                     FROM cfg_user_subdivision cus2
-                     JOIN ctd_subdivision s2 ON cus2.id_subdivision = s2.id
-                     WHERE cus2.id_user = r.created_by) as all_subdivision_names,
-                    (SELECT GROUP_CONCAT(s2.slug ORDER BY s2.id SEPARATOR ',')
-                     FROM cfg_user_subdivision cus2
-                     JOIN ctd_subdivision s2 ON cus2.id_subdivision = s2.id
-                     WHERE cus2.id_user = r.created_by) as all_subdivision_slugs
+                $query = "SELECT r.*, u.name as solicitor_name, sub.name as subdivision_name, sub.slug as subdivision_slug
                 FROM $t r LEFT JOIN ctd_users u ON r.created_by = u.id LEFT JOIN ctd_subdivision sub ON r.subdivision_id = sub.id WHERE 1=1";
                 $params = [];
                 
@@ -149,7 +180,9 @@ class RequestManager {
                 
                 $sectorName = str_replace(['ctd_', '_frm'], '', $t);
                 
+                $subMap = self::userSubdivisionMap($pdo);
                 foreach ($res as $r) {
+                    [$r['all_subdivision_names'], $r['all_subdivision_slugs']] = $subMap[(int)($r['created_by'] ?? 0)] ?? [null, null];
                     $st = trim(strtoupper($r['status'] ?? 'P'));
                     // Atrasada = prazo pedido já passou e a requisição ainda não foi encerrada
                     $deadline = $r['date'] ?? null;
@@ -213,35 +246,20 @@ class RequestManager {
             }
         }
 
-        // Ordenar as requisições por data de prazo (date) conforme solicitação do usuário
-        usort($all_requests, function($a, $b) use ($order) {
-            $rawA = $a['date'] ?? '';
-            $rawB = $b['date'] ?? '';
-            
-            $hasA = (!empty($rawA) && $rawA !== '0000-00-00' && $rawA !== '0000-00-00 00:00:00');
-            $hasB = (!empty($rawB) && $rawB !== '0000-00-00' && $rawB !== '0000-00-00 00:00:00');
-            
-            // Se um deles não tem prazo, colocamos no final
-            if ($hasA && !$hasB) return -1;
-            if (!$hasA && $hasB) return 1;
-            if (!$hasA && !$hasB) {
-                return strtotime($b['created_at'] ?? 0) - strtotime($a['created_at'] ?? 0);
+        // Ordenar por prazo (sem prazo vai para o fim; empate: mais recente primeiro).
+        // Datas ISO (AAAA-MM-DD) comparam corretamente como texto — evita strtotime a cada comparação.
+        $hasDeadline = fn($d) => !empty($d) && strpos((string)$d, '0000-00-00') !== 0;
+        usort($all_requests, function($a, $b) use ($order, $hasDeadline) {
+            $rawA = (string)($a['date'] ?? '');
+            $rawB = (string)($b['date'] ?? '');
+            $hasA = $hasDeadline($rawA);
+            $hasB = $hasDeadline($rawB);
+
+            if ($hasA !== $hasB) return $hasA ? -1 : 1;
+            if (!$hasA || $rawA === $rawB) {
+                return strcmp((string)($b['created_at'] ?? ''), (string)($a['created_at'] ?? ''));
             }
-            
-            $tsA = strtotime($rawA);
-            $tsB = strtotime($rawB);
-            
-            if ($tsA === $tsB) {
-                return strtotime($b['created_at'] ?? 0) - strtotime($a['created_at'] ?? 0);
-            }
-            
-            if ($order === 'ASC') {
-                // ASC (Seta para CIMA): Mais atrasadas (datas antigas) -> Mais de boas (datas futuras)
-                return ($tsA < $tsB) ? -1 : 1;
-            } else {
-                // DESC (Seta para BAIXO): Mais de boas (datas futuras) -> Mais atrasadas (datas antigas)
-                return ($tsA > $tsB) ? -1 : 1;
-            }
+            return $order === 'ASC' ? strcmp($rawA, $rawB) : strcmp($rawB, $rawA);
         });
 
         return [

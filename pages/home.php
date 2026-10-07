@@ -90,7 +90,29 @@ if ($isAdmin || $isAdmSub) {
     }
 }
 
-$recent_requests = $all_requests; // Mostrar todas para permitir filtro completo no Dashboard
+// Busca e data filtram no servidor (resultado vale para TODAS as requisições, não só as da tela)
+$searchTerm = mb_substr(trim((string)($_GET['q'] ?? '')), 0, 100);
+$searchDate = preg_match('/^\d{4}-\d{2}-\d{2}$/', (string)($_GET['data'] ?? '')) ? $_GET['data'] : '';
+$tableRequests = $all_requests;
+if ($searchTerm !== '' || $searchDate !== '') {
+    $filtered = RequestManager::getRequests($pdo, null, $managingId, $activeFilterStatus ?: null, null, null, 'DESC', $excludeStatuses, $searchDate ?: null, $searchDate ?: null, $subdivisionFilter);
+    $termLower = mb_strtolower($searchTerm);
+    $tableRequests = array_values(array_filter($filtered['requests'], function ($r) use ($termLower) {
+        if ($termLower === '') return true;
+        $haystack = mb_strtolower(($r['title'] ?? '') . ' #' . ($r['id'] ?? '') . ' ' . ($r['solicitor_name'] ?? ''));
+        return mb_strpos($haystack, $termLower) !== false;
+    }));
+}
+
+// Paginação: 50 por página
+$perPage = 50;
+$totalRows = count($tableRequests);
+$totalPages = max(1, (int)ceil($totalRows / $perPage));
+$currentPageNum = min($totalPages, max(1, (int)($_GET['p'] ?? 1)));
+$recent_requests = array_slice($tableRequests, ($currentPageNum - 1) * $perPage, $perPage);
+$pageLink = function (int $n) use ($activeFilterStatus, $searchTerm, $searchDate) {
+    return 'home?' . http_build_query(array_filter(['status' => $activeFilterStatus, 'q' => $searchTerm, 'data' => $searchDate, 'p' => $n > 1 ? $n : null]));
+};
 
 // Buscar notificações não lidas
 $unread_stmt = $pdo->prepare("SELECT COUNT(*) FROM notifications WHERE user_id = ? AND is_read = 0");
@@ -255,19 +277,22 @@ $stepperMap = ['P' => 0, 'Y' => 1, 'W' => 2, 'C' => 3, 'N' => -1];
                 </button>
             </div>
             
-            <div style="display: flex; gap: 24px; align-items: center; flex-wrap: wrap; padding-bottom: 4px; width: 100%;">
-                <!-- Busca -->
-                <div style="flex: 1; min-width: 250px; background: #fff; border: 1px solid var(--border-color); border-radius: 8px; padding: 8px 14px; display: flex; align-items: center; gap: 10px; box-shadow: var(--shadow-sm);">
-                    <i class="fas fa-search" style="color: var(--text-muted); font-size: 0.9rem;"></i>
-                    <input type="text" placeholder="Buscar requisição..." id="dashSearch" style="border: none; outline: none; width: 100%; background: transparent; font-family: var(--font-sans); color: var(--text-main); font-size: 0.9rem;">
-                </div>
-                
-                <!-- Filtro de Data -->
-                <div style="display: flex; flex-direction: column; gap: 4px;">
-                    <span style="font-size: 0.7rem; color: var(--text-muted); font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px; margin-left: 2px;">Data</span>
-                    <input type="date" id="dateFilter" title="Filtrar por data" style="padding: 6px 12px; border-radius: 6px; border: 1px solid var(--border-color); outline: none; background: #fff; color: var(--text-muted); font-family: var(--font-sans); font-size: 0.85rem; cursor: pointer; width: 140px; height: 32px; box-shadow: var(--shadow-sm);">
-                </div>
-            </div>
+            <form method="get" action="home" class="dash-filters" role="search">
+                <?php if ($activeFilterStatus): ?><input type="hidden" name="status" value="<?= e($activeFilterStatus) ?>"><?php endif; ?>
+                <label class="search-box" style="flex:1 1 260px;">
+                    <i class="fas fa-search" aria-hidden="true"></i>
+                    <input type="search" name="q" id="dashSearch" value="<?= e($searchTerm) ?>" placeholder="Título, número ou nome do solicitante" aria-label="Buscar requisição">
+                </label>
+                <label class="dash-date">
+                    <span>Pedidas no dia</span>
+                    <input type="date" name="data" id="dateFilter" value="<?= e($searchDate) ?>">
+                </label>
+                <button type="submit" class="btn-big btn-big--primary"><i class="fa-solid fa-magnifying-glass"></i> Buscar</button>
+                <?php if ($searchTerm !== '' || $searchDate !== ''): ?>
+                    <a class="btn-big" href="<?= e('home' . ($activeFilterStatus ? '?status=' . $activeFilterStatus : '')) ?>">Limpar</a>
+                <?php endif; ?>
+            </form>
+            <p class="dash-count"><?= $totalRows ?> requisição(ões) encontrada(s)<?= $totalPages > 1 ? ' — página ' . $currentPageNum . ' de ' . $totalPages : '' ?></p>
         </div>
         <div class="table-responsive">
             <table class="dash-table">
@@ -417,6 +442,13 @@ $stepperMap = ['P' => 0, 'Y' => 1, 'W' => 2, 'C' => 3, 'N' => -1];
                 </tbody>
             </table>
         </div>
+        <?php if ($totalPages > 1): ?>
+            <nav class="pager" aria-label="Páginas">
+                <?php if ($currentPageNum > 1): ?><a href="<?= e($pageLink($currentPageNum - 1)) ?>">&larr; Anterior</a><?php endif; ?>
+                <span class="is-current"><?= $currentPageNum ?> / <?= $totalPages ?></span>
+                <?php if ($currentPageNum < $totalPages): ?><a href="<?= e($pageLink($currentPageNum + 1)) ?>">Próxima &rarr;</a><?php endif; ?>
+            </nav>
+        <?php endif; ?>
     </div>
 </div>
 
@@ -467,39 +499,10 @@ new Chart(document.getElementById('categoryChart'), {
 });
 <?php endif; ?>
 
-// Table Filters
-const dashSearch = document.getElementById('dashSearch');
-const dateFilter = document.getElementById('dateFilter');
-
-function filterTable() {
-    const term = dashSearch.value.toLowerCase();
-    const filterDate = dateFilter.value;
-    const rows = document.querySelectorAll('.dash-table tbody tr');
-    
-    rows.forEach(row => {
-        const text = row.textContent.toLowerCase();
-        
-        // Date check
-        let matchesDate = true;
-        if (filterDate) {
-            const dateStrMatches = row.cells[1]?.textContent.match(/(\d{2})\/(\d{2})\/(\d{4})/);
-            if (dateStrMatches) {
-                const rowDateISO = `${dateStrMatches[3]}-${dateStrMatches[2]}-${dateStrMatches[1]}`;
-                if (rowDateISO !== filterDate) matchesDate = false;
-            }
-        }
-
-        row.style.display = (text.includes(term) && matchesDate) ? '' : 'none';
-    });
-}
-
-dashSearch.addEventListener('input', filterTable);
-if(dateFilter) dateFilter.addEventListener('change', filterTable);
-
 function exportToExcel() {
-    const term = document.getElementById('dashSearch').value;
-    const date = document.getElementById('dateFilter').value;
-    const status = '<?= $activeFilterStatus ?>';
+    const term = <?= json_encode($searchTerm) ?>;
+    const date = <?= json_encode($searchDate) ?>;
+    const status = <?= json_encode((string)$activeFilterStatus) ?>;
     
     const params = new URLSearchParams({
         search: term,

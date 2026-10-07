@@ -517,3 +517,9 @@ label.chip-radio span {
 }
 label.chip-radio input:checked + span { background: #2c2b31; border-color: #2c2b31; color: #fff; }
 label.chip-radio input:focus-visible + span { outline: 3px solid var(--focus-ring); outline-offset: 2px; }
+
+/* Filtros do painel */
+.dash-filters { display: flex; gap: 10px; align-items: flex-end; flex-wrap: wrap; width: 100%; }
+.dash-date { display: flex; flex-direction: column; gap: 4px; font-size: 0.85rem; font-weight: 600; color: #475569; }
+.dash-date input { min-height: 44px; padding: 6px 10px; border: 1px solid var(--border-color); border-radius: 10px; font: inherit; }
+.dash-count { margin: 4px 0 0; font-size: 0.9rem; color: var(--text-muted); }
