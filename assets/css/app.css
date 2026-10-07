@@ -1204,3 +1204,4 @@ details.panel[open] > summary::after { transform: rotate(180deg); }
 .form-panel[data-sector="shop"] { --setor: var(--setor-shop); }
 .form-panel[data-sector="xerox"] { --setor: var(--setor-xerox); }
 .form-panel[data-sector="mkt"] { --setor: var(--setor-mkt); }
+.stack > .panel + .panel { margin-top: 0; }

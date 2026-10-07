@@ -3,26 +3,26 @@ $roleHelp = $_SESSION['role'] ?? 'solicitante';
 $isApproverHelp = isAdminRole($roleHelp);
 $isGestorHelp = isGestorRole($roleHelp);
 ?>
-<div class="main help-page">
-    <div class="page-header">
-        <div>
-            <i class="fa-solid fa-circle-question"></i>
-            <h3>Como usar o sistema</h3>
-        </div>
+<div class="narrow stack">
+    <div class="page-head page-head--hide-mobile">
+        <h1>Como usar o sistema</h1>
     </div>
 
-    <section class="help-block">
-        <h2>Para pedir algo</h2>
+    <section class="panel">
+        <div class="panel__head"><h2>Para pedir algo</h2></div>
+        <div class="panel__body">
         <ol class="help-steps">
-            <li><span class="help-num">1</span><div><strong>Clique em "Nova requisição"</strong> no menu.</div></li>
+            <li><span class="help-num">1</span><div><strong>Toque no botão laranja "Novo"</strong> (no computador: "Nova requisição", no menu).</div></li>
             <li><span class="help-num">2</span><div><strong>Escolha o tipo de pedido</strong>: TI, manutenção, compras, impressão colorida ou marketing.</div></li>
             <li><span class="help-num">3</span><div><strong>Preencha o formulário</strong>. Os campos com <span class="req">*</span> são obrigatórios.</div></li>
             <li><span class="help-num">4</span><div><strong>Clique em "Enviar requisição"</strong>. Pronto! Anote o número que aparece na tela.</div></li>
         </ol>
+        </div>
     </section>
 
-    <section class="help-block">
-        <h2>Para acompanhar</h2>
+    <section class="panel">
+        <div class="panel__head"><h2>Para acompanhar</h2></div>
+        <div class="panel__body">
         <p>Abra <a href="myRequests">Minhas requisições</a>. Cada pedido mostra a situação em palavras:</p>
         <ul class="help-status">
             <?php foreach (statusLabels() as $code => $label): ?>
@@ -38,31 +38,38 @@ $isGestorHelp = isGestorRole($roleHelp);
                 </li>
             <?php endforeach; ?>
         </ul>
-        <p>Quando algo mudar, o <strong>sininho <i class="fa-solid fa-bell"></i></strong> no topo da tela mostra um aviso.</p>
+        <p>Quando algo mudar, o <strong>sino <i class="fa-solid fa-bell" aria-hidden="true"></i></strong> no topo da tela mostra um aviso.</p>
         <p>Tem dúvida sobre um pedido? Abra o pedido e escreva na <strong>Conversa sobre o pedido</strong>.</p>
+        </div>
     </section>
 
     <?php if ($isApproverHelp): ?>
-    <section class="help-block">
-        <h2>Para aprovar</h2>
-        <p>Abra <a href="approve">Aprovar pedidos</a>, clique em um pedido e escolha <strong>Aprovar</strong> ou <strong>Recusar</strong>. Ao recusar, escreva o motivo: o solicitante recebe essa explicação.</p>
+    <section class="panel">
+        <div class="panel__head"><h2>Para aprovar</h2></div>
+        <div class="panel__body">
+        <p>Abra <a href="approve">Aprovar pedidos</a>, abra um pedido e escolha <strong>Aprovar</strong> ou <strong>Recusar</strong>. Ao recusar, escreva o motivo: o solicitante recebe essa explicação.</p>
+        </div>
     </section>
     <?php endif; ?>
 
     <?php if ($isGestorHelp): ?>
-    <section class="help-block">
-        <h2>Para atender (setores)</h2>
+    <section class="panel">
+        <div class="panel__head"><h2>Para atender (setores)</h2></div>
+        <div class="panel__body">
         <ol class="help-steps">
             <li><span class="help-num">1</span><div>Em <a href="approved">Para atender</a>, abra o pedido e clique em <strong>Começar atendimento</strong>.</div></li>
             <li><span class="help-num">2</span><div>Use a conversa do pedido para falar com o solicitante.</div></li>
             <li><span class="help-num">3</span><div>Ao terminar, clique em <strong>Marcar como concluída</strong>.</div></li>
             <li><span class="help-num">4</span><div>Se o pedido for de outro setor, use <strong>Encaminhar a outro setor</strong>.</div></li>
         </ol>
+        </div>
     </section>
     <?php endif; ?>
 
-    <section class="help-block">
-        <h2>Esqueci minha senha</h2>
+    <section class="panel">
+        <div class="panel__head"><h2>Esqueci minha senha</h2></div>
+        <div class="panel__body">
         <p>Fale com o administrador do sistema. Ele cria uma senha temporária e você troca no primeiro acesso, em <a href="myAccount">Minha conta</a>.</p>
+        </div>
     </section>
 </div>
