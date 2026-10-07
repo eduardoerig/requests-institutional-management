@@ -279,7 +279,7 @@ $full_role_labels = array_merge($role_labels, [
                         <td class="ac-td">
                             <div style="display:flex; align-items:center; gap:10px;">
                                 <div class="ac-avatar" style="background: <?= $isActive ? 'var(--primary)' : '#94a3b8' ?>;">
-                                    <?= strtoupper(substr($u['name'], 0, 1)) ?>
+                                    <?= e(mb_strtoupper(mb_substr((string)$u['name'], 0, 1))) ?>
                                 </div>
                                 <div>
                                     <div class="user-name" style="font-weight:600; color:var(--text-main); white-space:nowrap;"><?= htmlspecialchars($u['name']) ?></div>

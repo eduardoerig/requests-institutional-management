@@ -46,7 +46,7 @@ $role_labels = [
         <div class="card" style="cursor: default; width: 100%; border-left: 4px solid var(--primary); padding: 30px;">
             <div class="user-info-banner" style="display: flex; align-items: center; gap: 20px; margin-bottom: 25px;">
                 <div class="user-avatar" style="width: 70px; height: 70px; border-radius: 50%; background: var(--primary); color: #fff; display: grid; place-items: center; font-size: 2rem; font-weight: 700;">
-                    <?= strtoupper(substr($user['name'] ?? 'U', 0, 1)) ?>
+                    <?= e(mb_strtoupper(mb_substr((string)($user['name'] ?? 'U'), 0, 1))) ?>
                 </div>
                 <div>
                     <h2 style="margin: 0; font-size: 1.5rem; color: var(--text-main);"><?= htmlspecialchars($user['name'] ?? 'Usuário') ?></h2>

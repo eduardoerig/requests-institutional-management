@@ -3,8 +3,10 @@
  * api/export_requests.php
  * Gera um arquivo CSV real, formatado para Excel (ponto-e-vírgula e BOM UTF-8).
  */
-session_start();
-require_once dirname(__DIR__) . '/config/conn.php';
+require_once __DIR__ . '/../config/session.php';
+require_once __DIR__ . '/../config/conn.php';
+require_once __DIR__ . '/../config/security.php';
+requireLoginJson($pdo);
 require_once dirname(__DIR__) . '/classes/RequestManager.php';
 
 if (!isset($_SESSION['id'])) die("Acesso negado.");
@@ -109,7 +111,7 @@ foreach ($data as $row) {
         str_replace(["\r", "\n"], ' ', strip_tags($row['descp'] ?? ''))
     ];
     
-    fputcsv($output, $line, ';');
+    fputcsv($output, array_map('csvSafe', $line), ';');
 }
 
 fclose($output);

@@ -22,6 +22,11 @@ async function fetchAjax(path, formData) {
         });
         const data = await resp.json();
 
+        if (!data.success && data.redirect) {
+            window.location.href = data.redirect;
+            return false;
+        }
+
         if (data.success) {
             return data;
         } else {
@@ -71,7 +76,20 @@ if (notifBtn) {
     setInterval(updateNotifications, 60000);
 }
 
+function escapeHtml(value) {
+    const div = document.createElement('div');
+    div.textContent = value == null ? '' : String(value);
+    return div.innerHTML;
+}
+
+// Aceita só links internos relativos (bloqueia javascript:, http://outro-site etc.)
+function safeInternalLink(link) {
+    const value = String(link || '');
+    return /^[a-zA-Z0-9_\-\/?=&.%]+$/.test(value) && !/^\/\//.test(value) ? value : '#';
+}
+
 async function updateNotifications() {
+    if (document.hidden) return;
     try {
         const response = await fetch('api/get_notifications.php');
         const data = await response.json();
@@ -85,18 +103,18 @@ async function updateNotifications() {
 
         if (data.notifications && data.notifications.length > 0) {
             notifBody.innerHTML = data.notifications.map(n => `
-                <div class="notif-item ${n.is_read == 0 ? 'unread' : ''}" onclick="window.location.href='${n.link || '#'}'">
+                <a class="notif-item ${n.is_read == 0 ? 'unread' : ''}" href="${escapeHtml(safeInternalLink(n.link))}">
                     <div class="notif-item-content">
-                        <span class="notif-item-title">${n.title}</span>
-                        <p class="notif-item-msg">${n.message}</p>
-                        <span class="notif-item-time">${formatDate(n.created_at)}</span>
+                        <span class="notif-item-title">${escapeHtml(n.title)}</span>
+                        <p class="notif-item-msg">${escapeHtml(n.message)}</p>
+                        <span class="notif-item-time">${escapeHtml(formatDate(n.created_at))}</span>
                     </div>
                     ${n.is_read == 0 ? `
-                        <button class="notif-mark-read" onclick="markSingleRead(event, ${n.id})" title="Marcar como lida">
+                        <button class="notif-mark-read" onclick="markSingleRead(event, ${parseInt(n.id, 10)})" title="Marcar como lida" aria-label="Marcar como lida">
                             <i class="fa-solid fa-circle"></i>
                         </button>
                     ` : ''}
-                </div>
+                </a>
             `).join('');
         } else {
             notifBody.innerHTML = '<div class="notif-empty">Nenhuma notificação nova</div>';
@@ -123,6 +141,7 @@ async function markAllRead() {
 }
 
 async function markSingleRead(event, id) {
+    event.preventDefault();
     event.stopPropagation();
     try {
         const formData = new URLSearchParams();
@@ -420,11 +439,12 @@ async function globalRequestAction(action, id, table, value = '') {
             body: attachCsrfToken(formData)
         });
         
-        if (!response.ok) {
-            throw new Error("Erro no servidor: " + response.status);
-        }
-
         const data = await response.json();
+
+        if (!data.success && data.redirect) {
+            window.location.href = data.redirect;
+            return;
+        }
 
         if (data.success) {
             showToast(data.message, 'success');
@@ -459,24 +479,43 @@ if (formCard) {
         const id = formCard.querySelector(".Rid")?.value;
         const table = formCard.querySelector(".Rtype")?.value;
 
-        console.log("Submit detectado:", { actionName, actionValue, id, table });
-
         if (!id || !table) {
             showToast("Selecione uma requisição primeiro.", "info");
             return;
         }
 
         if (actionName === 'action_value' && (actionValue === 'start_progress' || actionValue === 'finish' || actionValue === 'delete')) {
-            console.log("DEBUG: Iniciando fluxo de ação direta...");
             await globalRequestAction(actionValue, id, table);
         } 
-        else {
-            const val = actionValue || btn.innerText.trim();
+        else if (actionValue === 'Y' || actionValue === 'N') {
+            const val = actionValue;
+            let reason = '';
+            if (val === 'N') {
+                reason = await showConfirm({
+                    title: 'Recusar requisição',
+                    message: 'O solicitante vai receber o motivo abaixo.',
+                    type: 'error',
+                    confirmLabel: 'Recusar',
+                    isDanger: true,
+                    input: { label: 'Motivo da recusa *', placeholder: 'Ex.: falta informar a quantidade', required: true }
+                });
+                if (reason === false) return;
+            } else {
+                const ok = await showConfirm({
+                    title: 'Aprovar requisição',
+                    message: 'A requisição será enviada ao setor responsável para atendimento.',
+                    type: 'success',
+                    confirmLabel: 'Aprovar'
+                });
+                if (!ok) return;
+            }
+
             let formData = new FormData(formCard);
             formData.append('action', 'post');
             formData.append('id', id);
             formData.append('table', table);
-            formData.append('value', val); 
+            formData.append('value', val);
+            formData.append('reason', reason);
 
             const data = await fetchAjax("config/aprovRequest.php", formData);
             if (data && data.success) {

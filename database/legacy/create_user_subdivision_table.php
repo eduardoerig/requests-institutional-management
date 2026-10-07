@@ -1,4 +1,6 @@
 <?php
+if (PHP_SAPI !== 'cli') { http_response_code(404); exit; }
+// LEGADO: apenas referência histórica. Use database/schema.sql + database/migrate.php.
 /**
  * Migração: Criar tabela de ligação cfg_user_subdivision e migrar dados.
  */

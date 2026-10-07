@@ -439,7 +439,7 @@ aside footer a:hover {
 }
 
 /* =========================================
-   DASHBOARD ANALÃTICO (CARDS, GRÃFICOS, TABELA)
+   DASHBOARD ANALÍTICO (CARDS, GRÁFICOS, TABELA)
 ========================================= */
 .dashboard-cards {
     display: grid;
@@ -680,7 +680,7 @@ aside footer a:hover {
     border-color: #e2e8f0;
 }
 
-/* BotÃµes de aÃ§Ã£o da tabela do dashboard */
+/* Botões de ação da tabela do dashboard */
 .btn-action {
     display: inline-flex;
     align-items: center;
@@ -818,7 +818,7 @@ aside footer a:hover {
 }
 
 /* =========================================
-   CARDS (NOVA REQUISIÃ‡ÃƒO)
+   CARDS (NOVA REQUISIÇÃO)
 ========================================= */
 .home-split-layout {
     display: grid;
@@ -888,7 +888,7 @@ aside footer a:hover {
 }
 
 /* =========================================
-   FORMULÃRIOS
+   FORMULÁRIOS
 ========================================= */
 .form {
     background: var(--bg-card);
@@ -1123,7 +1123,7 @@ select:focus {
 
 
 /* =========================================
-   LISTAGEM DE REQUISIÃ‡Ã•ES (CARDS & FILTROS)
+   LISTAGEM DE REQUISIÇÕES (CARDS & FILTROS)
 ========================================= */
 .filter_req {
     display: flex;
@@ -1634,7 +1634,7 @@ select:focus {
 }
 
 /* =========================================
-   MODAL (REQUISIÃ‡Ã•ES & CONTAS)
+   MODAL (REQUISIÇÕES & CONTAS)
 ========================================= */
 .overlay_req {
     position: fixed;
@@ -2913,10 +2913,10 @@ aside details a {
 }
 
 /* =========================================
-   REPASSE DE REQUISIÃ‡Ã•ES (FASE 5)
+   REPASSE DE REQUISIÇÕES (FASE 5)
    ========================================= */
 
-/* Badge visual para requisiÃ§Ãµes repassadas nos cards */
+/* Badge visual para requisições repassadas nos cards */
 .badge-forwarded {
     display: inline-flex;
     align-items: center;
@@ -2952,7 +2952,7 @@ aside details a {
     }
 }
 
-/* Indicador lateral no card de requisiÃ§Ã£o repassada */
+/* Indicador lateral no card de requisição repassada */
 .card_req.forwarded {
     border-left: 4px solid #f59e0b !important;
     position: relative;
@@ -2969,7 +2969,7 @@ aside details a {
     border: 1px solid #fbbf24;
 }
 
-/* Stepper: Ã­cone do passo repassado */
+/* Stepper: ícone do passo repassado */
 .flow-icon.forwarded-bg {
     background: #fef3c7;
     color: #d97706;
@@ -3248,7 +3248,7 @@ aside details a {
     color: #065f46;
 }
 
-/* ---- BotÃ£o Repassar no modal ---- */
+/* ---- Botão Repassar no modal ---- */
 .btn-repassar {
     background: linear-gradient(135deg, #f59e0b, #d97706);
     color: #fff;
@@ -3288,7 +3288,7 @@ aside details a {
     color: #d97706;
 }
 
-/* ---- BotÃµes de aÃ§Ã£o de repasse (Aceitar/Recusar) ---- */
+/* ---- Botões de ação de repasse (Aceitar/Recusar) ---- */
 .btn-accept-forward {
     background: #10b981;
     color: #fff;
@@ -3523,7 +3523,7 @@ aside details a {
     color: #065f46;
 }
 
-/* ---- BotÃ£o Repassar no modal ---- */
+/* ---- Botão Repassar no modal ---- */
 .btn-repassar {
     background: linear-gradient(135deg, #f59e0b, #d97706);
     color: #fff;
@@ -3563,7 +3563,7 @@ aside details a {
     color: #d97706;
 }
 
-/* ---- BotÃµes de aÃ§Ã£o de repasse (Aceitar/Recusar) ---- */
+/* ---- Botões de ação de repasse (Aceitar/Recusar) ---- */
 .btn-accept-forward {
     background: #10b981;
     color: #fff;
@@ -3910,4 +3910,32 @@ aside details a {
     font-size: 0.95rem;
     max-width: 320px;
     line-height: 1.5;
+}
+/* Campo de texto do modal global (ex.: motivo da recusa) */
+.modal-input-label {
+    display: block;
+    text-align: left;
+    font-weight: 600;
+    font-size: 0.95rem;
+    margin: 12px 0 6px;
+}
+.modal-input {
+    width: 100%;
+    box-sizing: border-box;
+    padding: 10px 12px;
+    border: 1px solid #cbd5e1;
+    border-radius: 8px;
+    font: inherit;
+    font-size: 1rem;
+    resize: vertical;
+}
+.modal-input:focus {
+    outline: 2px solid #2563eb;
+    outline-offset: 1px;
+}
+.modal-input-error {
+    color: #b91c1c;
+    font-size: 0.9rem;
+    text-align: left;
+    margin: 6px 0 0;
 }

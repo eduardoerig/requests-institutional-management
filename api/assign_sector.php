@@ -1,7 +1,8 @@
 <?php
-session_start();
-require_once '../config/conn.php';
-require_once '../config/security.php';
+require_once __DIR__ . '/../config/session.php';
+require_once __DIR__ . '/../config/conn.php';
+require_once __DIR__ . '/../config/security.php';
+requireLoginJson($pdo);
 
 header('Content-Type: application/json');
 

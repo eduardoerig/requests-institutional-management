@@ -1,7 +1,8 @@
 <?php
-session_start();
+require_once __DIR__ . '/../config/session.php';
 require_once __DIR__ . '/../config/conn.php';
 require_once __DIR__ . '/../config/security.php';
+requireLoginJson($pdo);
 require_once __DIR__ . '/../classes/RequestManager.php';
 require_once __DIR__ . '/../classes/RequestForwardService.php';
 
@@ -12,9 +13,7 @@ if (!isset($_SESSION['id'])) {
     exit;
 }
 
-if ($_SERVER['REQUEST_METHOD'] === 'POST') {
-    requireCsrfTokenFromRequest();
-}
+requirePostJson();
 
 // Suporte para JSON e POST tradicional
 $data = json_decode(file_get_contents('php://input'), true);

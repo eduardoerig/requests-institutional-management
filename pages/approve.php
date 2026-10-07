@@ -201,7 +201,7 @@ if (!is_array($allowedSectors)) $allowedSectors = [];
                             <i class="fas fa-check" style="margin-right:6px;"></i> Aprovar
                         </button>
                         <button type="submit" class="btn_x" value="N">
-                            <i class="fas fa-xmark" style="margin-right:6px;"></i> Reprovar
+                            <i class="fas fa-xmark" style="margin-right:6px;"></i> Recusar
                         </button>
                     </div>
                 </form>
@@ -209,7 +209,7 @@ if (!is_array($allowedSectors)) $allowedSectors = [];
                 <div class="empty-state" id="modalEmptyState">
                     <i class="fa-solid fa-clipboard-check" style="color: #94a3b8;"></i>
                     <p>Nenhuma requisição selecionada</p>
-                    <p style="font-size: 0.83rem; color: var(--text-muted); margin-top: 4px;">Selecione uma requisição ao lado para analisar os detalhes e aprovar ou reprovar.</p>
+                    <p style="font-size: 0.83rem; color: var(--text-muted); margin-top: 4px;">Selecione uma requisição ao lado para ver os detalhes e aprovar ou recusar.</p>
                 </div>
             </div>
         </div>

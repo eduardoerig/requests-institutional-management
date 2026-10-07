@@ -1,4 +1,30 @@
+Options -Indexes
+DirectoryIndex index.php
+
 RewriteEngine On
+
+# HTTPS obrigatório fora do ambiente local
+RewriteCond %{HTTPS} off
+RewriteCond %{HTTP:X-Forwarded-Proto} !https
+RewriteCond %{HTTP_HOST} !^(localhost|127\.0\.0\.1)(:\d+)?$ [NC]
+RewriteRule ^ https://%{HTTP_HOST}%{REQUEST_URI} [L,R=301]
+
+# Pastas internas nunca são servidas diretamente
+RewriteRule (^|/)(scratch|database|classes|components|partials|pages|tests|vendor|\.agents|\.git)(/|$) - [F,L]
+
+# Arquivos sensíveis
+<FilesMatch "(\.(log|md|sql|example\.php|ini|lock|json|dist)$|^conn.*\.php$|^(security|session)\.php$|^\.)">
+    Require all denied
+</FilesMatch>
+
+# Rotas amigáveis
 RewriteCond %{REQUEST_FILENAME} !-f
 RewriteCond %{REQUEST_FILENAME} !-d
 RewriteRule ^(.+)$ index.php?url=$1 [QSA,L]
+
+<IfModule mod_headers.c>
+    Header always set X-Content-Type-Options "nosniff"
+    Header always set X-Frame-Options "SAMEORIGIN"
+    Header always set Referrer-Policy "strict-origin-when-cross-origin"
+    Header always set Permissions-Policy "camera=(), microphone=(), geolocation=()"
+</IfModule>

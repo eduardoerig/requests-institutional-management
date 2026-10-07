@@ -1,4 +1,6 @@
 <?php
+if (PHP_SAPI !== 'cli') { http_response_code(404); exit; }
+// LEGADO: apenas referência histórica. Use database/schema.sql + database/migrate.php.
 require_once 'conn.php';
 
 $tables = ['ctd_mkt_frm', 'ctd_shop_frm', 'ctd_xerox_frm', 'ctd_service_frm', 'ctd_ti_frm'];

@@ -3,9 +3,10 @@
  * api/get_comments.php
  * Retorna o HTML das mensagens do chat com avatares e nomes.
  */
-session_start();
-require_once '../config/conn.php';
-require_once '../config/security.php';
+require_once __DIR__ . '/../config/session.php';
+require_once __DIR__ . '/../config/conn.php';
+require_once __DIR__ . '/../config/security.php';
+requireLoginJson($pdo);
 
 if (!isset($_SESSION['id'])) {
     http_response_code(401);
@@ -41,7 +42,7 @@ if (count($comments) > 0) {
         
         $is_mine = ($c['user_id'] == ($_SESSION['id'] ?? -1));
         $side_class = $is_mine ? 'mine' : 'theirs';
-        $initials = strtoupper(substr($c['user_name'], 0, 1));
+        $initials = e(mb_strtoupper(mb_substr((string)$c['user_name'], 0, 1)));
         $user_name = htmlspecialchars($c['user_name']);
         $time_label = date('H:i', strtotime($c['created_at']));
         $text = nl2br(htmlspecialchars($c['comment']));

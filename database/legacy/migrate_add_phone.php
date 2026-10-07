@@ -1,4 +1,6 @@
 <?php
+if (PHP_SAPI !== 'cli') { http_response_code(404); exit; }
+// LEGADO: apenas referência histórica. Use database/schema.sql + database/migrate.php.
 /**
  * Migração: Adicionar campo 'phone' (WhatsApp) na tabela ctd_users.
  * Execute uma única vez acessando: /requests2.0/config/migrate_add_phone.php

@@ -1,17 +1,18 @@
 <?php
-session_start();
-require_once '../config/conn.php';
-require_once '../config/security.php';
+require_once __DIR__ . '/../config/session.php';
+require_once __DIR__ . '/../config/conn.php';
+require_once __DIR__ . '/../config/security.php';
+requireLoginJson($pdo);
 
 header('Content-Type: application/json');
 
 // Proteção: apenas administradores
 $current_role = $_SESSION['role'] ?? 'solicitante';
-if (!in_array($current_role, ['admin', 'adm'])) {
+if (!isGlobalAdminRole($current_role)) {
     echo json_encode(['success' => false, 'message' => 'Acesso negado.']);
     exit;
 }
-requireCsrfTokenFromRequest();
+requirePostJson();
 
 $name        = trim($_POST['new_name'] ?? '');
 $login       = trim($_POST['new_login'] ?? '');
@@ -22,10 +23,15 @@ $force_reset = isset($_POST['force_reset']) ? 1 : 0;
 $subdivisions = $_POST['new_subdivisions'] ?? [];
 $subdivisions = array_values(array_filter(array_map('intval', (array)$subdivisions)));
 $primary_subdivision = !empty($subdivisions[0]) ? (int)$subdivisions[0] : null;
-$allowedRoles = array_merge(['admin', 'adm_sub', 'solicitante'], gestorRoles());
+$allowedRoles = array_merge(globalAdminRoles(), ['adm_sub', 'solicitante'], gestorRoles());
 
 if (empty($name) || empty($login) || empty($password)) {
     echo json_encode(['success' => false, 'message' => 'Preencha todos os campos obrigatórios.']);
+    exit;
+}
+
+if (mb_strlen($password) < 8) {
+    echo json_encode(['success' => false, 'message' => 'A senha precisa ter pelo menos 8 caracteres.']);
     exit;
 }
 

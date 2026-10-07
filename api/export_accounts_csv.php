@@ -1,8 +1,10 @@
 <?php
-session_start();
+require_once __DIR__ . '/../config/session.php';
 require_once __DIR__ . '/../config/conn.php';
+require_once __DIR__ . '/../config/security.php';
+requireLoginJson($pdo);
 
-if (!in_array($_SESSION['role'], ['admin', 'adm'])) {
+if (!isGlobalAdminRole($_SESSION['role'] ?? '')) {
     die('Acesso negado.');
 }
 
@@ -24,14 +26,14 @@ $query = "SELECT u.id, u.name, u.login, u.role, u.status, a.title as sector_titl
 $stmt = $pdo->query($query);
 while ($row = $stmt->fetch(PDO::FETCH_ASSOC)) {
     $status = ($row['status'] ?? 1) == 1 ? 'Ativo' : 'Inativo';
-    fputcsv($output, [
+    fputcsv($output, array_map('csvSafe', [
         $row['id'],
         $row['name'],
         $row['login'],
         $row['role'],
         $row['sector_title'] ?? 'Nenhum',
         $status
-    ]);
+    ]));
 }
 
 fclose($output);

@@ -8,7 +8,7 @@
                 <img src="assets/img/LogoFavConSisreq.png" alt="Sistema de Requisições" class="school-logo-mobile">
             </div>
             <!-- LOGIN -->
-            <form class="form-auth form-login" id="frm_login" autocomplete="off">
+            <form class="form-auth form-login" id="frm_login">
                 <div class="form-title-wrapper">
                     <h1>Acessar o Painel</h1>
                     <p class="form-subtitle">Insira seu usuário e senha para continuar</p>
@@ -18,7 +18,7 @@
                     <label for="user">Usuário</label>
                     <div class="input-with-icon">
                         <i class="fa-solid fa-user"></i>
-                        <input type="text" id="user" name="user" placeholder="Digite seu usuário" required />
+                        <input type="text" id="user" name="user" placeholder="Digite seu usuário" autocomplete="username" required />
                     </div>
                 </div>
 
@@ -26,7 +26,7 @@
                     <label for="password">Senha</label>
                     <div class="input-with-icon">
                         <i class="fa-solid fa-lock"></i>
-                        <input type="password" id="password" name="password" placeholder="Digite sua senha" required />
+                        <input type="password" id="password" name="password" placeholder="Digite sua senha" autocomplete="current-password" required />
                     </div>
                 </div>
 

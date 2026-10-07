@@ -1,7 +1,70 @@
 <?php
 
-if (session_status() === PHP_SESSION_NONE) {
-    session_start();
+require_once __DIR__ . '/session.php';
+
+/**
+ * Escapa texto para saída HTML.
+ */
+function e($value): string
+{
+    return htmlspecialchars((string)($value ?? ''), ENT_QUOTES, 'UTF-8');
+}
+
+function jsonResponse(array $payload, int $status = 200): void
+{
+    http_response_code($status);
+    header('Content-Type: application/json; charset=UTF-8');
+    echo json_encode($payload);
+    exit;
+}
+
+/**
+ * Exige usuário logado, ativo e sem troca de senha pendente.
+ * Revalida no banco a cada 60s para derrubar sessões de contas desativadas.
+ */
+function requireLoginJson(?PDO $pdo = null, bool $allowForceReset = false): void
+{
+    if (empty($_SESSION['id'])) {
+        jsonResponse(['success' => false, 'message' => 'Sua sessão expirou. Entre novamente.', 'redirect' => 'login'], 401);
+    }
+
+    if ($pdo !== null && (time() - (int)($_SESSION['checked_at'] ?? 0)) > 60) {
+        $stmt = $pdo->prepare('SELECT status, role, force_reset FROM ctd_users WHERE id = ?');
+        $stmt->execute([(int)$_SESSION['id']]);
+        $row = $stmt->fetch(PDO::FETCH_ASSOC);
+        if (!$row || (int)($row['status'] ?? 1) !== 1) {
+            session_unset();
+            session_destroy();
+            jsonResponse(['success' => false, 'message' => 'Sua conta está inativa. Fale com o administrador.', 'redirect' => 'login'], 401);
+        }
+        $_SESSION['role'] = $row['role'];
+        $_SESSION['force_reset'] = (int)($row['force_reset'] ?? 0);
+        $_SESSION['checked_at'] = time();
+    }
+
+    if (!$allowForceReset && (int)($_SESSION['force_reset'] ?? 0) === 1) {
+        jsonResponse(['success' => false, 'message' => 'Troque sua senha em "Minha conta" antes de continuar.', 'redirect' => 'myAccount'], 403);
+    }
+}
+
+function requirePostJson(): void
+{
+    if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
+        jsonResponse(['success' => false, 'message' => 'Método não permitido.'], 405);
+    }
+    requireCsrfTokenFromRequest();
+}
+
+/**
+ * Neutraliza fórmulas em células CSV (=, +, -, @).
+ */
+function csvSafe($value): string
+{
+    $value = (string)($value ?? '');
+    if ($value !== '' && in_array($value[0], ['=', '+', '-', '@', "\t", "\r"], true)) {
+        return "'" . $value;
+    }
+    return $value;
 }
 
 function ensureCsrfToken(): string

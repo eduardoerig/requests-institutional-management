@@ -12,9 +12,10 @@
  *   GET  action=areas      → Lista setores disponíveis para repasse
  */
 
-session_start();
+require_once __DIR__ . '/../config/session.php';
 require_once __DIR__ . '/../config/conn.php';
 require_once __DIR__ . '/../config/security.php';
+requireLoginJson($pdo);
 require_once __DIR__ . '/../classes/RequestForwardService.php';
 
 header('Content-Type: application/json');
@@ -28,10 +29,8 @@ $role = $_SESSION['role'] ?? 'solicitante';
 $userId = (int)$_SESSION['id'];
 $userName = $_SESSION['name'] ?? 'Usuário';
 
-$adminRoles = ['admin', 'adm', 'coord'];
-$gestorRoles = ['gestor', 'ti', 'xerox', 'service', 'shop', 'mkt', 'marketing'];
-$isAdmin = in_array($role, $adminRoles);
-$isGestor = in_array($role, $gestorRoles);
+$isAdmin = isGlobalAdminRole($role);
+$isGestor = isGestorRole($role);
 
 // Suporte para JSON body e POST tradicional
 $input = json_decode(file_get_contents('php://input'), true);
@@ -41,8 +40,9 @@ if (!$input) {
 
 $action = $input['action'] ?? null;
 
-if ($_SERVER['REQUEST_METHOD'] === 'POST') {
-    requireCsrfTokenFromRequest();
+// Ações que alteram dados exigem POST + CSRF; consultas podem ser GET
+if (in_array($action, ['forward', 'accept', 'refuse', 'complete'], true) || $_SERVER['REQUEST_METHOD'] === 'POST') {
+    requirePostJson();
 }
 
 if (!$action) {

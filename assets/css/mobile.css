@@ -1,7 +1,7 @@
 /* =========================================
-   MOBILE-FIRST â€” SOLICITANTE
+   MOBILE-FIRST — SOLICITANTE
    Todas as regras encapsuladas em media queries
-   para nÃ£o afetar a experiÃªncia desktop.
+   para não afetar a experiência desktop.
    ========================================= */
 
 /* =========================================
@@ -17,7 +17,7 @@
         -webkit-text-size-adjust: 100%;
     }
 
-    /* EspaÃ§o para a bottom nav nÃ£o cobrir conteÃºdo */
+    /* Espaço para a bottom nav não cobrir conteúdo */
     .main {
         padding: 16px 16px 90px 16px !important;
     }
@@ -102,7 +102,7 @@
         color: var(--ml-primary);
     }
 
-    /* BotÃ£o Central (+) */
+    /* Botão Central (+) */
     .nav-item-center {
         flex: 1;
         display: flex;
@@ -125,7 +125,7 @@
         transform: scale(1.1);
     }
 
-    /* BotÃ£o central destaque (Nova RequisiÃ§Ã£o) */
+    /* Botão central destaque (Nova Requisição) */
     .mobile-bottom-nav .nav-item.nav-new {
         flex-direction: column;
         background: var(--primary);
@@ -157,7 +157,7 @@
         transform: scale(0.92);
     }
 
-    /* Badge de notificaÃ§Ã£o na bottom nav */
+    /* Badge de notificação na bottom nav */
     .nav-item .nav-badge {
         position: absolute;
         top: 0;
@@ -201,7 +201,7 @@
         pointer-events: auto;
     }
 
-    /* Sidebar sobre o backdrop â€” proporÃ§Ãµes corretas */
+    /* Sidebar sobre o backdrop — proporções corretas */
     aside {
         width: 80vw !important;
         max-width: 300px !important;
@@ -268,7 +268,7 @@
         font-size: 1rem !important;
     }
 
-    /* Dropdown de notificaÃ§Ãµes full-width */
+    /* Dropdown de notificações full-width */
     .notif-dropdown {
         width: calc(100vw - 32px) !important;
         right: -8px !important;
@@ -349,7 +349,7 @@
 }
 
 /* =========================================
-   NOVA REQUISIÃ‡ÃƒO (CATEGORIAS EM CARROSSEL)
+   NOVA REQUISIÇÃO (CATEGORIAS EM CARROSSEL)
    ========================================= */
 @media (max-width: 768px) {
     .home-split-layout {
@@ -397,7 +397,7 @@
         overflow: hidden;
     }
 
-    /* FormulÃ¡rio */
+    /* Formulário */
     .form {
         padding: 20px !important;
         border-radius: 12px !important;
@@ -448,7 +448,7 @@
 }
 
 /* =========================================
-   MINHAS REQUISIÃ‡Ã•ES (FILTROS + CARDS)
+   MINHAS REQUISIÇÕES (FILTROS + CARDS)
    ========================================= */
 @media (max-width: 768px) {
     .filter_req {
@@ -601,7 +601,7 @@
 }
 
 /* =========================================
-   DETALHES DA REQUISIÃ‡ÃƒO (MOBILE)
+   DETALHES DA REQUISIÇÃO (MOBILE)
    ========================================= */
 @media (max-width: 768px) {
     .detail-page {
@@ -641,7 +641,7 @@
         padding: 6px 12px !important;
     }
 
-    /* Tabs scrollÃ¡veis */
+    /* Tabs scrolláveis */
     .detail-tabs {
         overflow-x: auto;
         -webkit-overflow-scrolling: touch;
@@ -661,7 +661,7 @@
         flex-shrink: 0;
     }
 
-    /* Cards de conteÃºdo */
+    /* Cards de conteúdo */
     .detail-card {
         padding: 16px !important;
         border-radius: 10px !important;
@@ -695,7 +695,7 @@
         font-size: 0.9rem !important;
     }
 
-    /* ComentÃ¡rios */
+    /* Comentários */
     .comment-feed {
         max-height: 400px !important;
         gap: 14px !important;
@@ -751,7 +751,7 @@
         justify-content: center;
     }
 
-    /* HistÃ³rico */
+    /* Histórico */
     .history-item {
         gap: 12px !important;
         padding: 14px 0 !important;
@@ -826,7 +826,7 @@
         padding: 0 !important;
     }
 
-    /* Outros split layouts (approved, inWork) mantÃ©m o comportamento padrÃ£o */
+    /* Outros split layouts (approved, inWork) mantém o comportamento padrão */
     .request_list_container {
         height: 350px !important;
         border-radius: 10px !important;
@@ -845,7 +845,7 @@
 }
 
 /* =========================================
-   TOAST (MOBILE â€” BOTTOM)
+   TOAST (MOBILE — BOTTOM)
    ========================================= */
 @media (max-width: 768px) {
     .toast {
@@ -974,7 +974,7 @@
 }
 
 /* =========================================
-   DASHBOARD CARDS (MOBILE â€” Admin/Gestor)
+   DASHBOARD CARDS (MOBILE — Admin/Gestor)
    ========================================= */
 @media (max-width: 768px) {
     .dashboard-cards {
@@ -1078,8 +1078,8 @@
    ========================================= */
 @media (max-width: 768px) {
 
-    /* Menu toggle na topbar nÃ£o Ã© mais necessÃ¡rio com bottom nav */
-    /* Mantemos para abrir sidebar quando necessÃ¡rio para admin */
+    /* Menu toggle na topbar não é mais necessário com bottom nav */
+    /* Mantemos para abrir sidebar quando necessário para admin */
     .menu-toggle {
         font-size: 1.2rem !important;
     }

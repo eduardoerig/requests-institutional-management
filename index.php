@@ -1,5 +1,5 @@
 <?php
-session_start();
+require_once __DIR__ . '/config/session.php';
 include 'config/conn.php';
 require_once 'config/security.php';
 header('Content-Type: text/html; charset=UTF-8');
@@ -61,7 +61,8 @@ if ($logged && $force_reset === 1) {
 
     <script>
         // Global Modal Functionality (Attached to window for global access)
-        window.showConfirm = function({ title, message, type = 'warning', confirmLabel = 'Confirmar', cancelLabel = 'Cancelar', isDanger = false }) {
+        // input: { label, placeholder, required } -> resolve com o texto digitado (ou false se cancelar)
+        window.showConfirm = function({ title, message, type = 'warning', confirmLabel = 'Confirmar', cancelLabel = 'Cancelar', isDanger = false, input = null }) {
             const globalModal = document.getElementById('globalModal');
             const modalIcon = document.getElementById('gModalIcon');
             const modalTitle = document.getElementById('gModalTitle');
@@ -77,6 +78,19 @@ if ($logged && $force_reset === 1) {
                 modalBtnCancel.textContent = cancelLabel;
                 modalBtnCancel.style.display = 'block';
 
+                const modalInput = document.getElementById('gModalInput');
+                const modalInputLabel = document.getElementById('gModalInputLabel');
+                const modalInputError = document.getElementById('gModalInputError');
+                modalInput.value = '';
+                modalInputError.style.display = 'none';
+                modalInput.style.display = input ? 'block' : 'none';
+                modalInputLabel.style.display = input ? 'block' : 'none';
+                if (input) {
+                    modalInputLabel.textContent = input.label || '';
+                    modalInput.placeholder = input.placeholder || '';
+                    setTimeout(() => modalInput.focus(), 50);
+                }
+
                 // Setup Icon
                 modalIcon.className = `modal-icon ${type}`;
                 const iconMap = { warning: 'fa-triangle-exclamation', error: 'fa-circle-xmark', success: 'fa-circle-check', info: 'fa-circle-info' };
@@ -89,9 +103,15 @@ if ($logged && $force_reset === 1) {
                 globalModal.classList.add('active');
 
                 const handleConfirm = () => {
+                    const text = modalInput.value.trim();
+                    if (input && input.required && text === '') {
+                        modalInputError.style.display = 'block';
+                        modalInput.focus();
+                        return;
+                    }
                     globalModal.classList.remove('active');
                     cleanup();
-                    resolve(true);
+                    resolve(input ? text : true);
                 };
 
                 const handleCancel = () => {
@@ -123,6 +143,9 @@ if ($logged && $force_reset === 1) {
             modalMessage.textContent = message;
             modalBtnConfirm.textContent = confirmLabel;
             modalBtnCancel.style.display = 'none';
+            document.getElementById('gModalInput').style.display = 'none';
+            document.getElementById('gModalInputLabel').style.display = 'none';
+            document.getElementById('gModalInputError').style.display = 'none';
 
             modalIcon.className = `modal-icon ${type}`;
             const iconMap = { warning: 'fa-triangle-exclamation', error: 'fa-circle-xmark', success: 'fa-circle-check', info: 'fa-circle-info' };
@@ -169,7 +192,7 @@ if ($logged && $force_reset === 1) {
                 </div>
                 
                 <div class="user-profile">
-                    <span class="user-name"><?php echo $_SESSION['name'] ?? 'Usuário'; ?></span>
+                    <span class="user-name"><?= e($_SESSION['name'] ?? 'Usuário') ?></span>
                     <?php 
                     $role_labels = [
                         'admin' => 'ADMIN', 'adm' => 'ADMIN', 'coord' => 'COORD',
@@ -180,7 +203,7 @@ if ($logged && $force_reset === 1) {
                         'solicitante' => 'SOLICITANTE'
                     ];
                     ?>
-                    <span class="user-role"><?php echo $role_labels[$role] ?? strtoupper($role); ?></span>
+                    <span class="user-role"><?= e($role_labels[$role] ?? strtoupper($role)) ?></span>
                 </div>
             </div>
         </header>
@@ -189,7 +212,11 @@ if ($logged && $force_reset === 1) {
         <?php
         $page = isset($url[0]) && $url[0] !== '' ? $url[0] : "home";
 
-        if ($page === "login" || !$logged) {
+        if ($page === "logout") {
+            session_unset();
+            session_destroy();
+            echo '<script>location.href = "login";</script>';
+        } else if ($page === "login" || !$logged) {
             include "pages/login.php";
         } else if ($page === "home" && $logged) {
             include "pages/home.php";
@@ -209,8 +236,6 @@ if ($logged && $force_reset === 1) {
             include "pages/accounts.php";
         } else if ($page === "request_detail" && $logged) {
             include "pages/request_detail.php";
-        } else if ($page === "register" && !$logged) {
-            include "pages/register.php";
         } else {
             include "pages/home.php"; // Fallback
         }
@@ -227,7 +252,7 @@ if ($logged && $force_reset === 1) {
         <?php if($is_solicitante): ?>
         <!-- Mobile Bottom Nav -->
         <div class="mobile-bottom-nav">
-            <a href="home" class="nav-item <?= ($page == 'home' || $page == 'myRequests') ? 'active' : '' ?>">
+            <a href="myRequests" class="nav-item <?= ($page == 'home' || $page == 'myRequests') ? 'active' : '' ?>">
                 <i class="fa-solid fa-folder-open"></i>
                 <span>Requisições</span>
             </a>
@@ -327,7 +352,7 @@ if ($logged && $force_reset === 1) {
             if (data.success && data.data.length > 0) {
                 select.innerHTML = '<option value="">— Selecione o setor —</option>';
                 data.data.forEach(area => {
-                    select.innerHTML += `<option value="${area.id}">${area.label}</option>`;
+                    select.add(new Option(area.label, area.id));
                 });
                 forwardAreasLoaded = true;
             } else {
@@ -450,6 +475,9 @@ if ($logged && $force_reset === 1) {
             </div>
             <h3 id="gModalTitle" class="modal-title">Título</h3>
             <p id="gModalMessage" class="modal-message">Mensagem do modal aqui.</p>
+            <label id="gModalInputLabel" for="gModalInput" class="modal-input-label" style="display:none;"></label>
+            <textarea id="gModalInput" class="modal-input" rows="3" maxlength="1000" style="display:none;"></textarea>
+            <p id="gModalInputError" class="modal-input-error" style="display:none;">Este campo é obrigatório.</p>
 
             <div id="gModalActions" class="modal-actions">
                 <button id="gModalBtnConfirm" class="btn-modal btn-modal-confirm">Confirmar</button>

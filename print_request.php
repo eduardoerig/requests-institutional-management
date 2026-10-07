@@ -1,29 +1,20 @@
 <?php
 /**
  * print_request.php
- * RelatÃ³rio profissional para impressÃ£o/PDF de requisiÃ§Ãµes.
+ * Relatório profissional para impressão/PDF de requisições.
  */
-session_start();
-require_once 'config/conn.php';
-
-$logged = $_SESSION['id'] ?? false;
-if (!$logged) die('Acesso negado.');
+require_once __DIR__ . '/config/session.php';
+require_once __DIR__ . '/config/conn.php';
+require_once __DIR__ . '/config/security.php';
+requireLoginJson($pdo);
 
 $role = $_SESSION['role'] ?? 'solicitante';
-$adminRoles = ['admin', 'adm', 'coord', 'adm_sub'];
-$gestorRoles = ['gestor', 'ti', 'xerox', 'service', 'shop', 'mkt', 'marketing'];
-$isAdmin  = in_array($role, $adminRoles);
-$isGestor = in_array($role, $gestorRoles);
-
-if (!$isAdmin && !$isGestor) {
-    die('VocÃª nÃ£o tem permissÃ£o para gerar este relatÃ³rio.');
-}
 
 $req_id    = isset($_GET['id'])    ? (int)$_GET['id']              : 0;
 $req_table = isset($_GET['table']) ? preg_replace('/[^a-z]/', '', $_GET['table']) : '';
 $allowed_tables = ['mkt', 'shop', 'xerox', 'service', 'ti'];
 
-if (!$req_id || !in_array($req_table, $allowed_tables)) die('ParÃ¢metros invÃ¡lidos.');
+if (!$req_id || !in_array($req_table, $allowed_tables)) die('Parâmetros inválidos.');
 
 $label_map = ['mkt' => 'Marketing', 'shop' => 'Compras', 'xerox' => 'Reprografia', 'service' => 'Manutenção', 'ti' => 'TI'];
 
@@ -37,18 +28,24 @@ $stmt = $pdo->prepare("
 $stmt->execute([$req_id]);
 $req = $stmt->fetch();
 
-if (!$req) die('RequisiÃ§Ã£o nÃ£o encontrada.');
+if (!$req) die('Requisição não encontrada.');
+
+// Mesma regra da tela de detalhes: solicitante dono, admin, admin da subdivisão ou gestor do setor/repasse
+if (!userCanViewRequest($pdo, $req, $req_table, (int)$_SESSION['id'], $role)) {
+    http_response_code(403);
+    die('Você não tem permissão para ver esta requisição.');
+}
 
 $stmt_his = $pdo->prepare("SELECT * FROM request_history WHERE request_id = ? AND request_table = ? ORDER BY created_at ASC");
 $stmt_his->execute([$req_id, $req_table]);
 $history = $stmt_his->fetchAll();
 
-$status_label = ['P' => 'Pendente', 'Y' => 'Aprovado', 'N' => 'Recusado', 'W' => 'Em Andamento', 'C' => 'ConcluÃ­da', 'F' => 'Repassada'];
+$status_label = ['P' => 'Pendente', 'Y' => 'Aprovado', 'N' => 'Recusado', 'W' => 'Em Andamento', 'C' => 'Concluída', 'F' => 'Repassada'];
 $status_color = [
     'P' => '#d97706', 'Y' => '#059669', 'N' => '#dc2626',
     'W' => '#2563eb', 'C' => '#15803d', 'F' => '#7c3aed'
 ];
-$pri_labels = [1 => 'Baixa', 2 => 'MÃ©dia', 3 => 'Alta', 4 => 'CrÃ­tica'];
+$pri_labels = [1 => 'Baixa', 2 => 'Média', 3 => 'Alta', 4 => 'Crítica'];
 $pri_color  = [1 => '#10b981', 2 => '#f59e0b', 3 => '#ef4444', 4 => '#7f1d1d'];
 
 $current_status = trim(strtoupper($req['status'] ?? 'P'));
@@ -60,14 +57,14 @@ $prazoDisplay = (!$rawDate || $rawDate === '0000-00-00')
     ? 'Sem prazo definido'
     : (($ts = strtotime($rawDate)) ? date('d/m/Y', $ts) : 'Sem prazo definido');
 
-$geradoEm = date('d/m/Y \Ã \s H:i');
+$geradoEm = date('d/m/Y \à\s H:i');
 ?>
 <!DOCTYPE html>
 <html lang="pt-br">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>RelatÃ³rio â€” RequisiÃ§Ã£o #<?= $req_id ?></title>
+    <title>Relatório — Requisição #<?= $req_id ?></title>
     <style>
         @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap');
 
@@ -80,7 +77,7 @@ $geradoEm = date('d/m/Y \Ã \s H:i');
             padding: 0;
         }
 
-        /* ===== BARRA DE AÃ‡ÃƒO (nÃ£o imprime) ===== */
+        /* ===== BARRA DE AÇÃO (não imprime) ===== */
         .action-bar {
             position: fixed; top: 0; left: 0; right: 0;
             background: #2c2b31; color: #fff;
@@ -114,7 +111,7 @@ $geradoEm = date('d/m/Y \Ã \s H:i');
             border: 1px solid #e2e8f0;
         }
 
-        /* ===== CABEÃ‡ALHO ===== */
+        /* ===== CABEÇALHO ===== */
         .doc-header {
             background: linear-gradient(135deg, #2c2b31 0%, #3d3c42 100%);
             padding: 32px 40px;
@@ -188,7 +185,7 @@ $geradoEm = date('d/m/Y \Ã \s H:i');
             font-size: 0.95rem; font-weight: 600; color: #3d3c42;
         }
 
-        /* TÃ­tulo + DescriÃ§Ã£o */
+        /* Título + Descrição */
         .req-title {
             font-size: 1.5rem; font-weight: 800; color: #2c2b31;
             margin-bottom: 16px; line-height: 1.3;
@@ -199,7 +196,7 @@ $geradoEm = date('d/m/Y \Ã \s H:i');
             font-size: 0.95rem; color: #334155; min-height: 80px;
         }
 
-        /* Tabela de HistÃ³rico */
+        /* Tabela de Histórico */
         .history-table {
             width: 100%; border-collapse: collapse;
             font-size: 0.85rem;
@@ -232,7 +229,7 @@ $geradoEm = date('d/m/Y \Ã \s H:i');
         .signature-label { font-size: 0.78rem; font-weight: 600; color: #475569; margin-bottom: 2px; }
         .signature-sublabel { font-size: 0.7rem; color: #94a3b8; }
 
-        /* ===== RODAPÃ‰ ===== */
+        /* ===== RODAPÉ ===== */
         .doc-footer {
             background: #f8fafc; border-top: 1px solid #e2e8f0;
             padding: 16px 40px;
@@ -246,7 +243,7 @@ $geradoEm = date('d/m/Y \Ã \s H:i');
             font-size: 0.72rem; font-weight: 700; white-space: nowrap;
         }
 
-        /* ===== IMPRESSÃƒO ===== */
+        /* ===== IMPRESSÃO ===== */
         @media print {
             body { background: #fff; }
             .action-bar { display: none !important; }
@@ -262,26 +259,26 @@ $geradoEm = date('d/m/Y \Ã \s H:i');
 </head>
 <body>
 
-<!-- Barra de AÃ§Ã£o (nÃ£o imprime) -->
+<!-- Barra de Ação (não imprime) -->
 <div class="action-bar">
     <a href="javascript:history.back()" class="btn-back-link">
-        â† Voltar
+        &larr; Voltar
     </a>
-    <h1>PrÃ©-visualizaÃ§Ã£o do RelatÃ³rio â€” RequisiÃ§Ã£o #<?= $req_id ?></h1>
+    <h1>Pré-visualização do Relatório — Requisição #<?= $req_id ?></h1>
     <button class="btn-print" onclick="window.print()">
-        ðŸ–¨ï¸ Imprimir / Salvar PDF
+        🖨️ Imprimir / Salvar PDF
     </button>
 </div>
 
 <div class="document">
 
-    <!-- CABEÃ‡ALHO -->
+    <!-- CABEÇALHO -->
     <div class="doc-header">
         <div class="doc-header-logo">
             <img src="assets/img/LogoFavConSisreq.png" alt="SisReq">
             <div class="doc-header-title">
-                <h2>RelatÃ³rio de RequisiÃ§Ã£o</h2>
-                <p>Sistema Institucional de RequisiÃ§Ãµes Â· SisReq</p>
+                <h2>Relatório de Requisição</h2>
+                <p>Sistema Institucional de Requisições · SisReq</p>
             </div>
         </div>
         <div class="doc-header-meta">
@@ -298,42 +295,42 @@ $geradoEm = date('d/m/Y \Ã \s H:i');
             <span class="dot"></span>
             <?= $status_label[$current_status] ?? 'Indefinido' ?>
         </span>
-        <span class="banner-separator">Â·</span>
+        <span class="banner-separator">·</span>
         <?php $pc = $pri_color[$priority] ?? '#64748b'; ?>
         <span class="priority-chip">
             <span style="width:8px;height:8px;border-radius:50%;background:<?= $pc ?>;display:inline-block;"></span>
-            Prioridade <?= $pri_labels[$priority] ?? 'MÃ©dia' ?>
+            Prioridade <?= $pri_labels[$priority] ?? 'Média' ?>
         </span>
-        <span class="banner-separator">Â·</span>
+        <span class="banner-separator">·</span>
         <span class="priority-chip">
             ðŸ“ <?= $label_map[$req_table] ?? ucfirst($req_table) ?>
         </span>
         <?php if (!empty($req['subdivision_name'])): ?>
-        <span class="banner-separator">Â·</span>
+        <span class="banner-separator">·</span>
         <span class="priority-chip">ðŸ« <?= htmlspecialchars($req['subdivision_name']) ?></span>
         <?php endif; ?>
     </div>
 
     <div class="doc-body">
 
-        <!-- SEÃ‡ÃƒO: DETALHES DA REQUISIÃ‡ÃƒO -->
+        <!-- SEÇÃO: DETALHES DA REQUISIÇÃO -->
         <div class="section">
-            <div class="section-title">ðŸ“‹ Detalhes da RequisiÃ§Ã£o</div>
-            <div class="req-title"><?= htmlspecialchars($req['title'] ?? 'Sem tÃ­tulo') ?></div>
-            <div class="description-box"><?= nl2br(htmlspecialchars($req['descp'] ?? 'Nenhuma descriÃ§Ã£o fornecida.')) ?></div>
+            <div class="section-title">📋 Detalhes da Requisição</div>
+            <div class="req-title"><?= htmlspecialchars($req['title'] ?? 'Sem título') ?></div>
+            <div class="description-box"><?= nl2br(htmlspecialchars($req['descp'] ?? 'Nenhuma descrição fornecida.')) ?></div>
         </div>
 
-        <!-- SEÃ‡ÃƒO: INFORMAÃ‡Ã•ES GERAIS -->
+        <!-- SEÇÃO: INFORMAÇÕES GERAIS -->
         <div class="section">
-            <div class="section-title">â„¹ï¸ InformaÃ§Ãµes Gerais</div>
+            <div class="section-title">ℹ️ Informações Gerais</div>
             <div class="info-grid">
                 <div class="info-cell">
                     <label>Solicitante</label>
-                    <span><?= htmlspecialchars($req['creator_name'] ?? 'â€”') ?></span>
+                    <span><?= htmlspecialchars($req['creator_name'] ?? '—') ?></span>
                 </div>
                 <div class="info-cell">
                     <label>Data de Abertura</label>
-                    <span><?= isset($req['created_at']) ? date('d/m/Y H:i', strtotime($req['created_at'])) : 'â€”' ?></span>
+                    <span><?= isset($req['created_at']) ? date('d/m/Y H:i', strtotime($req['created_at'])) : '—' ?></span>
                 </div>
                 <div class="info-cell">
                     <label>Prazo de Entrega</label>
@@ -344,7 +341,7 @@ $geradoEm = date('d/m/Y \Ã \s H:i');
                     <span><?= $label_map[$req_table] ?? ucfirst($req_table) ?></span>
                 </div>
                 <div class="info-cell">
-                    <label>SubdivisÃ£o</label>
+                    <label>Subdivisão</label>
                     <span><?= htmlspecialchars($req['subdivision_name'] ?? 'N/A') ?></span>
                 </div>
                 <div class="info-cell">
@@ -353,31 +350,31 @@ $geradoEm = date('d/m/Y \Ã \s H:i');
                 </div>
                 <?php if (!empty($req['obs'])): ?>
                 <div class="info-cell" style="grid-column: 1 / -1;">
-                    <label>ObservaÃ§Ãµes</label>
+                    <label>Observações</label>
                     <span><?= htmlspecialchars($req['obs']) ?></span>
                 </div>
                 <?php endif; ?>
             </div>
         </div>
 
-        <!-- SEÃ‡ÃƒO: HISTÃ“RICO -->
+        <!-- SEÇÃO: HISTÓRICO -->
         <?php if (!empty($history)): ?>
         <div class="section">
-            <div class="section-title">ðŸ•’ HistÃ³rico de MovimentaÃ§Ãµes <span>(<?= count($history) ?> registros)</span></div>
+            <div class="section-title">🕒 Histórico de Movimentações <span>(<?= count($history) ?> registros)</span></div>
             <table class="history-table">
                 <thead>
                     <tr>
                         <th>Data / Hora</th>
-                        <th>UsuÃ¡rio</th>
-                        <th>AÃ§Ã£o Registrada</th>
+                        <th>Usuário</th>
+                        <th>Ação Registrada</th>
                     </tr>
                 </thead>
                 <tbody>
                     <?php foreach ($history as $h): ?>
                     <tr>
                         <td class="history-date"><?= date('d/m/Y H:i', strtotime($h['created_at'])) ?></td>
-                        <td class="history-user"><?= htmlspecialchars($h['user_name'] ?? 'â€”') ?></td>
-                        <td class="history-action"><?= htmlspecialchars($h['action'] ?? 'â€”') ?></td>
+                        <td class="history-user"><?= htmlspecialchars($h['user_name'] ?? '—') ?></td>
+                        <td class="history-action"><?= htmlspecialchars($h['action'] ?? '—') ?></td>
                     </tr>
                     <?php endforeach; ?>
                 </tbody>
@@ -387,7 +384,7 @@ $geradoEm = date('d/m/Y \Ã \s H:i');
 
         <!-- ASSINATURA -->
         <div class="signature-section">
-            <p style="font-size:0.78rem; color:#94a3b8; margin-bottom: 8px;">Para fins de protocolo institucional, as partes abaixo confirmam o atendimento desta requisiÃ§Ã£o:</p>
+            <p style="font-size:0.78rem; color:#94a3b8; margin-bottom: 8px;">Para fins de protocolo institucional, as partes abaixo confirmam o atendimento desta requisição:</p>
             <div class="signature-grid">
                 <div class="signature-block">
                     <div style="height: 48px;"></div>
@@ -399,7 +396,7 @@ $geradoEm = date('d/m/Y \Ã \s H:i');
                 <div class="signature-block">
                     <div style="height: 48px;"></div>
                     <div class="signature-line">
-                        <div class="signature-label">ResponsÃ¡vel pelo Atendimento</div>
+                        <div class="signature-label">Responsável pelo Atendimento</div>
                         <div class="signature-sublabel">Assinatura e Carimbo</div>
                     </div>
                 </div>
@@ -408,11 +405,11 @@ $geradoEm = date('d/m/Y \Ã \s H:i');
 
     </div><!-- /doc-body -->
 
-    <!-- RODAPÃ‰ -->
+    <!-- RODAPÉ -->
     <div class="doc-footer">
         <p>Documento gerado automaticamente pelo <strong>SisReq</strong>.<br>
-        A autenticidade deste relatÃ³rio Ã© garantida pelo Protocolo #<?= $req_id ?> e pela data de geraÃ§Ã£o registrada.</p>
-        <span class="footer-badge">SisReq Â· <?= date('Y') ?></span>
+        A autenticidade deste relatório é garantida pelo Protocolo #<?= $req_id ?> e pela data de geração registrada.</p>
+        <span class="footer-badge">SisReq · <?= date('Y') ?></span>
     </div>
 
 </div><!-- /document -->

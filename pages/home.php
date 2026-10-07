@@ -46,7 +46,7 @@ if (!$isAdmin && !$isAdmSub) {
 }
 
 $managingId = ($isAdmin || $isAdmSub) ? null : $user_id;
-$activeFilterStatus = isset($_GET['status']) && $_GET['status'] !== '' ? $_GET['status'] : null;
+$activeFilterStatus = in_array($_GET['status'] ?? '', ['P', 'Y', 'N', 'W', 'C', 'F'], true) ? $_GET['status'] : null;
 
 $tableTitle = 'Atividade Recente';
 if ($activeFilterStatus === 'C') $tableTitle = 'Requisições Concluídas';

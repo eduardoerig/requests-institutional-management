@@ -1,6 +1,8 @@
 <?php
-session_start();
-require_once 'conn.php';
+require_once __DIR__ . '/session.php';
+require_once __DIR__ . '/conn.php';
+require_once __DIR__ . '/security.php';
+requireLoginJson($pdo);
 require_once __DIR__ . '/../classes/RequestManager.php';
 
 if (isset($_POST['action']) && $_POST['action'] === 'post') {

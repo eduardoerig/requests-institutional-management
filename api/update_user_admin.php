@@ -1,29 +1,65 @@
 <?php
-session_start();
-require_once '../config/conn.php';
-require_once '../config/security.php';
+require_once __DIR__ . '/../config/session.php';
+require_once __DIR__ . '/../config/conn.php';
+require_once __DIR__ . '/../config/security.php';
 
 header('Content-Type: application/json');
 
 $is_self = isset($_GET['self']) && $_GET['self'] == 1;
 
+// Troca de senha própria é permitida mesmo com force_reset pendente
+requireLoginJson($pdo, $is_self);
+requirePostJson();
+
 // Proteção: apenas administradores para ações gerais
 $current_role = $_SESSION['role'] ?? 'solicitante';
-if (!$is_self && !in_array($current_role, ['admin', 'adm'])) {
-    echo json_encode(['success' => false, 'message' => 'Acesso negado.']);
-    exit;
+if (!$is_self && !isGlobalAdminRole($current_role)) {
+    jsonResponse(['success' => false, 'message' => 'Acesso negado.'], 403);
 }
 
-if ($_SERVER['REQUEST_METHOD'] === 'POST') {
-    requireCsrfTokenFromRequest();
+if ($is_self) {
+    // Autoatendimento: somente telefone e senha. Qualquer outro campo é ignorado.
+    $_POST = array_intersect_key($_POST, array_flip(['phone', 'password', 'currentPass', 'csrf_token']));
+    if (!empty($_POST['password']) && empty($_POST['currentPass'])) {
+        jsonResponse(['success' => false, 'message' => 'Informe sua senha atual.']);
+    }
+}
+
+if (!empty($_POST['password']) && mb_strlen(trim($_POST['password'])) < 8) {
+    jsonResponse(['success' => false, 'message' => 'A nova senha precisa ter pelo menos 8 caracteres.']);
 }
 
 $userId = $is_self ? ($_SESSION['id'] ?? null) : ($_POST['id'] ?? null);
-$action = $_POST['action'] ?? 'update';
+$action = $is_self ? 'update' : ($_POST['action'] ?? 'update');
 
 if (!$userId) {
     echo json_encode(['success' => false, 'message' => 'ID do usuário não informado.']);
     exit;
+}
+
+$userId = (int)$userId;
+
+// Impedir que o sistema fique sem administrador ativo
+$removesAdmin = !$is_self && (
+    $action === 'delete'
+    || (isset($_POST['role']) && !isGlobalAdminRole(trim($_POST['role'])))
+    || (isset($_POST['status']) && (int)$_POST['status'] !== 1)
+);
+if ($removesAdmin) {
+    if ($userId === (int)$_SESSION['id']) {
+        jsonResponse(['success' => false, 'message' => 'Você não pode excluir, desativar ou rebaixar a sua própria conta.']);
+    }
+    $stmtTarget = $pdo->prepare('SELECT role FROM ctd_users WHERE id = ?');
+    $stmtTarget->execute([$userId]);
+    $targetRole = (string)$stmtTarget->fetchColumn();
+    if (isGlobalAdminRole($targetRole)) {
+        $rolesIn = implode(',', array_fill(0, count(globalAdminRoles()), '?'));
+        $stmtAdmins = $pdo->prepare("SELECT COUNT(*) FROM ctd_users WHERE role IN ($rolesIn) AND status = 1 AND id <> ?");
+        $stmtAdmins->execute(array_merge(globalAdminRoles(), [$userId]));
+        if ((int)$stmtAdmins->fetchColumn() === 0) {
+            jsonResponse(['success' => false, 'message' => 'Este é o último administrador ativo. Crie outro administrador antes.']);
+        }
+    }
 }
 
 try {
@@ -43,6 +79,7 @@ try {
             }
         }
 
+        $pdo->beginTransaction();
         $stmtPivot = $pdo->prepare("DELETE FROM cfg_user_area WHERE id_user = ?");
         $stmtPivot->execute([$userId]);
 
@@ -53,6 +90,7 @@ try {
         // 3. Excluir usuário
         $stmt = $pdo->prepare("DELETE FROM ctd_users WHERE id = ?");
         $stmt->execute([$userId]);
+        $pdo->commit();
 
         echo json_encode(['success' => true, 'message' => 'Conta excluída permanentemente.']);
         exit;
@@ -84,7 +122,7 @@ try {
     }
     if (isset($_POST['role'])) {
         $newRole = trim($_POST['role']);
-        $allowedRoles = array_merge(['admin', 'adm_sub', 'solicitante'], gestorRoles());
+        $allowedRoles = array_merge(globalAdminRoles(), ['adm_sub', 'solicitante'], gestorRoles());
         if (!in_array($newRole, $allowedRoles, true)) {
             echo json_encode(['success' => false, 'message' => 'Perfil de acesso inválido.']);
             exit;

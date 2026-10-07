@@ -1,7 +1,8 @@
 <?php
-session_start();
+require_once __DIR__ . '/../config/session.php';
 require_once __DIR__ . '/../config/conn.php';
 require_once __DIR__ . '/../config/security.php';
+requireLoginJson($pdo);
 
 header('Content-Type: application/json');
 
@@ -11,7 +12,7 @@ if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
 }
 requireCsrfTokenFromRequest();
 
-if (!in_array($_SESSION['role'], ['admin', 'adm'])) {
+if (!isGlobalAdminRole($_SESSION['role'] ?? '')) {
     echo json_encode(['success' => false, 'message' => 'Acesso negado.']);
     exit;
 }

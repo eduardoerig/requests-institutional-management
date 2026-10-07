@@ -1,4 +1,6 @@
 <?php
+if (PHP_SAPI !== 'cli') { http_response_code(404); exit; }
+// LEGADO: apenas referência histórica. Use database/schema.sql + database/migrate.php.
 /**
  * Script de Migração — Fase 5 (Repasse de Requisições)
  * Cria a tabela `request_forwards` para rastrear repasses entre setores.

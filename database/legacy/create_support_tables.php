@@ -1,4 +1,6 @@
 <?php
+if (PHP_SAPI !== 'cli') { http_response_code(404); exit; }
+// LEGADO: apenas referência histórica. Use database/schema.sql + database/migrate.php.
 /**
  * Script de migração: Cria tabelas de suporte para o novo fluxo de requisições.
  * Execute este script UMA VEZ para criar as tabelas necessárias.

@@ -111,6 +111,8 @@
 }
 
 .notif-item {
+    color: inherit;
+    text-decoration: none;
     padding: 1rem;
     border-bottom: 1px solid #f1f5f9;
     transition: background 0.2s;
