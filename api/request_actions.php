@@ -82,54 +82,39 @@ try {
 
     switch ($action) {
         case 'reset_status':
-            if (!$isAdmin && !$isGestor) throw new UserMessage('Apenas administradores e gestores podem reabrir uma requisição.');
-
             $reqData = getRequestData($pdo, $table, $id);
             if (!$reqData) throw new UserMessage("Requisição #$id não encontrada.");
 
-            if (!userCanActOnRequest($pdo, $reqData, $sector, (int)$user_id, $role)) {
-                throw new UserMessage('Você não tem permissão para gerenciar esta requisição.');
+            if (!userIsRequestOwner($pdo, $reqData, $sector, (int)$user_id, $role)) {
+                throw new UserMessage('Só o setor responsável pelo pedido pode reabri-lo.');
             }
 
             $oldStatus = $reqData['status'] ?? 'P';
             if ($oldStatus !== 'C') {
                 throw new UserMessage('Só é possível reabrir requisições concluídas.');
             }
-            $completedForward = isGestorRole($role)
-                ? getActiveForwardForUser($pdo, (int)$user_id, (int)$id, $sector, ['completed'])
-                : null;
-            $managesOriginalRequest = userCanManageOriginalRequest($pdo, $reqData, $sector, (int)$user_id, $role);
-            $isForwardReopen = !$managesOriginalRequest && $completedForward !== null;
-            $newStatus = $isForwardReopen ? 'F' : 'W';
 
             $pdo->beginTransaction();
-            changeStatus($pdo, $table, (int)$id, 'C', $newStatus);
-
-            if ($isForwardReopen) {
-                $stmtForward = $pdo->prepare("UPDATE request_forwards SET status = 'accepted', received_by = ? WHERE id = ?");
-                $stmtForward->execute([(int)$user_id, (int)$completedForward['id']]);
-            }
-
-            $historyMessage = $isForwardReopen
-                ? 'Repasse reaberto para atendimento'
-                : 'Requisição reaberta para atendimento';
-            RequestManager::addHistory($pdo, $id, $sector, $user_id, $user_name, $historyMessage, statusLabel($oldStatus), statusLabel($newStatus));
+            changeStatus($pdo, $table, (int)$id, 'C', 'W');
+            RequestManager::addHistory($pdo, $id, $sector, $user_id, $user_name, 'Requisição reaberta para atendimento', statusLabel('C'), statusLabel('W'));
             $pdo->commit();
 
             RequestManager::notifyStakeholders($pdo, $reqData, $sector,
-                "Requisição Reaberta",
-                "🔄 Requisição #$id ($sectorLabel) foi reaberta por $user_name e está em andamento.",
+                "Pedido reaberto",
+                "O pedido nº $id ($sectorLabel) foi reaberto por $user_name e voltou para atendimento.",
                 $link, $user_id);
 
-            $msg = "Requisição reaberta com sucesso.";
+            $msg = "Pedido reaberto.";
             break;
 
         case 'start_progress':
-            if (!$isGestor) throw new UserMessage('Apenas gestores de setor podem iniciar o atendimento. O ADM apenas aprova a solicitação.');
-            if (!isUserManagerOfSector($pdo, (int)$user_id, $sector)) throw new UserMessage('Você não gerencia este setor.');
+            if (!$isGestor) throw new UserMessage('Apenas os setores começam o atendimento. A administração aprova e acompanha.');
 
             $reqData = getRequestData($pdo, $table, $id);
             if (!$reqData) throw new UserMessage("Requisição #$id não encontrada.");
+            if (!userIsRequestOwner($pdo, $reqData, $sector, (int)$user_id, $role)) {
+                throw new UserMessage('Este pedido está com outro setor.');
+            }
 
             $currentStatus = trim(strtoupper($reqData['status'] ?? 'P'));
             if ($currentStatus === '') $currentStatus = 'P';
@@ -149,61 +134,40 @@ try {
                 $link, $user_id
             );
 
-            $msg = "Atendimento iniciado! A requisição agora está na aba 'Em Andamento'.";
+            $msg = "Atendimento iniciado.";
             break;
 
         case 'finish':
-            if (!$isGestor) throw new UserMessage('Apenas gestores de setor podem concluir requisições.');
+            if (!$isGestor) throw new UserMessage('Apenas os setores concluem pedidos.');
 
             $reqData = getRequestData($pdo, $table, $id);
             if (!$reqData) throw new UserMessage("Requisição #$id não encontrada.");
-
-            $currentStatus = trim(strtoupper($reqData['status'] ?? 'P'));
-            if ($currentStatus === 'F') {
-                $activeForward = getActiveForwardForUser($pdo, (int)$user_id, (int)$id, $sector, ['accepted']);
-                if (!$activeForward) {
-                    throw new UserMessage('Você não gerencia este setor.');
-                }
-
-                $result = RequestForwardService::completeForward($pdo, (int)$activeForward['id'], (int)$user_id, $user_name);
-                if (empty($result['success'])) {
-                    throw new UserMessage($result['message'] ?? 'Não foi possível concluir o repasse.');
-                }
-
-                $msg = $result['message'] ?? 'Requisição concluída com sucesso via repasse!';
-                break;
+            if (!userIsRequestOwner($pdo, $reqData, $sector, (int)$user_id, $role)) {
+                throw new UserMessage('Este pedido está com outro setor. Só o setor responsável pode concluir.');
             }
 
-            if (!isUserManagerOfSector($pdo, (int)$user_id, $sector)) throw new UserMessage('Você não gerencia este setor.');
-
+            $currentStatus = trim(strtoupper($reqData['status'] ?? 'P'));
             if ($currentStatus !== 'W') {
                 throw new UserMessage('Só é possível concluir requisições em atendimento. Situação atual: ' . statusLabel($currentStatus) . '.');
+            }
+            $openForward = RequestForwardService::openForward($pdo, (int)$id, $sector);
+            if ($openForward) {
+                throw new UserMessage('Há um encaminhamento em aberto com ' . $openForward['to_label'] . '. Aguarde a resposta ou cancele antes de concluir.');
             }
 
             $pdo->beginTransaction();
             changeStatus($pdo, $table, (int)$id, 'W', 'C');
-
-            // Fechar qualquer repasse ativo (pending ou accepted) vinculado a esta requisição
-            // Isso evita que o forward fique "pendurado" após a conclusão
-            $stmtCloseForwards = $pdo->prepare("
-                UPDATE request_forwards
-                SET status = 'completed', received_by = ?, updated_at = NOW()
-                WHERE request_id = ? AND request_table = ?
-                  AND status IN ('pending', 'accepted')
-            ");
-            $stmtCloseForwards->execute([$user_id, $id, $sector]);
-
             RequestManager::addHistory($pdo, $id, $sector, $user_id, $user_name, 'Requisição concluída', statusLabel('W'), statusLabel('C'));
             $pdo->commit();
 
             $reqTitle = $reqData['title'] ?? "Requisição #$id";
             RequestManager::notifyStakeholders($pdo, $reqData, $sector,
-                "Requisição Concluída",
-                "✅ Requisição #$id ($sectorLabel) — \"$reqTitle\" — foi concluída com sucesso por $user_name.",
+                "Pedido concluído",
+                "O pedido nº $id ($sectorLabel), \"$reqTitle\", foi concluído por $user_name.",
                 $link, $user_id
             );
 
-            $msg = "Requisição concluída com sucesso!";
+            $msg = "Pedido concluído.";
             break;
 
         case 'set_priority':

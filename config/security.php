@@ -309,6 +309,10 @@ function getRequestRow(PDO $pdo, string $sector, int $id): ?array
     return $row ?: null;
 }
 
+/**
+ * O usuário participou (enviando ou recebendo) de algum encaminhamento deste pedido?
+ * Dá direito a VER o pedido e conversar, não a agir sobre ele.
+ */
 function userHasForwardAccess(PDO $pdo, int $userId, int $requestId, string $sector): bool
 {
     $normalizedSector = normalizeRequestTable($sector);
@@ -319,45 +323,38 @@ function userHasForwardAccess(PDO $pdo, int $userId, int $requestId, string $sec
     $stmt = $pdo->prepare("
         SELECT COUNT(*)
         FROM request_forwards rf
-        JOIN cfg_user_area cua ON cua.id_area = rf.to_area_id
-        WHERE rf.request_id = ?
-          AND rf.request_table = ?
-          AND rf.status IN ('pending', 'accepted', 'completed')
-          AND cua.id_user = ?
+        JOIN cfg_user_area cua ON cua.id_area IN (rf.to_area_id, rf.from_area_id)
+        WHERE rf.request_id = ? AND rf.request_table = ? AND cua.id_user = ?
     ");
     $stmt->execute([$requestId, $normalizedSector, $userId]);
 
     return (int)$stmt->fetchColumn() > 0;
 }
 
-function getActiveForwardForUser(PDO $pdo, int $userId, int $requestId, string $sector, array $statuses = ['pending', 'accepted']): ?array
+/**
+ * Setor responsável atual do pedido (ctd_area.id).
+ * É o destino da última transferência aceita; sem transferência, o setor do formulário.
+ */
+function requestOwnerAreaId(PDO $pdo, int $requestId, string $sector): ?int
 {
-    $normalizedSector = normalizeRequestTable($sector);
-    if ($normalizedSector === null || $userId <= 0 || $requestId <= 0 || empty($statuses)) {
-        return null;
-    }
-
-    $placeholders = implode(',', array_fill(0, count($statuses), '?'));
-    $stmt = $pdo->prepare("
-        SELECT rf.*
-        FROM request_forwards rf
-        JOIN cfg_user_area cua ON cua.id_area = rf.to_area_id
-        WHERE rf.request_id = ?
-          AND rf.request_table = ?
-          AND cua.id_user = ?
-          AND rf.status IN ($placeholders)
-        ORDER BY rf.created_at DESC, rf.id DESC
-        LIMIT 1
-    ");
-    $stmt->execute(array_merge([$requestId, $normalizedSector, $userId], $statuses));
-    $row = $stmt->fetch(PDO::FETCH_ASSOC);
-
-    return $row ?: null;
+    require_once __DIR__ . '/../classes/RequestForwardService.php';
+    return RequestForwardService::ownerAreaId($pdo, $requestId, normalizeRequestTable($sector) ?? $sector);
 }
 
-function userCanManageForwardedRequest(PDO $pdo, array $request, string $sector, int $userId): bool
+/**
+ * É o responsável pelo pedido? (gestor do setor responsável atual, ou administrador geral)
+ */
+function userIsRequestOwner(PDO $pdo, array $request, string $sector, int $userId, string $role): bool
 {
-    return getActiveForwardForUser($pdo, $userId, (int)($request['id'] ?? 0), $sector, ['pending', 'accepted', 'completed']) !== null;
+    if (isGlobalAdminRole($role)) {
+        return true;
+    }
+    if (!isGestorRole($role)) {
+        return false;
+    }
+    require_once __DIR__ . '/../classes/RequestForwardService.php';
+    $ownerArea = requestOwnerAreaId($pdo, (int)($request['id'] ?? 0), $sector);
+    return RequestForwardService::userInArea($pdo, $userId, $ownerArea);
 }
 
 function userCanViewRequest(PDO $pdo, array $request, string $sector, int $userId, string $role): bool
@@ -381,12 +378,17 @@ function userCanViewRequest(PDO $pdo, array $request, string $sector, int $userI
 
     if (isGestorRole($role)) {
         return isUserManagerOfSector($pdo, $userId, normalizeRequestTable($sector) ?? $sector)
+            || userIsRequestOwner($pdo, $request, $sector, $userId, $role)
             || userHasForwardAccess($pdo, $userId, $requestId, $sector);
     }
 
     return false;
 }
 
+/**
+ * Escopo de aprovação: administrador geral, ou coordenação da subdivisão do pedido.
+ * (Também usado para mudar urgência e cancelar, como antes.)
+ */
 function userCanManageOriginalRequest(PDO $pdo, array $request, string $sector, int $userId, string $role): bool
 {
     $requestSubdivisionId = isset($request['subdivision_id']) ? (int)$request['subdivision_id'] : null;
@@ -400,17 +402,17 @@ function userCanManageOriginalRequest(PDO $pdo, array $request, string $sector, 
             || userCanAccessCreatorSubdivision($pdo, (int)($request['created_by'] ?? 0));
     }
 
-    if (isGestorRole($role)) {
-        return isUserManagerOfSector($pdo, $userId, normalizeRequestTable($sector) ?? $sector);
-    }
-
     return false;
 }
 
+/**
+ * Pode agir sobre o pedido (urgência, reabrir)? Responsável atual ou coordenação da subdivisão.
+ * Começar e concluir exigem ser gestor do setor responsável (ver api/request_actions.php).
+ */
 function userCanActOnRequest(PDO $pdo, array $request, string $sector, int $userId, string $role): bool
 {
-    return userCanManageOriginalRequest($pdo, $request, $sector, $userId, $role)
-        || (isGestorRole($role) && userCanManageForwardedRequest($pdo, $request, $sector, $userId));
+    return userIsRequestOwner($pdo, $request, $sector, $userId, $role)
+        || userCanManageOriginalRequest($pdo, $request, $sector, $userId, $role);
 }
 
 function getAreaIdBySector(PDO $pdo, string $sector): ?int
