@@ -9,6 +9,8 @@ $role = $_SESSION['role'] ?? 'view';
 $force_reset = (int)($_SESSION['force_reset'] ?? 0);
 $assetVersion = max(array_map(fn($f) => (int)@filemtime($f), glob(__DIR__ . '/assets/{js,css}/*.{js,css}', GLOB_BRACE) ?: [])) ?: time();
 $csrfToken = getCsrfToken();
+// Caminho base da aplicação (funciona em subpasta local ou na raiz do domínio)
+$basePath = rtrim(str_replace(chr(92), '/', dirname($_SERVER['SCRIPT_NAME'])), '/') . '/';
 
 // Solicitante não tem painel: vai direto para as próprias requisições
 $requestedPage = (isset($url[0]) && $url[0] !== '') ? $url[0] : 'home';
@@ -38,7 +40,7 @@ if ($logged && $force_reset === 1) {
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <base href="/requests2.0/">
+    <base href="<?= e($basePath) ?>">
     <meta name="theme-color" content="#111827">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.2/css/all.min.css" crossorigin="anonymous" referrerpolicy="no-referrer">
     <link rel="icon" href="assets/img/LogoFavConSisreq.png">

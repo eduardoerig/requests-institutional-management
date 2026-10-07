@@ -57,59 +57,65 @@ Desenvolvido com uma interface moderna, sofisticadamente clean e responsiva (Mob
  ┣ 📂 classes/      # Camada de Negócio e Repositórios (Ex: RequestManager.php)
  ┣ 📂 components/   # Fragmentos de Layout Reutilizáveis (Sidebar, Navbar)
  ┣ 📂 config/       # Variáveis de ambiente e conexão PDO
- ┣ 📂 migrations/   # Estrutura SQL do banco de dados relacional
+ ┣ 📂 database/     # schema.sql, migrations/, migrate.php e scripts de linha de comando
+ ┣ 📂 tests/        # Testes de integração (php tests/run.php)
  ┗ 📂 pages/        # Controladores e Views Principais da Aplicação
 ```
 
 ---
 
-## ⚙️ Instalação e Configuração (Local)
+## ⚙️ Instalação
 
-1. **Clone o Repositório**:
+Requisitos: PHP 8.1+ (pdo_mysql, mbstring, curl), MySQL 5.7+ ou MariaDB 10.4+, Apache com `mod_rewrite` (e, de preferência, `mod_headers`).
+
+1. **Código**: copie o projeto para a pasta pública (raiz do domínio ou subpasta). **Não envie** `scratch/`, `database/backups/` nem `*.local.*`.
+2. **Credenciais do banco** (nunca no git), uma das opções:
+   * variáveis de ambiente `DB_HOST`, `DB_NAME`, `DB_USER`, `DB_PASS`; ou
+   * `config/conn.local.php` a partir de `config/conn.local.example.php`.
+3. **Banco de dados** (pela linha de comando):
    ```bash
-   git clone https://github.com/eduardoerig/requests-institutional-management.git
+   php database/migrate.php --fresh    # banco NOVO e vazio
+   php database/migrate.php            # banco existente: aplica só o que falta
+   php database/migrate.php --status   # mostra o que já foi aplicado
    ```
-
-2. **Prepare o Banco de Dados**:
-   * Importe os esquemas SQL contidos no diretório `/migrations`.
-   
-3. **Configure a Conexão**:
-   * Renomeie ou crie o arquivo em `/config/conn.php` e adicione os dados locais:
-   ```php
-   <?php
-   $host = 'localhost';
-   $dbname = 'nome_do_banco';
-   $user = 'root';
-   $pass = '';
-   
-   try {
-       $conn = new PDO("mysql:host=$host;dbname=$dbname;charset=utf8", $user, $pass);
-       $conn->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
-       $pdo = $conn;
-   } catch (PDOException $e) {
-       die("System Offline.");
-   }
-   ?>
+4. **Primeiro administrador** (senha temporária exibida uma vez; troca obrigatória no 1º acesso):
+   ```bash
+   php database/seed_admin.php admin "Nome do Administrador"
    ```
+5. **PHP em produção**: `display_errors=Off`, `log_errors=On`, sem Xdebug, OPcache ligado.
+6. **HTTPS**: o `.htaccess` redireciona para HTTPS fora de `localhost`. Instale o certificado (cPanel → SSL/TLS ou AutoSSL).
+7. **Backup diário** do MySQL (cPanel → Cron Jobs), por exemplo:
+   ```bash
+   mysqldump --single-transaction -u USUARIO -p'SENHA' BANCO | gzip > ~/backups/sisreq_$(date +\%F).sql.gz
+   ```
+   Teste a restauração ao menos uma vez antes do lançamento.
 
-4. **Inicie o Servidor**:
-   * Aloque o projeto no diretório base (`www` ou `htdocs`) do seu servidor web (Apache/Nginx).
-   * Verifique se o módulo de **Rewrite (mod_rewrite)** do Apache está ligado para suportar as rotas amigáveis do `.htaccess`.
+### Integração WhatsApp
+Desligada por padrão. Para ativar: `BOT_ENABLED=1` e `BOT_KEY=<chave longa>` no ambiente (ou `bot_enabled`/`bot_key` em `config/conn.local.php`).
 
----
+## ✅ Testes
 
-## 🚥 Pipeline e Nomenclatura de Status
+Em um banco de **homologação** com o servidor rodando:
+```bash
+php database/seed_test_users.php     # contas de teste (credenciais em database/test_accounts.local.txt)
+php tests/run.php                    # 67 verificações de fluxo, permissão e segurança
+```
+`TEST_BASE_URL` muda o endereço testado (padrão `http://localhost/requests2.0/`).
 
-O sistema adota letras chaves no backend para padronizar as condições globais de um chamado:
+## 🚥 Situações da requisição
 
-| Código | Nomenclatura | Descrição |
+Toda tela usa os mesmos nomes (`statusLabel()` em `config/security.php`):
+
+| Código | Nome na tela | Significado |
 | :---: | :--- | :--- |
-| `P` | **Pendente** | Na triagem da gerência geral. |
-| `Y` | **Aprovada** | O.K. do administrador. A caminho da caixa do técnico. |
-| `W` | **Em Andamento** | O técnico ou setor responsável aceitou e começou a tratar. |
-| `F` | **Repassada** | Serviço delegado de um técnico para outro departamento. |
-| `C` | **Concluída** | Fim da jornada. Solução registrada e notificada. |
-| `N` | **Recusada** | Ticket invalidado pelos gestores. |
+| `P` | **Aguardando aprovação** | A coordenação ainda vai analisar. |
+| `Y` | **Aprovada** | Na fila do setor responsável. |
+| `W` | **Em atendimento** | O setor está trabalhando no pedido. |
+| `F` | **Encaminhada a outro setor** | Outro setor vai continuar o atendimento. |
+| `C` | **Concluída** | Pedido atendido. |
+| `N` | **Recusada** | Não aprovada; o motivo fica na conversa do pedido. |
+
+Transições permitidas: `P→Y/N` (coordenação/admin, recusa exige motivo), `Y→W` (setor), `W→F→W` (encaminhar/aceitar), `W→C` e `F→C` (setor), `C→W` (reabrir).
 
 ---
 

@@ -303,7 +303,30 @@ $status = $pdo->query("SELECT status FROM ctd_ti_frm WHERE id = $fwdReqId")->fet
 check('pedido encaminhado termina Concluída', $status === 'C', (string)$status);
 
 // ------------------------------------------------------------------
-section('12. Limpeza');
+section('12. Todas as páginas abrem para cada perfil');
+$pages = ['home', 'new_request', 'myRequests', 'approve', 'approved', 'inWork', 'myAccount', 'accounts', 'ajuda', "request_detail?id=$reqId&table=ti", 'home?status=C', 'home?q=teste'];
+foreach (['solicitante' => $sol, 'coordenação' => $apr, 'gestor TI' => $ti, 'admin' => $adm] as $who => $client) {
+    $broken = [];
+    foreach ($pages as $page) {
+        $res = $client->get($page);
+        $complete = str_contains($res['body'], '</html>');
+        $phpError = preg_match('/(Fatal error|Warning|Notice|Deprecated|Uncaught)/', $res['body']);
+        if (!in_array($res['status'], [200, 302], true) || ($res['status'] === 200 && (!$complete || $phpError))) {
+            $broken[] = "$page (HTTP {$res['status']})";
+        }
+    }
+    check("$who: páginas carregam completas e sem erro de PHP", !$broken, implode(', ', $broken));
+}
+
+// ------------------------------------------------------------------
+section('13. Limpeza');
+// O banco remoto fecha conexões ociosas: reconecta antes de limpar
+require dirname(__DIR__) . '/config/conn.php';
+// Inclui sobras de rodadas anteriores interrompidas
+$leftovers = $pdo->query("SELECT 'ti' AS t, id FROM ctd_ti_frm WHERE created_by = $solId AND title IN ('Teste automático <script>x</script>', 'Para cancelar', 'Teste repasse')")->fetchAll(PDO::FETCH_NUM);
+foreach ($leftovers as $row) {
+    $createdIds[] = [$row[0], (int)$row[1]];
+}
 foreach ($createdIds as [$t, $id]) {
     if ($id <= 0) {
         continue;
