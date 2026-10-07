@@ -228,7 +228,7 @@ class RequestManager {
                     $stats['total']++;
                     
                     if ($isAtrasada) $stats['atrasadas']++;
-                    if (!empty($r['urgent'])) $stats['urgentes']++;
+                    if (!empty($r['urgent']) || (int)($r['priority'] ?? 2) >= 3) $stats['urgentes']++;
                     if (isset($r['priority']) && $r['priority'] == 4) $stats['criticas']++;
                     
                     $stMapped = $st;

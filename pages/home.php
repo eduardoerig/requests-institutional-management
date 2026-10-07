@@ -13,12 +13,9 @@ $role = $_SESSION['role'] ?? 'view';
 $user_id = $_SESSION['id'];
 
 // Definição de perfis com permissão de gestão
-$adminRoles = ['admin', 'adm', 'coord'];
-$gestorRoles = ['gestor', 'ti', 'xerox', 'service', 'shop', 'mkt', 'marketing'];
-
-$isAdmin = in_array($role, $adminRoles);
+$isAdmin = isGlobalAdminRole($role);
 $isAdmSub = ($role === 'adm_sub');
-$isGestor = in_array($role, $gestorRoles);
+$isGestor = isGestorRole($role);
 $canManage = $isAdmin || $isGestor || $isAdmSub;
 
 if (!$canManage) {
@@ -27,6 +24,7 @@ if (!$canManage) {
 }
 
 require_once __DIR__ . '/../classes/RequestManager.php';
+require_once __DIR__ . '/../components/request_card.php';
 
 // Pegar setores permitidos para este usuário
 $allowedSectors = [];
@@ -122,399 +120,194 @@ $unread_count = $unread_stmt->fetchColumn();
 // Status stepper labels
 $stepperMap = ['P' => 0, 'Y' => 1, 'W' => 2, 'C' => 3, 'N' => -1];
 ?>
-<style>
-/* === DASHBOARD COMPACTO === */
-.db-kpi-strip{display:flex;align-items:center;background:#fff;border:1px solid var(--border-color);border-radius:10px;padding:10px 16px;margin-bottom:18px;gap:0;overflow-x:auto;}
-.db-kpi{display:flex;align-items:center;gap:10px;flex:1;min-width:110px;text-decoration:none;color:inherit;padding:4px 14px;}
-.db-kpi--active .db-kpi__val{color:var(--primary);}
-.db-kpi__icon{width:32px;height:32px;border-radius:8px;display:flex;align-items:center;justify-content:center;font-size:0.82rem;flex-shrink:0;}
-.db-kpi__val{font-size:1.3rem;font-weight:800;color:var(--text-main);line-height:1;}
-.db-kpi__lbl{font-size:0.65rem;color:var(--text-muted);font-weight:600;text-transform:uppercase;letter-spacing:0.4px;margin-top:1px;}
-.db-kpi__bar{height:3px;background:#f1f5f9;border-radius:2px;margin-top:4px;width:80px;}
-.db-kpi__bar-fill{height:3px;background:#15803d;border-radius:2px;}
-.db-kpi__sep{width:1px;height:32px;background:var(--border-color);flex-shrink:0;margin:0 2px;}
-.db-charts{display:grid;grid-template-columns:repeat(auto-fit, minmax(280px, 1fr));gap:16px;margin-bottom:20px;}
-.db-chart-box{background:#fff;border:1px solid var(--border-color);border-radius:10px;padding:16px;display:flex;flex-direction:column;gap:10px;min-width:0;}
-.db-chart-head{font-size:0.76rem;font-weight:700;color:var(--text-main);display:flex;align-items:center;gap:7px;border-bottom:1px solid var(--border-color);padding-bottom:10px;}
-.db-canvas-wrap{position:relative;height:160px;width:100%;}
-.db-donut-center{position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);text-align:center;pointer-events:none;}
-.db-donut-center__val{font-size:1.5rem;font-weight:800;color:var(--text-main);line-height:1;}
-.db-donut-center__lbl{font-size:0.6rem;color:var(--text-muted);font-weight:600;text-transform:uppercase;}
-.db-legend{display:flex;flex-wrap:wrap;gap:4px 10px;}
-.db-legend__item{display:flex;align-items:center;gap:5px;font-size:0.67rem;color:var(--text-muted);font-weight:600;}
-.db-legend__dot{width:7px;height:7px;border-radius:50%;flex-shrink:0;}
-.db-health{display:flex;flex-direction:column;gap:9px;flex:1;justify-content:center;}
-.db-health__row{display:grid;grid-template-columns:85px 1fr 28px;align-items:center;gap:8px;}
-.db-health__lbl{font-size:0.7rem;color:var(--text-muted);font-weight:600;white-space:nowrap;}
-.db-health__bar{height:5px;background:#f1f5f9;border-radius:4px;overflow:hidden;}
-.db-health__fill{height:5px;border-radius:4px;}
-.db-health__num{font-size:0.72rem;font-weight:800;text-align:right;}
-@media(max-width:900px){.db-charts{grid-template-columns:1fr;}.db-kpi__sep{display:none;}.db-kpi-strip{flex-wrap:wrap;}}
-</style>
-<div class="main">
+<?php
+$pageHeading = [
+    'P' => 'Aguardando aprovação', 'Y' => 'Aprovadas', 'W' => 'Em atendimento',
+    'C' => 'Concluídas', 'N' => 'Recusadas', 'F' => 'Encaminhadas',
+][$activeFilterStatus] ?? 'Painel';
 
-    <div class="page-header">
-        <div>
-            <i class="fa-solid fa-chart-pie"></i>
-            <div>
-                <h3>Dashboard</h3>
-                <p style="font-size: 0.85rem; color: var(--text-muted); margin: 2px 0 0;">
-                    <?php if ($isGestor): ?>
-                        Visualizando requisições aprovadas dos seus setores
-                    <?php else: ?>
-                        Visão geral de todas as requisições
-                    <?php endif; ?>
-                </p>
-            </div>
-        </div>
-        <div>
-            <a href="new_request" class="btn-primary"><i class="fas fa-plus"></i> Nova Requisição</a>
-        </div>
+// Esteira: as etapas em ordem; setores não veem as etapas de aprovação
+$pipeline = [
+    'P' => ['Aguardando aprovação', $pendentes ?? 0],
+    'Y' => [$isGestor ? 'Para atender' : 'Aprovadas', $aprovadas ?? 0],
+    'W' => ['Em atendimento', $emAndamento ?? 0],
+    'C' => ['Concluídas', $concluidas ?? 0],
+    'N' => ['Recusadas', $recusadas ?? 0],
+];
+if ($isGestor) {
+    unset($pipeline['P'], $pipeline['N']);
+}
+$hasFilter = $activeFilterStatus || $searchTerm !== '' || $searchDate !== '';
+?>
+<div class="page-head">
+    <div class="page-head--hide-mobile">
+        <h1><?= e($pageHeading) ?></h1>
+        <p><?= $isAdmSub ? 'Pedidos da sua subdivisão.' : ($isGestor ? 'Pedidos do seu setor.' : 'Todos os pedidos da escola.') ?></p>
     </div>
+    <button type="button" onclick="exportToExcel()" class="btn"><i class="fa-solid fa-file-csv" aria-hidden="true"></i> Exportar planilha</button>
+</div>
 
-    <?php if (!$activeFilterStatus): ?>
-    <!-- Pipeline Visual (Fluxo) -->
-    <div class="flow-pipeline">
-        <?php if ($isAdmin): ?>
-        <a href="home?status=P" class="flow-step <?= $activeFilterStatus === 'P' ? 'active' : '' ?>">
-            <div class="flow-icon pending-bg"><i class="fa-solid fa-clock"></i></div>
-            <div class="flow-label">Pendentes</div>
-            <div class="flow-count"><?= $pendentes ?></div>
+<nav class="pipeline" aria-label="Pedidos por etapa" style="<?= $isGestor ? 'grid-template-columns: repeat(3, 1fr);' : '' ?>">
+    <?php foreach ($pipeline as $code => [$label, $count]):
+        $isOn = $activeFilterStatus === $code;
+        $href = $isOn ? 'home' : 'home?status=' . $code;
+    ?>
+        <a class="pipeline__step pipeline__step--<?= $code ?><?= $isOn ? ' is-active' : '' ?>" href="<?= e($href) ?>"<?= $isOn ? ' aria-current="true"' : '' ?>>
+            <strong><?= (int)$count ?></strong>
+            <span><?= e($label) ?></span>
         </a>
-        <div class="flow-arrow"><i class="fa-solid fa-arrow-right"></i></div>
-        <?php endif; ?>
-        <a href="home?status=Y" class="flow-step <?= $activeFilterStatus === 'Y' ? 'active' : '' ?>">
-            <div class="flow-icon approved-bg"><i class="fa-solid fa-check-circle"></i></div>
-            <div class="flow-label">Aprovadas</div>
-            <div class="flow-count"><?= $aprovadas ?></div>
-        </a>
-        <div class="flow-arrow"><i class="fa-solid fa-arrow-right"></i></div>
-        <a href="home?status=W" class="flow-step <?= $activeFilterStatus === 'W' ? 'active' : '' ?>">
-            <div class="flow-icon progress-bg"><i class="fa-solid fa-gears"></i></div>
-            <div class="flow-label">Em Andamento</div>
-            <div class="flow-count"><?= $emAndamento ?></div>
-        </a>
-        <div class="flow-arrow"><i class="fa-solid fa-arrow-right"></i></div>
-        <a href="home?status=C" class="flow-step <?= $activeFilterStatus === 'C' ? 'active' : '' ?>">
-            <div class="flow-icon completed-bg"><i class="fa-solid fa-check-double"></i></div>
-            <div class="flow-label">Concluídas</div>
-            <div class="flow-count"><?= $concluidas ?></div>
-        </a>
-        <?php if ($isAdmin): ?>
-        <div class="flow-divider"></div>
-        <a href="home?status=N" class="flow-step <?= $activeFilterStatus === 'N' ? 'active' : '' ?>">
-            <div class="flow-icon rejected-bg"><i class="fa-solid fa-circle-xmark"></i></div>
-            <div class="flow-label">Recusadas</div>
-            <div class="flow-count"><?= $recusadas ?></div>
-        </a>
-        <?php endif; ?>
-    </div>
+    <?php endforeach; ?>
+</nav>
 
-    <?php $taxa = ($total > 0) ? round(($concluidas / $total) * 100) : 0; ?>
-    <!-- KPI Strip Compacto -->
-    <div class="db-kpi-strip">
-        <a href="home" class="db-kpi <?= !$activeFilterStatus ? 'db-kpi--active' : '' ?>">
-            <span class="db-kpi__icon" style="background:#eff6ff;color:#2563eb"><i class="fa-solid fa-list-check"></i></span>
-            <div><div class="db-kpi__val"><?= $total ?></div><div class="db-kpi__lbl">Total</div></div>
-        </a>
-        <div class="db-kpi__sep"></div>
-        <div class="db-kpi"><span class="db-kpi__icon" style="background:#fffbeb;color:#d97706"><i class="fa-solid fa-fire-flame-curved"></i></span><div><div class="db-kpi__val"><?= $urgentes ?></div><div class="db-kpi__lbl">Urgentes</div></div></div>
-        <div class="db-kpi__sep"></div>
-        <div class="db-kpi"><span class="db-kpi__icon" style="background:#fef2f2;color:#dc2626"><i class="fa-solid fa-fire"></i></span><div><div class="db-kpi__val"><?= $criticas ?></div><div class="db-kpi__lbl">Críticas</div></div></div>
-        <div class="db-kpi__sep"></div>
-        <div class="db-kpi"><span class="db-kpi__icon" style="background:#fff1f2;color:#be123c"><i class="fa-solid fa-hourglass-end"></i></span><div><div class="db-kpi__val"><?= $atrasadas ?></div><div class="db-kpi__lbl">Atrasadas</div></div></div>
-        <div class="db-kpi__sep"></div>
-        <div class="db-kpi"><span class="db-kpi__icon" style="background:#f0fdf4;color:#15803d"><i class="fa-solid fa-chart-line"></i></span>
-            <div><div class="db-kpi__val"><?= $taxa ?>%</div><div class="db-kpi__lbl">Taxa Conclusão</div>
-            <div class="db-kpi__bar"><div class="db-kpi__bar-fill" style="width:<?= $taxa ?>%"></div></div></div>
-        </div>
-    </div>
+<p class="alerts-row">
+    <span class="<?= ($atrasadas ?? 0) > 0 ? 'is-bad' : '' ?>"><b><?= (int)($atrasadas ?? 0) ?></b> com prazo vencido</span>
+    <span class="<?= ($criticas ?? 0) > 0 ? 'is-bad' : '' ?>"><b><?= (int)($criticas ?? 0) ?></b> críticas</span>
+    <span><b><?= (int)($urgentes ?? 0) ?></b> com urgência alta ou crítica</span>
+    <span><b><?= (int)($total ?? 0) ?></b> no total</span>
+</p>
 
-    <!-- Gráficos 3 colunas -->
-    <div class="db-charts">
-        <div class="db-chart-box">
-            <div class="db-chart-head"><i class="fa-solid fa-circle-half-stroke" style="color:var(--primary)"></i> Status</div>
-            <div class="db-canvas-wrap">
-                <canvas id="statusChart"></canvas>
-                <div class="db-donut-center"><div class="db-donut-center__val"><?= $total ?></div><div class="db-donut-center__lbl">Total</div></div>
-            </div>
-            <div class="db-legend" id="statusLegend"></div>
+<div class="dash-grid">
+    <section class="panel" aria-labelledby="tabelaTitulo">
+        <div class="panel__head" style="flex-wrap:wrap;">
+            <h2 id="tabelaTitulo"><?= e($activeFilterStatus ? $pageHeading : 'Pedidos') ?></h2>
+            <?php if ($activeFilterStatus): ?><a class="btn btn--sm btn--ghost" href="home">Ver todos</a><?php endif; ?>
         </div>
-        <div class="db-chart-box">
-            <div class="db-chart-head"><i class="fa-solid fa-layer-group" style="color:var(--primary)"></i> Por Setor</div>
-            <div class="db-canvas-wrap"><canvas id="categoryChart"></canvas></div>
-        </div>
-        <div class="db-chart-box">
-            <div class="db-chart-head"><i class="fa-solid fa-gauge-high" style="color:var(--primary)"></i> Saúde do Fluxo</div>
-            <div class="db-health">
-                <?php
-                $hi = [
-                    ['Pendentes',$pendentes,'#eab308'],['Aprovadas',$aprovadas,'#10b981'],
-                    ['Em Andamento',$emAndamento,'#3b82f6'],['Concluídas',$concluidas,'#15803d'],
-                    ['Recusadas',$recusadas,'#ef4444'],['Atrasadas',$atrasadas,'#be123c'],
-                ];
-                foreach($hi as $h):
-                    $p = $total>0 ? round($h[1]/$total*100) : 0;
-                ?>
-                <div class="db-health__row">
-                    <div class="db-health__lbl"><?= $h[0] ?></div>
-                    <div class="db-health__bar"><div class="db-health__fill" style="width:<?= $p ?>%;background:<?= $h[2] ?>"></div></div>
-                    <div class="db-health__num" style="color:<?= $h[2] ?>"><?= $h[1] ?></div>
-                </div>
-                <?php endforeach; ?>
-            </div>
-        </div>
-    </div>
-    <?php endif; ?>
-
-    <!-- Tabela Principal Unificada (Recentes) -->
-    <div class="dashboard-table-container">
-        <div class="table-header" style="flex-direction: column; align-items: stretch; gap: 16px;">
-            <div style="display: flex; justify-content: space-between; align-items: center;">
-                <h4><?= $tableTitle ?></h4>
-                <button onclick="exportToExcel()" class="btn-primary" title="Exportar dados atuais para CSV (Excel)" style="background: #f0fdf4; color: #15803d; border: 1px solid #86efac; padding: 8px 16px; font-size: 0.85rem; font-weight: 600; box-shadow: none; border-radius: 8px; display:inline-flex; align-items:center; gap:7px;">
-                    <i class="fa-solid fa-file-csv"></i> Exportar Dados
-                </button>
-            </div>
-            
-            <form method="get" action="home" class="dash-filters" role="search">
+        <div class="panel__body" style="padding-bottom:6px;">
+            <form method="get" action="home" class="row" role="search" style="align-items:flex-end;">
                 <?php if ($activeFilterStatus): ?><input type="hidden" name="status" value="<?= e($activeFilterStatus) ?>"><?php endif; ?>
-                <label class="search-box" style="flex:1 1 260px;">
-                    <i class="fas fa-search" aria-hidden="true"></i>
-                    <input type="search" name="q" id="dashSearch" value="<?= e($searchTerm) ?>" placeholder="Título, número ou nome do solicitante" aria-label="Buscar requisição">
-                </label>
-                <label class="dash-date">
-                    <span>Pedidas no dia</span>
+                <div class="field" style="flex:1 1 260px; margin:0;">
+                    <label for="dashSearch">Buscar</label>
+                    <div class="search-box">
+                        <i class="fas fa-search" aria-hidden="true"></i>
+                        <input type="search" name="q" id="dashSearch" value="<?= e($searchTerm) ?>" placeholder="Título, número ou solicitante">
+                    </div>
+                </div>
+                <div class="field field--date" style="margin:0; width:180px;">
+                    <label for="dateFilter">Pedidos do dia</label>
                     <input type="date" name="data" id="dateFilter" value="<?= e($searchDate) ?>">
-                </label>
-                <button type="submit" class="btn-big btn-big--primary"><i class="fa-solid fa-magnifying-glass"></i> Buscar</button>
+                </div>
+                <button type="submit" class="btn btn--dark"><i class="fa-solid fa-magnifying-glass" aria-hidden="true"></i> Buscar</button>
                 <?php if ($searchTerm !== '' || $searchDate !== ''): ?>
-                    <a class="btn-big" href="<?= e('home' . ($activeFilterStatus ? '?status=' . $activeFilterStatus : '')) ?>">Limpar</a>
+                    <a class="btn btn--ghost" href="<?= e('home' . ($activeFilterStatus ? '?status=' . $activeFilterStatus : '')) ?>">Limpar busca</a>
                 <?php endif; ?>
             </form>
-            <p class="dash-count"><?= $totalRows ?> requisição(ões) encontrada(s)<?= $totalPages > 1 ? ' — página ' . $currentPageNum . ' de ' . $totalPages : '' ?></p>
+            <p class="result-count" style="margin:12px 0 0;"><?= $totalRows ?> <?= $totalRows === 1 ? 'pedido encontrado' : 'pedidos encontrados' ?><?= $totalPages > 1 ? ', página ' . $currentPageNum . ' de ' . $totalPages : '' ?></p>
         </div>
-        <div class="table-responsive">
-            <table class="dash-table">
+
+        <div class="table-wrap">
+            <table class="data-table data-table--stack">
                 <thead>
                     <tr>
-                        <th>Detalhes</th>
-                        <th>Solicitante</th>
-                        <th>Classificação</th>
-                        <th>Prazo</th>
-                        <th>Progresso</th>
-                        <th style="text-align: right;">Ações</th>
+                        <th scope="col">Nº</th>
+                        <th scope="col">Pedido</th>
+                        <th scope="col">Setor</th>
+                        <th scope="col">Prazo</th>
+                        <th scope="col">Situação</th>
+                        <th scope="col"><span class="visually-hidden">Ações</span></th>
                     </tr>
                 </thead>
                 <tbody>
                     <?php if (count($recent_requests) > 0): ?>
-                        <?php foreach($recent_requests as $req): ?>
-                            <?php
-                                // Formatação de data de criação
-                                $createdTs   = isset($req['created_at']) ? strtotime($req['created_at']) : 0;
-                                $createdFmt  = $createdTs ? date('d/m/Y', $createdTs) : '—';
-
-                                // Formatação robusta do prazo (date)
-                                $rawDate     = $req['date'] ?? '';
-                                $hasPrazo    = (!empty($rawDate) && $rawDate !== '0000-00-00');
-                                $prazoTs     = $hasPrazo ? strtotime($rawDate) : 0;
-                                $prazoFmt    = ($prazoTs && $prazoTs > 0) ? date('d/m/Y', $prazoTs) : null;
-
-                                // Determina se está atrasada com base na data de prazo
-                                $isAtrasada  = $req['is_atrasada'] ?? false;
-                                $isVencHoje  = ($prazoTs && date('Y-m-d', $prazoTs) === date('Y-m-d'));
-
-                                // Status atual
-                                $st          = strtoupper($req['status'] ?? 'P');
-                                $stepIndex   = $stepperMap[$st] ?? 0;
-                                $isRejected  = ($st === 'N');
-                                $steps = [
-                                    ['label' => 'Pendente',  'icon' => 'fa-clock'],
-                                    ['label' => 'Aprovada',  'icon' => 'fa-check'],
-                                    ['label' => 'Atendendo', 'icon' => 'fa-gears'],
-                                    ['label' => 'Concluída', 'icon' => 'fa-check-double'],
-                                ];
-                                $pri = $req['priority'] ?? 2;
-                            ?>
+                        <?php foreach ($recent_requests as $req):
+                            $st = strtoupper($req['status'] ?? 'P') ?: 'P';
+                            $pri = (int)($req['priority'] ?? 2);
+                            $tbl = $req['table'];
+                            $detailHref = 'request_detail?id=' . (int)$req['id'] . '&table=' . urlencode($tbl);
+                        ?>
                             <tr>
-                                <!-- COLUNA: Detalhes -->
-                                <td style="min-width: 200px;">
-                                    <div style="font-weight:600; color:var(--text-main); line-height:1.4; margin-bottom:4px;">
-                                        <?= htmlspecialchars($req['title']) ?>
-                                    </div>
-                                    <div style="display:flex; align-items:center; gap:8px;">
-                                        <span style="font-size:0.75rem; color:var(--text-muted); background:#f1f5f9; padding:1px 7px; border-radius:5px; font-weight:600;">#<?= $req['id'] ?></span>
-                                        <?php if (!empty($req['is_forwarded'])): ?>
-                                            <span style="font-size:0.68rem; background:#fef3c7; color:#d97706; padding:1px 7px; border-radius:5px; font-weight:700; border:1px solid #fde68a;">
-                                                <i class="fa-solid fa-share-nodes"></i> Repassada
-                                            </span>
-                                        <?php endif; ?>
-                                    </div>
-                                </td>
-
-                                <!-- COLUNA: Solicitante -->
-                                <td style="white-space: nowrap;">
-                                    <div style="font-weight:500; color:var(--text-sidebar); margin-bottom:4px;">
-                                        <?= htmlspecialchars($req['solicitor_name_formatted']) ?>
-                                    </div>
-                                    <div style="font-size:0.78rem; color:var(--text-muted);">
-                                        <i class="fa-regular fa-calendar" style="margin-right:4px;"></i><?= $createdFmt ?>
-                                    </div>
-                                </td>
-
-                                <!-- COLUNA: Classificação -->
+                                <td class="num">#<?= (int)$req['id'] ?></td>
                                 <td>
-                                    <div style="display:flex; flex-direction:column; gap:5px; align-items:flex-start;">
-                                        <span class="badge-cat badge-<?= $req['table'] ?>"><?= $map[$req['table']] ?? 'Outros' ?></span>
-                                        <?php if (!empty($req['subdivision_name'])): ?>
-                                            <span style="font-size:0.68rem; background:#e0e7ff; color:#4338ca; padding:2px 7px; border-radius:5px; font-weight:700; border:1px solid #c7d2fe; white-space:nowrap;">
-                                                <?= htmlspecialchars($req['subdivision_name']) ?>
-                                            </span>
-                                        <?php endif; ?>
-                                        <?php
-                                            if     ($pri == 4) echo '<span class="badge-status urgent" style="background:#fef2f2;color:#dc2626;"><i class="fa-solid fa-fire"></i> Crítica</span>';
-                                            elseif ($pri == 3) echo '<span class="badge-status urgent" style="background:#fff7ed;color:#ea580c;"><i class="fa-solid fa-angles-up"></i> Alta</span>';
-                                            elseif ($pri == 2) echo '<span class="badge-status pending"><i class="fa-solid fa-angle-up"></i> Média</span>';
-                                            else               echo '<span class="badge-status normal"><i class="fa-solid fa-angle-down"></i> Baixa</span>';
-                                        ?>
+                                    <a class="cell-title" href="<?= e($detailHref) ?>" style="color:inherit;"><?= e($req['title']) ?></a>
+                                    <div class="cell-sub">
+                                        <?= e($req['solicitor_name_formatted'] ?? '') ?><?php if (!empty($req['subdivision_name'])): ?>, <?= e($req['subdivision_name']) ?><?php endif; ?>
+                                        <?php if ($pri >= 3): ?> <span class="prio-tag prio-tag--<?= $pri ?>"><?= e(priorityLabel($pri)) ?></span><?php endif; ?>
                                     </div>
                                 </td>
-
-                                <!-- COLUNA: Prazo -->
-                                <td style="white-space: nowrap;">
-                                    <?= getPrazoBadge($rawDate, $st) ?>
-                                </td>
-
-                                <!-- COLUNA: Progresso (Mini-Stepper) -->
-                                <td>
-                                    <?php if ($isRejected): ?>
-                                        <span class="badge-status rejected"><i class="fa-solid fa-circle-xmark"></i> Recusada</span>
-                                    <?php else: ?>
-                                        <div class="mini-stepper">
-                                            <?php foreach ($steps as $i => $step): ?>
-                                                <div class="mini-step <?= $i <= $stepIndex ? 'active' : '' ?> <?= $i === $stepIndex ? 'current' : '' ?>">
-                                                    <div class="mini-step-dot" title="<?= $step['label'] ?>"><i class="fa-solid <?= $step['icon'] ?>"></i></div>
-                                                    <?php if ($i < count($steps) - 1): ?>
-                                                        <div class="mini-step-line <?= $i < $stepIndex ? 'filled' : '' ?>"></div>
-                                                    <?php endif; ?>
-                                                </div>
-                                            <?php endforeach; ?>
-                                        </div>
-                                        <div style="font-size:0.68rem; color:var(--text-muted); margin-top:5px; text-align:center; font-weight:500;">
-                                            <?= $steps[$stepIndex]['label'] ?? '' ?>
-                                        </div>
+                                <td data-label="Setor"><span class="sector-tag" data-sector="<?= e($tbl) ?>"><?= e(requestSectorName($tbl)) ?></span></td>
+                                <td data-label="Prazo"><?= getPrazoBadge($req['date'] ?? '', $st) ?></td>
+                                <td><span class="status-pill status-pill--<?= e($st) ?>"><?= e(statusLabel($st)) ?></span></td>
+                                <td style="text-align:right; white-space:nowrap;">
+                                    <?php if ($st === 'Y' && $isGestor): ?>
+                                        <button type="button" class="btn btn--sm btn--primary" onclick="globalRequestAction('start_progress', '<?= (int)$req['id'] ?>', 'ctd_<?= e($tbl) ?>_frm')">Começar</button>
+                                    <?php elseif ($st === 'W' && $isGestor): ?>
+                                        <button type="button" class="btn btn--sm btn--success" onclick="globalRequestAction('finish', '<?= (int)$req['id'] ?>', 'ctd_<?= e($tbl) ?>_frm')">Concluir</button>
                                     <?php endif; ?>
-                                </td>
-
-                                <!-- COLUNA: Ações -->
-                                <td style="text-align: right;">
-                                    <div style="display:flex; gap:6px; justify-content:flex-end;">
-                                        <a href="request_detail?id=<?= $req['id'] ?>&table=<?= $req['table'] ?>" class="btn-action btn-view" title="Ver detalhes">
-                                            <i class="fas fa-eye"></i>
-                                        </a>
-                                        <?php if (($st === 'Y' || $st === 'A') && $canManage): ?>
-                                            <button onclick="handleRequestAction('start_progress', '<?= $req['id'] ?>', 'ctd_<?= $req['table'] ?>_frm')" class="btn-action btn-start" title="Iniciar atendimento">
-                                                <i class="fa-solid fa-play"></i>
-                                            </button>
-                                        <?php endif; ?>
-                                        <?php if ($st === 'W' && $canManage): ?>
-                                            <button onclick="handleRequestAction('finish', '<?= $req['id'] ?>', 'ctd_<?= $req['table'] ?>_frm')" class="btn-action btn-finish" title="Marcar como concluída">
-                                                <i class="fa-solid fa-check-double"></i>
-                                            </button>
-                                        <?php endif; ?>
-                                    </div>
+                                    <a class="btn btn--sm" href="<?= e($detailHref) ?>">Abrir</a>
                                 </td>
                             </tr>
                         <?php endforeach; ?>
                     <?php else: ?>
-                        <tr>
-                            <td colspan="6" style="padding: 56px 20px;">
-                                <div style="display:flex; flex-direction:column; align-items:center; gap:12px; color:var(--text-muted);">
-                                    <div style="width:56px; height:56px; background:#f1f5f9; border-radius:14px; display:flex; align-items:center; justify-content:center; font-size:1.6rem; color:#cbd5e1;">
-                                        <i class="fa-solid fa-inbox"></i>
-                                    </div>
-                                    <p style="font-weight:600; font-size:0.95rem; margin:0;">Nenhuma atividade encontrada</p>
-                                    <p style="font-size:0.82rem; margin:0;">Tente ajustar os filtros ou aguarde novas requisições.</p>
-                                </div>
-                            </td>
-                        </tr>
+                        <tr><td colspan="6"><div class="empty-state"><i class="fa-regular fa-folder-open" aria-hidden="true"></i><p><?= $hasFilter ? 'Nenhum pedido com esses filtros.' : 'Ainda não há pedidos.' ?></p></div></td></tr>
                     <?php endif; ?>
                 </tbody>
             </table>
         </div>
+
         <?php if ($totalPages > 1): ?>
-            <nav class="pager" aria-label="Páginas">
-                <?php if ($currentPageNum > 1): ?><a href="<?= e($pageLink($currentPageNum - 1)) ?>">&larr; Anterior</a><?php endif; ?>
-                <span class="is-current"><?= $currentPageNum ?> / <?= $totalPages ?></span>
-                <?php if ($currentPageNum < $totalPages): ?><a href="<?= e($pageLink($currentPageNum + 1)) ?>">Próxima &rarr;</a><?php endif; ?>
+            <nav class="pager" aria-label="Páginas" style="padding-bottom:14px;">
+                <?php if ($currentPageNum > 1): ?><a href="<?= e($pageLink($currentPageNum - 1)) ?>">Anterior</a><?php endif; ?>
+                <span class="is-current"><?= $currentPageNum ?> de <?= $totalPages ?></span>
+                <?php if ($currentPageNum < $totalPages): ?><a href="<?= e($pageLink($currentPageNum + 1)) ?>">Próxima</a><?php endif; ?>
             </nav>
         <?php endif; ?>
-    </div>
+    </section>
+
+    <?php if (!$activeFilterStatus && ($total ?? 0) > 0): ?>
+        <aside class="stack" aria-label="Resumo">
+            <section class="panel">
+                <div class="panel__head"><h2>Por situação</h2></div>
+                <div class="panel__body"><div class="chart-box"><canvas id="statusChart" aria-label="Pedidos por situação" role="img"></canvas></div></div>
+            </section>
+            <section class="panel">
+                <div class="panel__head"><h2>Por setor</h2></div>
+                <div class="panel__body"><div class="chart-box"><canvas id="categoryChart" aria-label="Pedidos por setor" role="img"></canvas></div></div>
+            </section>
+        </aside>
+    <?php endif; ?>
 </div>
 
+<?php if (!$activeFilterStatus && ($total ?? 0) > 0): ?>
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
 <script>
-<?php if (!$activeFilterStatus): ?>
-const statusLabels = ['Pendentes','Aprovadas','Recusadas','Em Andamento','Concluídas'];
-const statusColors = ['#eab308','#10b981','#ef4444','#3b82f6','#15803d'];
-const statusData   = [<?= $statusCounts['P']?>,<?= $statusCounts['Y']?>,<?= $statusCounts['N']?>,<?= $statusCounts['W']?>,<?= $statusCounts['C']?>];
-const catLabels    = <?= json_encode(array_map(fn($k)=>$map[$k]??$k, array_keys($categoryCounts))) ?>;
-const catData      = <?= json_encode(array_values($categoryCounts)) ?>;
-const catColors    = ['#8b5cf6','#10b981','#3b82f6','#eab308','#f97316'];
+(function () {
+    if (typeof Chart === 'undefined') return; // sem internet: os números da esteira continuam valendo
+    Chart.defaults.font.family = getComputedStyle(document.body).fontFamily;
+    Chart.defaults.color = '#565A63';
 
-// Donut de Status
-new Chart(document.getElementById('statusChart'), {
-    type: 'doughnut',
-    data: { labels: statusLabels, datasets: [{ data: statusData, backgroundColor: statusColors, borderWidth: 2, borderColor: '#fff', hoverOffset: 6 }] },
-    options: {
-        responsive: true, maintainAspectRatio: false, cutout: '68%',
-        plugins: {
-            legend: { display: false },
-            tooltip: { callbacks: { label: ctx => ` ${ctx.label}: ${ctx.parsed}` } }
-        },
-        animation: { animateRotate: true, duration: 700 }
-    }
-});
+    const statusData = <?= json_encode([
+        ['Aguardando aprovação', (int)($statusCounts['P'] ?? 0), '#D97706'],
+        ['Aprovadas', (int)($statusCounts['Y'] ?? 0), '#2563EB'],
+        ['Em atendimento', (int)($statusCounts['W'] ?? 0), '#7C3AED'],
+        ['Concluídas', (int)($statusCounts['C'] ?? 0), '#15803D'],
+        ['Recusadas', (int)($statusCounts['N'] ?? 0), '#B91C1C'],
+    ], JSON_UNESCAPED_UNICODE) ?>.filter(d => d[1] > 0);
 
-// Build legend
-const leg = document.getElementById('statusLegend');
-statusLabels.forEach((l,i) => {
-    if (!statusData[i]) return;
-    leg.innerHTML += `<div class="db-legend__item"><span class="db-legend__dot" style="background:${statusColors[i]}"></span>${l} <strong>${statusData[i]}</strong></div>`;
-});
+    new Chart(document.getElementById('statusChart'), {
+        type: 'doughnut',
+        data: { labels: statusData.map(d => d[0]), datasets: [{ data: statusData.map(d => d[1]), backgroundColor: statusData.map(d => d[2]), borderColor: '#fff', borderWidth: 2 }] },
+        options: { responsive: true, maintainAspectRatio: false, cutout: '62%', plugins: { legend: { position: 'right', labels: { boxWidth: 10, font: { size: 12 } } } } }
+    });
 
-// Bar por Setor
-new Chart(document.getElementById('categoryChart'), {
-    type: 'bar',
-    data: { labels: catLabels, datasets: [{ data: catData, backgroundColor: catColors.slice(0,catData.length), borderRadius: 6, borderSkipped: false }] },
-    options: {
-        responsive: true, maintainAspectRatio: false,
-        plugins: { legend: { display: false }, tooltip: { callbacks: { label: ctx => ` ${ctx.parsed.y} requisições` } } },
-        scales: {
-            x: { grid: { display: false }, ticks: { font: { size: 11, weight: '600' } } },
-            y: { beginAtZero: true, ticks: { stepSize: 1, font: { size: 11 } }, grid: { color: '#f1f5f9' } }
-        },
-        animation: { duration: 700 }
-    }
-});
+    const sectorColors = { ti: '#DC2626', service: '#CA8A04', shop: '#059669', xerox: '#7C3AED', mkt: '#475569' };
+    const sectorNames = <?= json_encode(['ti' => 'TI', 'service' => 'Manutenção', 'shop' => 'Compras', 'xerox' => 'Reprografia', 'mkt' => 'Marketing'], JSON_UNESCAPED_UNICODE) ?>;
+    const cat = <?= json_encode($categoryCounts ?? []) ?>;
+    const keys = Object.keys(cat);
+    new Chart(document.getElementById('categoryChart'), {
+        type: 'bar',
+        data: { labels: keys.map(k => sectorNames[k] || k), datasets: [{ data: keys.map(k => cat[k]), backgroundColor: keys.map(k => sectorColors[k] || '#475569'), borderRadius: 6 }] },
+        options: { indexAxis: 'y', responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } }, scales: { x: { beginAtZero: true, ticks: { precision: 0 }, grid: { color: '#EEF0F3' } }, y: { grid: { display: false } } } }
+    });
+})();
+</script>
 <?php endif; ?>
 
+<script>
 function exportToExcel() {
-    const term = <?= json_encode($searchTerm) ?>;
-    const date = <?= json_encode($searchDate) ?>;
-    const status = <?= json_encode((string)$activeFilterStatus) ?>;
-    
     const params = new URLSearchParams({
-        search: term,
-        status: status,
-        date: date
+        search: <?= json_encode($searchTerm) ?>,
+        status: <?= json_encode((string)$activeFilterStatus) ?>,
+        date: <?= json_encode($searchDate) ?>
     });
-    
     window.location.href = `api/export_requests.php?${params.toString()}`;
-}
-
-function handleRequestAction(action, id, table) {
-    // Agora chama a função global para aproveitar as confirmações e lógica centralizada
-    globalRequestAction(action, id, table);
 }
 </script>
