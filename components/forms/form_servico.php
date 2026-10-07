@@ -1,36 +1,28 @@
-<form class="form_request">
-
-    <p style="border-left-color: #eab308; color: #a16207; background: #fefce8;">Requisições de serviço são utilizadas para realizar a solicitação de atividades da manutenção ou de outro setor.</p>
-
+<form class="form_request" novalidate>
     <input type="hidden" name="type" value="service">
 
-    <div class="form-group">
-        <label for="title">Evento/atividade/título: </label>
-        <input type="text" name="title" id="title" required maxlength="60">
-        <span>Seja breve no título!</span>
-    </div>
+    <p class="form-intro" style="border-left-color: #eab308; color: #a16207; background: #fefce8;">Use para pedir <strong>consertos e serviços de manutenção</strong>: elétrica, hidráulica, móveis, pintura, limpeza etc.</p>
 
     <div class="form-group">
-        <label for="end">Data de entrega: </label>
+        <label for="title">Título <span class="req">*</span></label>
+        <input type="text" name="title" id="title" required maxlength="80" placeholder="Ex.: Lâmpada queimada na sala 12">
+        <span>Uma frase curta que resuma o pedido.</span>
+    </div>
+    <div class="form-group">
+        <label for="end">Para quando você precisa? <span class="req">*</span></label>
         <input type="date" name="end" id="end" required>
     </div>
-
     <div class="form-group">
-        <label for="details">Informações da requisição: </label>
-        <textarea name="details" id="details" required></textarea>
+        <label for="details">Explique o que você precisa <span class="req">*</span></label>
+        <textarea name="details" id="details" required rows="5" placeholder="Onde é, o que aconteceu e o que precisa ser feito."></textarea>
     </div>
-
-    <div class="checkbox_group">
-        <input type="checkbox" name="urgent" id="urgent">
-        <label for="urgent">Necessita ser adquirido com urgência (antes do prazo supracitado)</label>
-    </div>
-
     <div class="form-group">
-        <label for="obs">Observações ou objetivo: </label>
-        <input type="text" name="obs" id="obs">
-        <span>Não obrigatório, porém interessante para o comitê de aprovação!</span>
+        <label for="obs">Observações <small>(opcional)</small></label>
+        <input type="text" name="obs" id="obs" maxlength="2000" placeholder="Algo mais que ajude quem vai aprovar ou atender">
     </div>
 
-    <button type="submit">Enviar Requisição</button>
+<!--PRIORIDADE-->
 
+    <p class="form-required-hint"><span class="req">*</span> Campos obrigatórios</p>
+    <button type="submit"><i class="fa-solid fa-paper-plane"></i> Enviar requisição</button>
 </form>

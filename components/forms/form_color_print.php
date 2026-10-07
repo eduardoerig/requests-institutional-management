@@ -1,44 +1,42 @@
-<form class="form_request">
+<form class="form_request" novalidate>
     <input type="hidden" name="type" value="colorPrint">
 
-    <p style="border-left-color: #06b6d4; color: #0e7490; background: #ecfeff;">Requisições de impressão colorida são utilizadas para realizar impressões coloridas no setor de reprografia.</p>
+    <p class="form-intro" style="border-left-color: #06b6d4; color: #0e7490; background: #ecfeff;">Use para pedir <strong>impressões coloridas</strong> na reprografia.</p>
 
     <div class="form-group">
-        <label for="title">Evento/atividade/título: </label>
-        <input type="text" name="title" id="title" required maxlength="60">
-        <span>Seja breve no título!</span>
+        <label for="title">Título <span class="req">*</span></label>
+        <input type="text" name="title" id="title" required maxlength="80" placeholder="Ex.: Certificados da formatura">
+        <span>Uma frase curta que resuma o pedido.</span>
     </div>
-
     <div class="form-group">
-        <label for="end">Data de entrega: </label>
+        <label for="end">Para quando você precisa? <span class="req">*</span></label>
         <input type="date" name="end" id="end" required>
     </div>
-
     <div class="form-group">
-        <label for="file">Nome do arquivo/Informações: </label>
-        <input type="text" name="file" id="file" required>
+        <label for="file">Qual arquivo imprimir? <span class="req">*</span></label>
+        <input type="text" name="file" id="file" required maxlength="255" placeholder="Nome do arquivo ou onde ele está (e-mail, pasta, link)">
     </div>
 
     <div class="form-group">
-        <label for="qtd">Quantidade: </label>
-        <input type="number" name="qtd" id="qtd" required>
+        <label for="qtd">Quantas cópias? <span class="req">*</span></label>
+        <input type="number" name="qtd" id="qtd" required min="1" max="100000" inputmode="numeric" placeholder="Ex.: 30">
     </div>
 
-    <div class="form-group">
-        <label>Formato:</label>
+    <fieldset class="form-group">
+        <legend>Tamanho do papel <span class="req">*</span></legend>
         <div class="aplication_select">
-            <label><input type="radio" name="model" value="A4"> A4</label>
-            <label><input type="radio" name="model" value="A4/Cartolina"> A4/Cartolina</label>
-            <label><input type="radio" name="model" value="A3/Cartolina"> A3</label>
+            <label><input type="radio" name="model" value="A4" required> A4 (folha comum)</label>
+            <label><input type="radio" name="model" value="A4/Cartolina"> A4 em papel cartão</label>
+            <label><input type="radio" name="model" value="A3/Cartolina"> A3 (folha grande)</label>
         </div>
-    </div>
-
+    </fieldset>
     <div class="form-group">
-        <label for="obs">Observações ou objetivo: </label>
-        <input type="text" name="obs" id="obs">
-        <span>Não obrigatório, porém interessante para o comitê de aprovação!</span>
+        <label for="obs">Observações <small>(opcional)</small></label>
+        <input type="text" name="obs" id="obs" maxlength="2000" placeholder="Algo mais que ajude quem vai aprovar ou atender">
     </div>
 
-    <button type="submit">Enviar Requisição</button>
+<!--PRIORIDADE-->
 
+    <p class="form-required-hint"><span class="req">*</span> Campos obrigatórios</p>
+    <button type="submit"><i class="fa-solid fa-paper-plane"></i> Enviar requisição</button>
 </form>

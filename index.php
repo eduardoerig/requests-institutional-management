@@ -7,7 +7,7 @@ $url = isset($_GET['url']) ? explode('/', trim($_GET['url'], '/')) : [];
 $logged = $_SESSION['id'] ?? false;
 $role = $_SESSION['role'] ?? 'view';
 $force_reset = (int)($_SESSION['force_reset'] ?? 0);
-$assetVersion = @filemtime(__DIR__ . '/assets/js/script.js') ?: time();
+$assetVersion = max(array_map(fn($f) => (int)@filemtime($f), glob(__DIR__ . '/assets/{js,css}/*.{js,css}', GLOB_BRACE) ?: [])) ?: time();
 $csrfToken = getCsrfToken();
 
 // Se forçado a resetar, só permite acessar 'myAccount' ou 'logout'
@@ -33,12 +33,13 @@ if ($logged && $force_reset === 1) {
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <base href="/requests2.0/">
     <meta name="theme-color" content="#111827">
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.2/css/all.min.css" crossorigin="anonymous" referrerpolicy="no-referrer">
     <link rel="icon" href="assets/img/LogoFavConSisreq.png">
     <link rel="stylesheet" href="assets/css/style.css?v=<?php echo $assetVersion; ?>">
     <link rel="stylesheet" href="assets/css/fase3.css?v=<?php echo $assetVersion; ?>">
     <link rel="stylesheet" href="assets/css/notifications.css?v=<?php echo $assetVersion; ?>">
     <link rel="stylesheet" href="assets/css/mobile.css?v=<?php echo $assetVersion; ?>">
+    <link rel="stylesheet" href="assets/css/ux.css?v=<?php echo $assetVersion; ?>">
     <title>SisReq — Gestão de Requisições</title>
 </head>
 

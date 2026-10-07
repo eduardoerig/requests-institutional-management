@@ -101,6 +101,9 @@ switch ($sector) {
     case 'mkt':
         // Aceita 'details' (padrão) e 'descp' (nome antigo do campo)
         $details = postText('details') ?: postText('descp');
+        if ($details === '') {
+            fail('Explique o que você precisa.');
+        }
         $model = postText('model', 255);
         if ($model === '' || $model === 'outros') {
             $model = postText('outros_texto', 255);

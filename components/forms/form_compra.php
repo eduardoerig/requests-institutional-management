@@ -1,29 +1,28 @@
-<form class="form_request">
+<form class="form_request" novalidate>
     <input type="hidden" name="type" value="shopping">
 
-    <p style="border-left-color: #10b981; color: #047857; background: #ecfdf5;">Requisições de compras são utilizadas para fazer o orçamento ou a compra/contratação de algo externo.</p>
+    <p class="form-intro" style="border-left-color: #10b981; color: #047857; background: #ecfdf5;">Use para pedir <strong>compra ou orçamento</strong> de materiais, produtos ou serviços de fora da empresa.</p>
 
     <div class="form-group">
-        <label for="title">Evento/atividade/título: </label>
-        <input type="text" name="title" id="title" required maxlength="60">
-        <span>Seja breve no título!</span>
+        <label for="title">Título <span class="req">*</span></label>
+        <input type="text" name="title" id="title" required maxlength="80" placeholder="Ex.: 10 resmas de papel A4">
+        <span>Uma frase curta que resuma o pedido.</span>
     </div>
-
     <div class="form-group">
-        <label for="end">Data de entrega: </label>
+        <label for="end">Para quando você precisa? <span class="req">*</span></label>
         <input type="date" name="end" id="end" required>
     </div>
-
     <div class="form-group">
-        <label for="details">Informações da requisição: </label>
-        <textarea name="details" id="details" required></textarea>
+        <label for="details">Explique o que você precisa <span class="req">*</span></label>
+        <textarea name="details" id="details" required rows="5" placeholder="O que comprar, quantidade, modelo/marca se tiver preferência e link de referência."></textarea>
+    </div>
+    <div class="form-group">
+        <label for="obs">Observações <small>(opcional)</small></label>
+        <input type="text" name="obs" id="obs" maxlength="2000" placeholder="Algo mais que ajude quem vai aprovar ou atender">
     </div>
 
-    <div class="form-group">
-        <label for="obs">Observações ou objetivo: </label>
-        <input type="text" name="obs" id="obs">
-        <span>Não obrigatório, porém interessante para o comitê de aprovação!</span>
-    </div>
+<!--PRIORIDADE-->
 
-    <button type="submit">Enviar Requisição</button>
+    <p class="form-required-hint"><span class="req">*</span> Campos obrigatórios</p>
+    <button type="submit"><i class="fa-solid fa-paper-plane"></i> Enviar requisição</button>
 </form>

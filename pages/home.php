@@ -420,7 +420,7 @@ $stepperMap = ['P' => 0, 'Y' => 1, 'W' => 2, 'C' => 3, 'N' => -1];
     </div>
 </div>
 
-<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
 <script>
 <?php if (!$activeFilterStatus): ?>
 const statusLabels = ['Pendentes','Aprovadas','Recusadas','Em Andamento','Concluídas'];

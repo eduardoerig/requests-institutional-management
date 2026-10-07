@@ -50,3 +50,6 @@ assets/img/logoMartin.png
 
 # Agent Rules/Config
 .agents/
+
+# Credenciais locais de teste
+*.local.txt

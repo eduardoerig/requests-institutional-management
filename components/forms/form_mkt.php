@@ -1,46 +1,42 @@
-<form class="form_request">
+<form class="form_request" novalidate>
     <input type="hidden" name="type" value="mkt">
 
-    <p style="border-left-color: #54585a; color: #54585a; background: #f8fafc;">Requisições de marketing são utilizadas para solicitar a criação, adaptação ou execução de ações e materiais necessários às atividades de comunicação da empresa.</p>
+    <p class="form-intro" style="border-left-color: #54585a; color: #334155; background: #f8fafc;">Use para pedir <strong>artes e materiais de divulgação</strong>: posts, banners, panfletos, convites etc.</p>
 
     <div class="form-group">
-        <label for="title">Evento/atividade/título: </label>
-        <input type="text" name="title" id="title" required maxlength="60">
-        <span>Seja breve no título!</span>
+        <label for="title">Título <span class="req">*</span></label>
+        <input type="text" name="title" id="title" required maxlength="80" placeholder="Ex.: Divulgação da festa junina">
+        <span>Uma frase curta que resuma o pedido.</span>
     </div>
-
     <div class="form-group">
-        <label for="end">Data de entrega: </label>
+        <label for="end">Para quando você precisa? <span class="req">*</span></label>
         <input type="date" name="end" id="end" required>
     </div>
-
     <div class="form-group">
-        <label for="details">Informações da requisição: </label>
-        <textarea name="descp" id="details" required></textarea>
+        <label for="details">Explique o que você precisa <span class="req">*</span></label>
+        <textarea name="details" id="details" required rows="5" placeholder="Textos que devem aparecer, cores, tamanho e qualquer referência."></textarea>
     </div>
-
-    <div class="form-group">
-        <label for="qtd">Aplicação: </label>
+    <fieldset class="form-group">
+        <legend>Onde a peça será usada? <span class="req">*</span></legend>
         <div class="aplication_select">
-            <label><input type="radio" class="model_radius" name="model" value="Whatsapp"> Whatsapp</label>
-            <label><input type="radio" class="model_radius" name="model" value="Ingressos"> Ingressos</label>
-            <label><input type="radio" class="model_radius" name="model" value="Panfleto"> Panfleto</label>
+            <label><input type="radio" class="model_radius" name="model" value="Whatsapp" required> WhatsApp</label>
             <label><input type="radio" class="model_radius" name="model" value="Instagram"> Instagram</label>
+            <label><input type="radio" class="model_radius" name="model" value="Posts"> Posts (outras redes)</label>
+            <label><input type="radio" class="model_radius" name="model" value="Panfleto"> Panfleto</label>
             <label><input type="radio" class="model_radius" name="model" value="Banner"> Banner</label>
+            <label><input type="radio" class="model_radius" name="model" value="Ingressos"> Ingressos</label>
             <label><input type="radio" class="model_radius" name="model" value="ClipEscola"> ClipEscola</label>
-            <label><input type="radio" class="model_radius" name="model" value="Posts"> Posts</label>
-            <label>
-                <input type="radio" name="model" class="model_radius" value="" id="radio_outros"> Outros
-                <input type="text" id="input_outros" name="outros_texto" placeholder="Descreva..." style="display:none; margin-top:5px;">
-            </label>
+            <label><input type="radio" class="model_radius" name="model" value="outros" id="radio_outros"> Outro</label>
+            <input type="text" id="input_outros" name="outros_texto" maxlength="255" placeholder="Qual?" style="display:none;">
         </div>
-    </div>
-
+    </fieldset>
     <div class="form-group">
-        <label for="obs">Observações ou objetivo: </label>
-        <input type="text" name="obs" id="obs">
-        <span>Não obrigatório, porém interessante para o comitê de aprovação!</span>
+        <label for="obs">Observações <small>(opcional)</small></label>
+        <input type="text" name="obs" id="obs" maxlength="2000" placeholder="Algo mais que ajude quem vai aprovar ou atender">
     </div>
 
-    <button type="submit">Enviar Requisição</button>
+<!--PRIORIDADE-->
+
+    <p class="form-required-hint"><span class="req">*</span> Campos obrigatórios</p>
+    <button type="submit"><i class="fa-solid fa-paper-plane"></i> Enviar requisição</button>
 </form>

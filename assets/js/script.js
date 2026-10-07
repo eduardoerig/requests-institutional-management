@@ -274,45 +274,126 @@ if (btn_logout) {
     });
 }
 
-function bindFormRequests() {
-    let form_requests = document.querySelector('.form_request');
+function todayIso() {
+    const d = new Date();
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+}
 
-    // Aparição do descrição da aplicação
-    const radioOutros = document.getElementById('radio_outros');
-    const inputOutros = document.getElementById('input_outros');
-    const radios = document.querySelectorAll('.model_radius');
+// Mostra a mensagem de erro logo abaixo do campo e leva o usuário até ele
+function showFieldError(field, message) {
+    const group = field.closest('.form-group') || field.parentElement;
+    let msg = group.querySelector('.field-error');
+    if (!msg) {
+        msg = document.createElement('p');
+        msg.className = 'field-error';
+        msg.setAttribute('role', 'alert');
+        group.appendChild(msg);
+    }
+    msg.textContent = message;
+    group.classList.add('has-error');
+}
 
-    radios.forEach(radio => {
-        radio.addEventListener('change', function () {
-            if (radioOutros.checked) {
-                inputOutros.style.display = 'block';
-                inputOutros.required = true;
-            } else {
-                inputOutros.style.display = 'none';
-                inputOutros.required = false;
-                inputOutros.value = "";
+function clearFieldErrors(form) {
+    form.querySelectorAll('.field-error').forEach(el => el.remove());
+    form.querySelectorAll('.has-error').forEach(el => el.classList.remove('has-error'));
+}
+
+function validateRequestForm(form) {
+    clearFieldErrors(form);
+    const messages = {
+        title: 'Escreva um título curto.',
+        end: 'Escolha a data em que você precisa.',
+        details: 'Explique o que você precisa.',
+        file: 'Informe qual arquivo deve ser impresso.',
+        qtd: 'Informe quantas cópias (número maior que zero).',
+        model: 'Escolha uma opção.',
+        outros_texto: 'Descreva qual é a outra opção.'
+    };
+    let firstInvalid = null;
+    const checkedGroups = new Set();
+
+    form.querySelectorAll('[required]').forEach(field => {
+        if (field.type === 'radio') {
+            if (checkedGroups.has(field.name)) return;
+            checkedGroups.add(field.name);
+            if (!form.querySelector(`input[name="${field.name}"]:checked`)) {
+                showFieldError(field, messages[field.name] || 'Escolha uma opção.');
+                firstInvalid = firstInvalid || field;
             }
-        });
+            return;
+        }
+        const value = field.value.trim();
+        let invalid = value === '';
+        if (!invalid && field.type === 'date' && value < todayIso()) {
+            showFieldError(field, 'A data não pode ser no passado.');
+            firstInvalid = firstInvalid || field;
+            return;
+        }
+        if (!invalid && field.type === 'number' && !(parseInt(value, 10) > 0)) invalid = true;
+        if (invalid) {
+            showFieldError(field, messages[field.name] || 'Preencha este campo.');
+            firstInvalid = firstInvalid || field;
+        }
     });
 
-    // prepara para o envio
+    if (firstInvalid) {
+        firstInvalid.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        firstInvalid.focus({ preventScroll: true });
+        return false;
+    }
+    return true;
+}
+
+function showRequestSuccess(container, data) {
+    container.innerHTML = `
+        <div class="request-success" role="status">
+            <div class="request-success__icon"><i class="fa-solid fa-circle-check"></i></div>
+            <h2>Requisição #${parseInt(data.id, 10)} enviada!</h2>
+            <p>Agora ela aguarda aprovação. Você recebe um aviso no sininho <i class="fa-solid fa-bell"></i> quando a situação mudar.</p>
+            <div class="request-success__actions">
+                <a class="btn-big btn-big--primary" href="${escapeHtml(safeInternalLink(data.link))}"><i class="fa-solid fa-eye"></i> Ver minha requisição</a>
+                <a class="btn-big" href="new_request"><i class="fa-solid fa-plus"></i> Fazer outra</a>
+                <a class="btn-big" href="myRequests"><i class="fa-solid fa-list"></i> Minhas requisições</a>
+            </div>
+        </div>`;
+    container.scrollIntoView({ behavior: 'smooth', block: 'start' });
+}
+
+function bindFormRequests() {
+    const form_requests = document.querySelector('.form_request');
+    if (!form_requests) return;
+
+    // Data mínima = hoje
+    form_requests.querySelectorAll('input[type="date"]').forEach(input => { input.min = todayIso(); });
+
+    // Campo "Outro" do marketing
+    const radioOutros = document.getElementById('radio_outros');
+    const inputOutros = document.getElementById('input_outros');
+    if (radioOutros && inputOutros) {
+        form_requests.querySelectorAll('.model_radius').forEach(radio => {
+            radio.addEventListener('change', () => {
+                const isOther = radioOutros.checked;
+                inputOutros.style.display = isOther ? 'block' : 'none';
+                inputOutros.required = isOther;
+                if (isOther) inputOutros.focus(); else inputOutros.value = '';
+            });
+        });
+    }
+
+    // Some com a mensagem de erro assim que o usuário corrige o campo
+    form_requests.addEventListener('input', (e) => {
+        const group = e.target.closest('.form-group');
+        if (group) {
+            group.classList.remove('has-error');
+            group.querySelector('.field-error')?.remove();
+        }
+    });
+
     let isSubmitting = false;
     form_requests.addEventListener('submit', async (e) => {
         e.preventDefault();
-        
         if (isSubmitting) return;
-
-        // Fallback to customConfirm if showConfirm is not globally defined yet
-        const confirmationFn = typeof showConfirm === 'function' ? showConfirm : customConfirm;
-        const confirm = await confirmationFn({
-            title: 'Enviar Requisição',
-            message: 'Deseja realmente enviar esta requisição agora?',
-            type: 'info',
-            confirmLabel: 'Sim, Enviar'
-        });
-        
-        // customConfirm returns boolean, showConfirm might return boolean
-        if(!confirm) return;
+        if (!validateRequestForm(form_requests)) return;
 
         isSubmitting = true;
         const submitBtn = form_requests.querySelector('button[type="submit"]');
@@ -322,79 +403,29 @@ function bindFormRequests() {
             submitBtn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Enviando...';
         }
 
-        let formData = new FormData(form_requests);
+        const formData = new FormData(form_requests);
         formData.append('action', 'post');
 
         const data = await fetchAjax("config/addRequest.php", formData);
         if (data && data.success) {
-            // Se showToast não existir, usa showAlert
-            if (typeof showAlert === 'function') {
-                showAlert({ title: 'Sucesso', message: 'Sua requisição foi enviada com sucesso!', type: 'success' });
-            } else {
-                showToast('Sua requisição foi enviada com sucesso!', 'success');
-            }
-            setTimeout(() => location.reload(), 500);
-        } else {
-            isSubmitting = false;
-            if (submitBtn) {
-                submitBtn.disabled = false;
-                submitBtn.innerHTML = originalBtnText;
-            }
-            if (data) {
-                if (typeof showAlert === 'function') {
-                    showAlert({ title: 'Atenção', message: data.message, type: 'warning' });
-                } else {
-                    showToast(data.message, 'error');
-                }
-            }
+            showRequestSuccess(document.getElementById('dynamicForm') || form_requests.parentElement, data);
+            return;
+        }
+
+        isSubmitting = false;
+        if (submitBtn) {
+            submitBtn.disabled = false;
+            submitBtn.innerHTML = originalBtnText;
         }
     });
 }
 
-// Função de Confirmação Customizada (Modal Premium)
+// Compatibilidade: confirmação antiga redirecionada ao modal global
 function customConfirm(message, title = 'Confirmação') {
-    return new Promise((resolve) => {
-        // Injetar HTML do modal se não existir
-        let overlay = document.getElementById('confirm-overlay');
-        if (!overlay) {
-            overlay = document.createElement('div');
-            overlay.id = 'confirm-overlay';
-            overlay.className = 'confirm-overlay';
-            overlay.innerHTML = `
-                <div class="confirm-modal">
-                    <div class="confirm-icon"><i class="fa-solid fa-circle-question"></i></div>
-                    <h3 id="confirm-title">${title}</h3>
-                    <p id="confirm-message">${message}</p>
-                    <div class="confirm-buttons">
-                        <button class="confirm-btn confirm-btn-ok" id="confirm-btn-ok">Sim, Continuar</button>
-                        <button class="confirm-btn confirm-btn-cancel" id="confirm-btn-cancel">Cancelar</button>
-                    </div>
-                </div>
-            `;
-            document.body.appendChild(overlay);
-        } else {
-            document.getElementById('confirm-title').innerText = title;
-            document.getElementById('confirm-message').innerText = message;
-        }
-
-        const btnOk = document.getElementById('confirm-btn-ok');
-        const btnCancel = document.getElementById('confirm-btn-cancel');
-
-        const close = (result) => {
-            overlay.classList.remove('show');
-            setTimeout(() => {
-                overlay.style.display = 'none';
-                resolve(result);
-            }, 300);
-        };
-
-        btnOk.onclick = () => close(true);
-        btnCancel.onclick = () => close(false);
-        overlay.onclick = (e) => { if (e.target === overlay) close(false); };
-
-        overlay.style.display = 'flex';
-        setTimeout(() => overlay.classList.add('show'), 10);
-    });
+    if (typeof message === 'object' && message !== null) {
+        return window.showConfirm(message);
+    }
+    return window.showConfirm({ title, message, type: 'warning', confirmLabel: 'Sim, continuar' });
 }
 
 // Funções Globais de Ação de Requisição

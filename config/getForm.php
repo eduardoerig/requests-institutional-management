@@ -3,54 +3,39 @@ require_once __DIR__ . '/session.php';
 require_once __DIR__ . '/conn.php';
 require_once __DIR__ . '/security.php';
 requireLoginJson($pdo);
+requirePostJson();
 
-if (!isset($_SESSION['id'])) {
-    header('home');
-    exit();
+$id = (int)($_POST['id'] ?? 0);
+if (($_POST['action'] ?? '') !== 'get' || $id <= 0) {
+    jsonResponse(['success' => false, 'message' => 'Escolha um tipo de requisição.']);
 }
 
-if ($_POST['action'] == 'get') {
-    $id = $_POST['id'];
+$qr = $pdo->prepare('SELECT form_name FROM ctd_requests_models WHERE id = ? AND `status` = ?');
+$qr->execute([$id, 'Y']);
+$formName = basename((string)$qr->fetchColumn());
+$formFile = dirname(__DIR__) . '/components/forms/' . $formName;
 
-    if ($id) {
-        $qr = $pdo->prepare('SELECT form_name FROM ctd_requests_models WHERE id = ? AND `status` = ?');
-        $qr->execute([$id, 'Y']);
-        $row = $qr->fetch(PDO::FETCH_ASSOC);
-        if ($row) {
-            $form_html = file_get_contents('../components/forms/' . $row['form_name']);
-            
-            // Adicionar campo de prioridade antes do botão de submit
-            $priority_html = '
-                <div class="form-group">
-                    <label>Prioridade</label>
-                    <select name="priority">
-                        <option value="1">Baixa</option>
-                        <option value="2" selected>Média</option>
-                        <option value="3">Alta</option>
-                        <option value="4">Crítica</option>
-                    </select>
-                    <span>Defina o nível de urgência desta solicitação.</span>
-                </div>
-            ';
-            
-            // Inserir antes do botão de submit para ser mais intuitivo
-            if (strpos($form_html, '<button') !== false) {
-                $form_html = str_replace('<button', $priority_html . '<button', $form_html);
-            } else {
-                $form_html = str_replace('</form>', $priority_html . '</form>', $form_html);
-            }
+if ($formName === '' || !preg_match('/^form_[a-z_]+\.php$/', $formName) || !is_file($formFile)) {
+    jsonResponse(['success' => false, 'message' => 'Este tipo de requisição não está disponível.']);
+}
 
-            echo json_encode(['success' => true, 'message' => 'ok!', 'form' => $form_html]);
-            exit();
-        } else {
-            echo json_encode(['success' => false, 'message' => 'Requisição nao encontrada ou invalida!']);
-            exit();
-        }
-    } else {
-        echo json_encode(['success' => false, 'message' => 'Indentificação invalida!']);
-        exit();
-    }
+$formHtml = file_get_contents($formFile);
+
+// Urgência em botões grandes (substitui o antigo campo "urgente")
+$priorityHtml = '
+    <fieldset class="form-group priority-picker">
+        <legend>Qual a urgência? <span class="req">*</span></legend>
+        <label class="priority-option"><input type="radio" name="priority" value="1"><span><strong>Baixa</strong><small>Sem pressa</small></span></label>
+        <label class="priority-option"><input type="radio" name="priority" value="2" checked><span><strong>Normal</strong><small>No prazo pedido</small></span></label>
+        <label class="priority-option"><input type="radio" name="priority" value="3"><span><strong>Alta</strong><small>Precisa ser rápido</small></span></label>
+        <label class="priority-option"><input type="radio" name="priority" value="4"><span><strong>Crítica</strong><small>Está parando o trabalho</small></span></label>
+    </fieldset>
+';
+
+if (strpos($formHtml, '<!--PRIORIDADE-->') !== false) {
+    $formHtml = str_replace('<!--PRIORIDADE-->', $priorityHtml, $formHtml);
 } else {
-    echo json_encode(['success' => false, 'message' => 'Requisição invalida!']);
-    exit();
+    $formHtml = str_replace('<button', $priorityHtml . '<button', $formHtml);
 }
+
+jsonResponse(['success' => true, 'form' => $formHtml]);
