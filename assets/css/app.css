@@ -697,10 +697,6 @@ label.chip-radio input:focus-visible + span { outline: none; box-shadow: var(--a
 
 .sector-tag { font-weight: 600; color: var(--texto); }
 
-.prazo-badge { display: inline-flex; align-items: center; gap: 4px; font-size: var(--t-sm); font-weight: 600; color: var(--texto-2); white-space: nowrap; }
-.prazo-atrasado { color: var(--perigo); font-weight: 700; }
-.prazo-hoje { color: var(--texto); font-weight: 700; }
-.prazo-proximo { color: var(--texto); }
 
 /* ---------- 10. Painéis, estados vazios ---------- */
 .panel {

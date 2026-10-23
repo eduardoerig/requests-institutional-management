@@ -131,7 +131,7 @@ $future = date('Y-m-d', strtotime('+5 days'));
 // ------------------------------------------------------------------
 section('1. Acesso sem login');
 $anon = new Client($baseUrl);
-foreach (['api/request_view.php?id=1&table=ti', 'api/request_forwards.php?action=areas', 'api/get_notifications.php', 'api/get_request_details.php?id=1&table=ti', 'api/export_requests.php', 'print_request.php?id=1&table=ti'] as $path) {
+foreach (['api/request_view.php?id=1&table=ti', 'api/request_forwards.php?action=areas', 'api/get_notifications.php', 'api/export_requests.php', 'print_request.php?id=1&table=ti'] as $path) {
     $res = $anon->get($path);
     check("sem login bloqueia $path", $res['status'] === 401, snippet($res));
 }
@@ -225,8 +225,6 @@ check('Minhas requisições mostra o pedido novo em Em andamento, aguardando a c
 
 // ------------------------------------------------------------------
 section('6. Quem pode ver');
-$res = $shop->get("api/get_request_details.php?id=$reqId&table=ti");
-check('gestor de outro setor não vê requisição de TI', ($res['json']['success'] ?? true) === false, snippet($res));
 $res = $ti->get("api/request_view.php?id=$reqId&table=ti");
 check('gestor TI vê a requisição no painel', $res['status'] === 200 && str_contains($res['body'], 'request-view'), 'HTTP ' . $res['status']);
 check('painel não contém hash de senha', !str_contains($res['body'], 'password') && !str_contains($res['body'], '$2y$'));

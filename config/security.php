@@ -468,42 +468,6 @@ function ensureUserAreaForRole(PDO $pdo, int $userId, string $role): void
 }
 
 /**
- * Selo do prazo pedido, em texto simples ("Atrasada", "Hoje", "Amanhã", "Faltam 3 dias").
- */
-function getPrazoBadge(?string $rawDate, string $status = 'P'): string
-{
-    $ts = (!empty($rawDate) && strpos((string)$rawDate, '0000-00-00') !== 0) ? strtotime((string)$rawDate) : false;
-    if (!$ts) {
-        return '<span class="prazo-badge prazo-sem-prazo">Sem prazo</span>';
-    }
-
-    $date = date('Y-m-d', $ts);
-    $display = date('d/m', $ts);
-    $st = strtoupper(trim($status));
-
-    if (in_array($st, ['C', 'N'], true)) {
-        return '<span class="prazo-badge prazo-encerrado"><i class="fa-regular fa-calendar" aria-hidden="true"></i> Prazo ' . $display . '</span>';
-    }
-
-    $today = date('Y-m-d');
-    $days = (int)round((strtotime($date) - strtotime($today)) / 86400);
-
-    if ($days < 0) {
-        return '<span class="prazo-badge prazo-atrasado"><i class="fa-solid fa-triangle-exclamation" aria-hidden="true"></i> Atrasada (era ' . $display . ')</span>';
-    }
-    if ($days === 0) {
-        return '<span class="prazo-badge prazo-hoje"><i class="fa-solid fa-clock" aria-hidden="true"></i> Vence hoje</span>';
-    }
-    if ($days === 1) {
-        return '<span class="prazo-badge prazo-hoje"><i class="fa-regular fa-clock" aria-hidden="true"></i> Vence amanhã</span>';
-    }
-    if ($days <= 3) {
-        return '<span class="prazo-badge prazo-proximo"><i class="fa-regular fa-calendar" aria-hidden="true"></i> Faltam ' . $days . ' dias (' . $display . ')</span>';
-    }
-    return '<span class="prazo-badge prazo-futuro"><i class="fa-regular fa-calendar" aria-hidden="true"></i> Até ' . $display . '</span>';
-}
-
-/**
  * Abrir o pedido conta como ler os avisos dele.
  */
 function markRequestNotificationsRead(PDO $pdo, int $userId, string $sector, int $requestId): void
