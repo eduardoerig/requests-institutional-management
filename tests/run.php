@@ -89,7 +89,7 @@ final class Client
     public function login(string $login, string $password): array
     {
         $this->refreshCsrf();
-        $res = $this->post('config/login.php', ['action' => 'get', 'login' => $login, 'password' => $password]);
+        $res = $this->post('api/login.php', ['action' => 'get', 'login' => $login, 'password' => $password]);
         // Após login a sessão ganha novo id e novo token
         $page = $this->get('myAccount');
         if (preg_match('/window\.CSRF_TOKEN = "([a-f0-9]+)"/', $page['body'], $m)) {
@@ -185,24 +185,24 @@ check('solicitante não cria usuários', ($res['json']['success'] ?? true) === f
 $res = $sol->get('home?status=' . urlencode("';alert(1)//"));
 check('parâmetro status não é refletido sem escape', !str_contains($res['body'], "';alert(1)//"));
 
-$res = $sol->post('config/aprovRequest.php', ['action' => 'post', 'id' => 1, 'table' => "ti_frm WHERE 1=1; --", 'value' => 'Y']);
+$res = $sol->post('api/approve_request.php', ['action' => 'post', 'id' => 1, 'table' => "ti_frm WHERE 1=1; --", 'value' => 'Y']);
 check('solicitante não aprova (e tabela maliciosa não passa)', ($res['json']['success'] ?? true) === false, snippet($res));
 
 // ------------------------------------------------------------------
 section('5. Criar requisição');
 $base = ['type' => 'ti', 'title' => 'Teste automático', 'end' => $future, 'details' => 'Detalhes', 'priority' => 2];
-$res = $sol->post('config/addRequest.php', ['title' => ''] + $base);
+$res = $sol->post('api/add_request.php', ['title' => ''] + $base);
 check('sem título é recusado', ($res['json']['success'] ?? true) === false && str_contains($res['json']['message'] ?? '', 'título'));
-$res = $sol->post('config/addRequest.php', ['end' => '2020-01-01'] + $base);
+$res = $sol->post('api/add_request.php', ['end' => '2020-01-01'] + $base);
 check('data no passado é recusada', ($res['json']['success'] ?? true) === false && str_contains($res['json']['message'] ?? '', 'passado'));
-$res = $sol->post('config/addRequest.php', ['type' => 'colorPrint', 'qtd' => '0', 'model' => 'A4', 'file' => 'a.pdf'] + $base);
+$res = $sol->post('api/add_request.php', ['type' => 'colorPrint', 'qtd' => '0', 'model' => 'A4', 'file' => 'a.pdf'] + $base);
 check('impressão com 0 cópias é recusada', ($res['json']['success'] ?? true) === false);
-$res = $sol->post('config/addRequest.php', ['type' => 'mkt', 'model' => ''] + $base);
+$res = $sol->post('api/add_request.php', ['type' => 'mkt', 'model' => ''] + $base);
 check('marketing sem aplicação é recusado', ($res['json']['success'] ?? true) === false);
-$res = $sol->post('config/addRequest.php', ['urgent' => '1', 'urgent_reason' => ''] + $base);
+$res = $sol->post('api/add_request.php', ['urgent' => '1', 'urgent_reason' => ''] + $base);
 check('urgente sem motivo é recusado', ($res['json']['success'] ?? true) === false && str_contains($res['json']['message'] ?? '', 'urgente'));
 
-$res = $sol->post('config/addRequest.php', ['title' => 'Teste automático <script>x</script>'] + $base);
+$res = $sol->post('api/add_request.php', ['title' => 'Teste automático <script>x</script>'] + $base);
 $reqId = (int)($res['json']['id'] ?? 0);
 check('requisição válida é criada', ($res['json']['success'] ?? false) === true && $reqId > 0, snippet($res));
 $createdIds[] = ['ti', $reqId];
@@ -214,7 +214,7 @@ check('aprovadores são avisados', (int)$notif >= 1);
 $res = $sol->get("request_detail?id=$reqId&table=ti");
 check('título com HTML aparece escapado no detalhe', !str_contains($res['body'], '<script>x</script>') && str_contains($res['body'], '&lt;script&gt;'));
 
-$res = $sol->post('config/addRequest.php', ['title' => 'Teste automático urgente', 'urgent' => '1', 'urgent_reason' => 'turma sem projetor'] + $base);
+$res = $sol->post('api/add_request.php', ['title' => 'Teste automático urgente', 'urgent' => '1', 'urgent_reason' => 'turma sem projetor'] + $base);
 $urgentId = (int)($res['json']['id'] ?? 0);
 $createdIds[] = ['ti', $urgentId];
 $urgentRow = $urgentId ? $pdo->query("SELECT priority, obs FROM ctd_ti_frm WHERE id = $urgentId")->fetch(PDO::FETCH_ASSOC) : null;
@@ -235,15 +235,15 @@ check('impressão bloqueada para quem não pode ver', $res['status'] === 403, 'H
 
 // ------------------------------------------------------------------
 section('7. Aprovação');
-$res = $ti->post('config/aprovRequest.php', ['action' => 'post', 'id' => $reqId, 'table' => 'ti', 'value' => 'Y']);
+$res = $ti->post('api/approve_request.php', ['action' => 'post', 'id' => $reqId, 'table' => 'ti', 'value' => 'Y']);
 check('gestor não aprova', ($res['json']['success'] ?? true) === false);
-$res = $apr->post('config/aprovRequest.php', ['action' => 'post', 'id' => $reqId, 'table' => 'ti', 'value' => 'N', 'reason' => '']);
+$res = $apr->post('api/approve_request.php', ['action' => 'post', 'id' => $reqId, 'table' => 'ti', 'value' => 'N', 'reason' => '']);
 check('recusar sem motivo é bloqueado', ($res['json']['success'] ?? true) === false && str_contains($res['json']['message'] ?? '', 'motivo'));
 $res = $ti->post('api/request_actions.php', ['id' => $reqId, 'table' => 'ctd_ti_frm', 'action' => 'start_progress']);
 check('não inicia atendimento antes da aprovação', ($res['json']['success'] ?? true) === false);
-$res = $apr->post('config/aprovRequest.php', ['action' => 'post', 'id' => $reqId, 'table' => 'ti', 'value' => 'Y']);
+$res = $apr->post('api/approve_request.php', ['action' => 'post', 'id' => $reqId, 'table' => 'ti', 'value' => 'Y']);
 check('coordenação aprova', ($res['json']['success'] ?? false) === true, snippet($res));
-$res = $adm->post('config/aprovRequest.php', ['action' => 'post', 'id' => $reqId, 'table' => 'ti', 'value' => 'N', 'reason' => 'dup']);
+$res = $adm->post('api/approve_request.php', ['action' => 'post', 'id' => $reqId, 'table' => 'ti', 'value' => 'N', 'reason' => 'dup']);
 check('segunda decisão sobre o mesmo pedido é bloqueada', ($res['json']['success'] ?? true) === false);
 $res = $sol->post('api/request_actions.php', ['id' => $reqId, 'table' => 'ctd_ti_frm', 'action' => 'delete']);
 check('solicitante não exclui pedido já aprovado', ($res['json']['success'] ?? true) === false);
@@ -274,7 +274,7 @@ check('quem não vê o pedido não comenta', ($res['json']['success'] ?? true) =
 
 // ------------------------------------------------------------------
 section('10. Cancelar pedido pendente');
-$res = $sol->post('config/addRequest.php', ['title' => 'Para cancelar'] + $base);
+$res = $sol->post('api/add_request.php', ['title' => 'Para cancelar'] + $base);
 $cancelId = (int)($res['json']['id'] ?? 0);
 $createdIds[] = ['ti', $cancelId];
 $res = $sol->post('api/request_actions.php', ['id' => $cancelId, 'table' => 'ctd_ti_frm', 'action' => 'delete']);
@@ -284,10 +284,10 @@ check('cancelamento não deixa histórico órfão', (int)$left === 0);
 
 // ------------------------------------------------------------------
 section('11. Encaminhar: transferir');
-$res = $sol->post('config/addRequest.php', ['title' => 'Teste repasse'] + $base);
+$res = $sol->post('api/add_request.php', ['title' => 'Teste repasse'] + $base);
 $fwdReqId = (int)($res['json']['id'] ?? 0);
 $createdIds[] = ['ti', $fwdReqId];
-$apr->post('config/aprovRequest.php', ['action' => 'post', 'id' => $fwdReqId, 'table' => 'ti', 'value' => 'Y']);
+$apr->post('api/approve_request.php', ['action' => 'post', 'id' => $fwdReqId, 'table' => 'ti', 'value' => 'Y']);
 $ti->post('api/request_actions.php', ['id' => $fwdReqId, 'table' => 'ctd_ti_frm', 'action' => 'start_progress']);
 $shopAreaId = (int)$pdo->query("SELECT id FROM ctd_area WHERE LOWER(title) IN ('shop', 'compras') LIMIT 1")->fetchColumn();
 $lastFwd = fn() => (int)$pdo->query("SELECT id FROM request_forwards WHERE request_id = $fwdReqId AND request_table = 'ti' ORDER BY id DESC LIMIT 1")->fetchColumn();
@@ -358,10 +358,10 @@ $inboxPlace = function (int $areaId, int $id) use ($pdo): array {
     }
     return [null, null, null];
 };
-$res = $sol->post('config/addRequest.php', ['title' => 'Teste ajuda'] + $base);
+$res = $sol->post('api/add_request.php', ['title' => 'Teste ajuda'] + $base);
 $helpReqId = (int)($res['json']['id'] ?? 0);
 $createdIds[] = ['ti', $helpReqId];
-$apr->post('config/aprovRequest.php', ['action' => 'post', 'id' => $helpReqId, 'table' => 'ti', 'value' => 'Y']);
+$apr->post('api/approve_request.php', ['action' => 'post', 'id' => $helpReqId, 'table' => 'ti', 'value' => 'Y']);
 $ti->post('api/request_actions.php', ['id' => $helpReqId, 'table' => 'ctd_ti_frm', 'action' => 'start_progress']);
 $res = $ti->post('api/request_forwards.php', ['action' => 'forward', 'id' => $helpReqId, 'table' => 'ti', 'to_area_id' => $shopAreaId, 'mode' => 'help', 'message' => 'Precisamos de 2 cabos HDMI para terminar.']);
 check('TI pede ajuda a Compras', ($res['json']['success'] ?? false) === true, snippet($res));

@@ -1,7 +1,7 @@
 <?php
-require_once __DIR__ . '/session.php';
-require_once __DIR__ . '/conn.php';
-require_once __DIR__ . '/security.php';
+require_once __DIR__ . '/../config/session.php';
+require_once __DIR__ . '/../config/conn.php';
+require_once __DIR__ . '/../config/security.php';
 requireLoginJson($pdo);
 require_once __DIR__ . '/../classes/RequestManager.php';
 
@@ -80,7 +80,7 @@ try {
     if ($pdo->inTransaction()) {
         $pdo->rollBack();
     }
-    error_log('aprovRequest.php: ' . $e->getMessage());
+    error_log('approve_request.php: ' . $e->getMessage());
     jsonResponse(['success' => false, 'message' => 'Não foi possível salvar. Tente novamente.'], 500);
 }
 
@@ -93,7 +93,7 @@ $safeRecipients = function (callable $fetch) use ($id, $table): array {
     try {
         return $fetch();
     } catch (Throwable $e) {
-        error_log("aprovRequest.php: destinatários dos avisos de $table/$id: " . $e->getMessage());
+        error_log("approve_request.php: destinatários dos avisos de $table/$id: " . $e->getMessage());
         return [];
     }
 };

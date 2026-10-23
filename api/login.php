@@ -1,7 +1,7 @@
 <?php
-require_once __DIR__ . '/session.php';
-require_once __DIR__ . '/conn.php';
-require_once __DIR__ . '/security.php';
+require_once __DIR__ . '/../config/session.php';
+require_once __DIR__ . '/../config/conn.php';
+require_once __DIR__ . '/../config/security.php';
 
 header('Content-Type: application/json; charset=UTF-8');
 

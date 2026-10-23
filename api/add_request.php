@@ -1,7 +1,7 @@
 <?php
-require_once __DIR__ . '/session.php';
-require_once __DIR__ . '/conn.php';
-require_once __DIR__ . '/security.php';
+require_once __DIR__ . '/../config/session.php';
+require_once __DIR__ . '/../config/conn.php';
+require_once __DIR__ . '/../config/security.php';
 require_once __DIR__ . '/../classes/RequestManager.php';
 requireLoginJson($pdo);
 requirePostJson();
@@ -142,7 +142,7 @@ try {
     if ($pdo->inTransaction()) {
         $pdo->rollBack();
     }
-    error_log('addRequest.php: ' . $e->getMessage());
+    error_log('add_request.php: ' . $e->getMessage());
     jsonResponse(['success' => false, 'message' => 'Não foi possível enviar agora. Tente de novo em instantes.'], 500);
 }
 
@@ -163,7 +163,7 @@ try {
         $userId
     );
 } catch (Throwable $e) {
-    error_log("addRequest.php: avisos do pedido $sector/$newId: " . $e->getMessage());
+    error_log("add_request.php: avisos do pedido $sector/$newId: " . $e->getMessage());
 }
 
 jsonResponse([

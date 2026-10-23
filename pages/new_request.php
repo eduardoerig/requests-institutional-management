@@ -73,7 +73,7 @@ $modelInfo = [
                     const formData = new FormData();
                     formData.append('action', 'get');
                     formData.append('id', card.dataset.id);
-                    const data = await fetchAjax('config/getForm.php', formData);
+                    const data = await fetchAjax('api/get_form.php', formData);
                     if (!data || !data.success) {
                         holder.innerHTML = '<div class="empty-state"><i class="fa-solid fa-triangle-exclamation" aria-hidden="true"></i><p>Não foi possível abrir o formulário. Tente de novo.</p></div>';
                         return;

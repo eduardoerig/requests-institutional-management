@@ -464,7 +464,7 @@ if (btn_login) {
         formData.append('login', document.querySelector('#user').value);
         formData.append('password', document.querySelector('#password').value);
 
-        const success = await fetchAjax("config/login.php", formData);
+        const success = await fetchAjax("api/login.php", formData);
         if (success) {
             window.location.href = 'home';
         } else {
@@ -482,7 +482,7 @@ if (btn_logout) {
 
         let formData = new FormData();
 
-        const success = await fetchAjax("config/logout.php", formData);
+        const success = await fetchAjax("api/logout.php", formData);
         if (success) {
             window.location.reload()
         }
@@ -642,7 +642,7 @@ function bindFormRequests() {
         const formData = new FormData(form_requests);
         formData.append('action', 'post');
 
-        const data = await fetchAjax("config/addRequest.php", formData);
+        const data = await fetchAjax("api/add_request.php", formData);
         if (data && data.success) {
             flashToast(`Pedido nº ${parseInt(data.id, 10)} enviado. Você recebe um aviso quando a coordenação aprovar.`);
             window.location.href = safeInternalLink(data.link);
@@ -788,7 +788,7 @@ if (formCard) {
             formData.append('value', val);
             formData.append('reason', reason);
 
-            const data = await fetchAjax("config/aprovRequest.php", formData);
+            const data = await fetchAjax("api/approve_request.php", formData);
             if (data && data.success) {
                 showToast(data.message, 'success');
                 setTimeout(() => location.reload(), 1000);
@@ -928,7 +928,7 @@ async function decideRequest(value, id, table) {
         const ok = await showConfirm({ title: 'Aprovar pedido', message: 'O pedido vai para o setor responsável começar o atendimento.', type: 'success', confirmLabel: 'Aprovar' });
         if (!ok) return;
     }
-    const data = await postForm('config/aprovRequest.php', { action: 'post', id, table, value, reason });
+    const data = await postForm('api/approve_request.php', { action: 'post', id, table, value, reason });
     if (!data) return;
     showToast(data.message, data.success ? 'success' : 'error');
     if (data.success) refreshAfterChange({ advance: true, message: data.message });
@@ -1111,7 +1111,7 @@ document.addEventListener('click', async (e) => {
         count.textContent = `${verb} ${i + 1} de ${n}...`;
         let data;
         if (action === 'approve' || action === 'refuse') {
-            data = await postForm('config/aprovRequest.php', { action: 'post', id: item.id, table: item.table, value: action === 'approve' ? 'Y' : 'N', reason });
+            data = await postForm('api/approve_request.php', { action: 'post', id: item.id, table: item.table, value: action === 'approve' ? 'Y' : 'N', reason });
         } else {
             data = await postForm('api/request_actions.php', { id: item.id, table: `ctd_${item.table}_frm`, action: action === 'start' ? 'start_progress' : 'finish' });
         }
