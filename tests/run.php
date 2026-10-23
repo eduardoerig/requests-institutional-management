@@ -199,6 +199,8 @@ $res = $sol->post('config/addRequest.php', ['type' => 'colorPrint', 'qtd' => '0'
 check('impressão com 0 cópias é recusada', ($res['json']['success'] ?? true) === false);
 $res = $sol->post('config/addRequest.php', ['type' => 'mkt', 'model' => ''] + $base);
 check('marketing sem aplicação é recusado', ($res['json']['success'] ?? true) === false);
+$res = $sol->post('config/addRequest.php', ['urgent' => '1', 'urgent_reason' => ''] + $base);
+check('urgente sem motivo é recusado', ($res['json']['success'] ?? true) === false && str_contains($res['json']['message'] ?? '', 'urgente'));
 
 $res = $sol->post('config/addRequest.php', ['title' => 'Teste automático <script>x</script>'] + $base);
 $reqId = (int)($res['json']['id'] ?? 0);
@@ -211,6 +213,15 @@ check('aprovadores são avisados', (int)$notif >= 1);
 
 $res = $sol->get("request_detail?id=$reqId&table=ti");
 check('título com HTML aparece escapado no detalhe', !str_contains($res['body'], '<script>x</script>') && str_contains($res['body'], '&lt;script&gt;'));
+
+$res = $sol->post('config/addRequest.php', ['title' => 'Teste automático urgente', 'urgent' => '1', 'urgent_reason' => 'turma sem projetor'] + $base);
+$urgentId = (int)($res['json']['id'] ?? 0);
+$createdIds[] = ['ti', $urgentId];
+$urgentRow = $urgentId ? $pdo->query("SELECT priority, obs FROM ctd_ti_frm WHERE id = $urgentId")->fetch(PDO::FETCH_ASSOC) : null;
+check('urgente com motivo vira prioridade alta e guarda o motivo', $urgentRow && (int)$urgentRow['priority'] === 3 && str_starts_with((string)$urgentRow['obs'], 'Urgente: turma sem projetor'), json_encode($urgentRow));
+
+$res = $sol->get('myRequests');
+check('Minhas requisições mostra o pedido novo em Em andamento, aguardando a coordenação', str_contains($res['body'], 'Aguardando a coordenação') && str_contains($res['body'], 'Teste automático urgente'));
 
 // ------------------------------------------------------------------
 section('6. Quem pode ver');
@@ -337,6 +348,18 @@ check('pedido transferido termina Concluída', $reqStatus() === 'C', $reqStatus(
 
 // ------------------------------------------------------------------
 section('11b. Encaminhar: pedir ajuda');
+require_once dirname(__DIR__) . '/classes/RequestInbox.php';
+$tiAreaId = (int)$pdo->query("SELECT id FROM ctd_area WHERE LOWER(title) = 'ti' LIMIT 1")->fetchColumn();
+// Em qual aba/grupo da Caixa de um setor o pedido aparece, e com que frase
+$inboxPlace = function (int $areaId, int $id) use ($pdo): array {
+    RequestInbox::clearCache(); // a Caixa fica guardada por requisição; aqui o estado muda entre as checagens
+    foreach (RequestInbox::build($pdo, [$areaId])['tabs'] as $tab => $rows) {
+        foreach ($rows as $r) {
+            if ($r['table'] === 'ti' && (int)$r['id'] === $id) return [$tab, $r['group'], $r['context'][0]];
+        }
+    }
+    return [null, null, null];
+};
 $res = $sol->post('config/addRequest.php', ['title' => 'Teste ajuda'] + $base);
 $helpReqId = (int)($res['json']['id'] ?? 0);
 $createdIds[] = ['ti', $helpReqId];
@@ -347,6 +370,10 @@ check('TI pede ajuda a Compras', ($res['json']['success'] ?? false) === true, sn
 $helpFwd = (int)$pdo->query("SELECT id FROM request_forwards WHERE request_id = $helpReqId AND request_table = 'ti' ORDER BY id DESC LIMIT 1")->fetchColumn();
 $helpStatus = fn() => (string)$pdo->query("SELECT status FROM ctd_ti_frm WHERE id = $helpReqId")->fetchColumn();
 check('pedir ajuda não muda a situação', $helpStatus() === 'W', $helpStatus());
+$place = $inboxPlace($tiAreaId, $helpReqId);
+check('na TI, o pedido vai para Esperando', $place[0] === 'esperando' && str_contains((string)$place[2], 'Compras'), json_encode($place, JSON_UNESCAPED_UNICODE));
+$place = $inboxPlace($shopAreaId, $helpReqId);
+check('em Compras, chega em Para fazer', $place[0] === 'fazer' && $place[1] === 'chegaram', json_encode($place, JSON_UNESCAPED_UNICODE));
 $res = $ti->post('api/request_actions.php', ['id' => $helpReqId, 'table' => 'ctd_ti_frm', 'action' => 'finish']);
 check('não conclui com ajuda em aberto', ($res['json']['success'] ?? true) === false);
 $res = $shop->post('api/request_forwards.php', ['action' => 'accept', 'forward_id' => $helpFwd]);
@@ -357,27 +384,35 @@ $res = $shop->post('api/request_forwards.php', ['action' => 'return', 'forward_i
 check('devolver sem retorno é bloqueado', ($res['json']['success'] ?? true) === false);
 $res = $shop->post('api/request_forwards.php', ['action' => 'return', 'forward_id' => $helpFwd, 'note' => 'Cabos comprados, estão na secretaria.']);
 check('Compras devolve com retorno', ($res['json']['success'] ?? false) === true, snippet($res));
+$place = $inboxPlace($tiAreaId, $helpReqId);
+check('ajuda devolvida: volta para Para fazer da TI com o recado', $place[0] === 'fazer' && $place[1] === 'andamento' && str_contains((string)$place[2], 'devolveu'), json_encode($place, JSON_UNESCAPED_UNICODE));
 $res = $ti->post('api/request_actions.php', ['id' => $helpReqId, 'table' => 'ctd_ti_frm', 'action' => 'finish']);
 check('TI conclui depois do retorno', ($res['json']['success'] ?? false) === true, snippet($res));
 
 // ------------------------------------------------------------------
 section('11c. Caixa do setor');
-require_once dirname(__DIR__) . '/classes/RequestInbox.php';
-$tiAreaId = (int)$pdo->query("SELECT id FROM ctd_area WHERE LOWER(title) = 'ti' LIMIT 1")->fetchColumn();
+RequestInbox::clearCache();
 $inbox = RequestInbox::build($pdo, [$tiAreaId]);
 $mismatch = [];
 foreach ($inbox['tabs'] as $tab => $rows) {
     if (count($rows) !== $inbox['counts'][$tab]) $mismatch[] = $tab;
 }
 check('contadores das abas batem com as listas', !$mismatch, implode(', ', $mismatch));
+check('cada pedido aparece numa aba só', count(array_unique(array_merge(...array_map(fn($rows) => array_map(fn($r) => $r['table'] . ':' . $r['id'], $rows), array_values($inbox['tabs']))))) === array_sum(array_map('count', $inbox['tabs'])));
+$res = $ti->get('inbox?tab=historico');
+check('Histórico mostra a transferência da TI', $res['status'] === 200 && str_contains($res['body'], 'Teste repasse') && str_contains($res['body'], 'Transferido para Compras'), 'HTTP ' . $res['status']);
 $res = $ti->get('inbox?tab=enviados');
-check('aba Enviados mostra a transferência da TI', $res['status'] === 200 && str_contains($res['body'], 'Teste repasse'), 'HTTP ' . $res['status']);
+check('aba antiga (Enviados) abre a aba nova', $res['status'] === 200 && str_contains($res['body'], 'aria-current="page"'), 'HTTP ' . $res['status']);
+$res = $ti->get('inbox?q=' . urlencode('Teste repasse'));
+check('busca procura nas três abas', $res['status'] === 200 && str_contains($res['body'], 'Teste repasse'), 'HTTP ' . $res['status']);
+$res = $ti->get("request_detail?id=$fwdReqId&table=ti&from=inbox&tab=historico");
+check('pedido aberto da Caixa mostra a fila (Anterior/Próximo)', $res['status'] === 200 && str_contains($res['body'], 'queue-nav__pager') && str_contains($res['body'], 'data-back='), 'HTTP ' . $res['status']);
 $res = $ti->get('approved');
 check('rota antiga leva para a Caixa', $res['status'] === 302 && str_contains($res['headers'] ?? '', 'inbox'), 'HTTP ' . $res['status']);
 
 // ------------------------------------------------------------------
 section('12. Todas as páginas abrem para cada perfil');
-$pages = ['home', 'new_request', 'myRequests', 'approve', 'inbox', 'inbox?tab=concluidos', 'myAccount', 'accounts', 'ajuda', "request_detail?id=$reqId&table=ti", 'home?status=C', 'home?q=teste'];
+$pages = ['home', 'new_request', 'myRequests', 'myRequests?tab=concluidas', 'myRequests?q=teste', 'approve', 'approve?q=teste', 'inbox', 'inbox?tab=esperando', 'inbox?tab=historico', 'inbox?q=teste', 'myAccount', 'accounts', 'ajuda', "request_detail?id=$reqId&table=ti", "request_detail?id=$reqId&table=ti&from=inbox&tab=historico", "request_detail?id=$reqId&table=ti&from=approve", 'home?status=C', 'home?q=teste'];
 foreach (['solicitante' => $sol, 'coordenação' => $apr, 'gestor TI' => $ti, 'admin' => $adm] as $who => $client) {
     $broken = [];
     foreach ($pages as $page) {

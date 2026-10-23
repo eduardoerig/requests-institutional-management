@@ -20,14 +20,14 @@ if ($logged && $requestedPage === 'login' && $force_reset !== 1) {
     exit;
 }
 // Filas antigas viraram abas da Caixa do setor
-$legacyQueues = ['approved' => 'novos', 'inWork' => 'andamento'];
+$legacyQueues = ['approved' => 'fazer', 'inWork' => 'fazer'];
 if ($logged && isset($legacyQueues[$requestedPage]) && $force_reset !== 1) {
     header('Location: inbox?tab=' . $legacyQueues[$requestedPage]);
     exit;
 }
 // Setores trabalham pela Caixa; o Painel é da coordenação e da administração
 if ($logged && isGestorRole($role) && $requestedPage === 'home' && $force_reset !== 1) {
-    header('Location: inbox' . (($_GET['status'] ?? '') === 'C' ? '?tab=concluidos' : ''));
+    header('Location: inbox' . (($_GET['status'] ?? '') === 'C' ? '?tab=historico' : ''));
     exit;
 }
 if ($logged && $role === 'solicitante' && $requestedPage === 'home' && $force_reset !== 1) {
@@ -51,6 +51,11 @@ if ($logged && $force_reset === 1) {
 }
 
 $page = $requestedPage;
+// Daqui em diante a página só lê a sessão: libera o arquivo para os avisos e a conversa
+// (que rodam em segundo plano) não esperarem esta página terminar
+if ($page !== 'logout') {
+    session_write_close();
+}
 $currentStatusParam = $_GET['status'] ?? '';
 $isGestorShell = isGestorRole($role);
 $pageTitles = [
@@ -106,15 +111,15 @@ $pageClass = preg_replace('/[^a-zA-Z_]/', '', (string)$page);
                 modalMessage.textContent = message;
                 modalBtnConfirm.textContent = confirmLabel;
                 modalBtnCancel.textContent = cancelLabel;
-                modalBtnCancel.style.display = 'block';
+                modalBtnCancel.hidden = false;
 
                 const modalInput = document.getElementById('gModalInput');
                 const modalInputLabel = document.getElementById('gModalInputLabel');
                 const modalInputError = document.getElementById('gModalInputError');
                 modalInput.value = '';
-                modalInputError.style.display = 'none';
-                modalInput.style.display = input ? 'block' : 'none';
-                modalInputLabel.style.display = input ? 'block' : 'none';
+                modalInputError.hidden = true;
+                modalInput.hidden = !input;
+                modalInputLabel.hidden = !input;
                 if (input) {
                     modalInputLabel.textContent = input.label || '';
                     modalInput.placeholder = input.placeholder || '';
@@ -135,7 +140,7 @@ $pageClass = preg_replace('/[^a-zA-Z_]/', '', (string)$page);
                 const handleConfirm = () => {
                     const text = modalInput.value.trim();
                     if (input && input.required && text === '') {
-                        modalInputError.style.display = 'block';
+                        modalInputError.hidden = false;
                         modalInput.focus();
                         return;
                     }
@@ -179,10 +184,10 @@ $pageClass = preg_replace('/[^a-zA-Z_]/', '', (string)$page);
             modalTitle.textContent = title;
             modalMessage.textContent = message;
             modalBtnConfirm.textContent = confirmLabel;
-            modalBtnCancel.style.display = 'none';
-            document.getElementById('gModalInput').style.display = 'none';
-            document.getElementById('gModalInputLabel').style.display = 'none';
-            document.getElementById('gModalInputError').style.display = 'none';
+            modalBtnCancel.hidden = true;
+            document.getElementById('gModalInput').hidden = true;
+            document.getElementById('gModalInputLabel').hidden = true;
+            document.getElementById('gModalInputError').hidden = true;
 
             modalIcon.className = `modal-icon ${type}`;
             const iconMap = { warning: 'fa-triangle-exclamation', error: 'fa-circle-xmark', success: 'fa-circle-check', info: 'fa-circle-info' };
@@ -231,7 +236,7 @@ $pageClass = preg_replace('/[^a-zA-Z_]/', '', (string)$page);
             <div class="topbar__actions">
                 <div class="notification-wrapper icon-btn" id="notif-btn" role="button" tabindex="0" aria-label="Avisos" aria-haspopup="true" aria-expanded="false">
                     <i class="fa-solid fa-bell" aria-hidden="true"></i>
-                    <span class="notif-badge" id="notif-badge" style="display:none;">0</span>
+                    <span class="notif-badge" id="notif-badge" hidden>0</span>
                     <div class="notif-dropdown" id="notif-dropdown" role="dialog" aria-label="Avisos">
                         <div class="notif-header">
                             <span>Avisos</span>
@@ -456,7 +461,7 @@ $pageClass = preg_replace('/[^a-zA-Z_]/', '', (string)$page);
             showToast(data.message, data.success ? 'success' : 'error');
             if (data.success) {
                 close();
-                refreshAfterChange();
+                refreshAfterChange({ advance: true, message: data.message }); // o pedido vai para "Esperando": abre o próximo da fila
             }
         });
     })();
@@ -470,9 +475,9 @@ $pageClass = preg_replace('/[^a-zA-Z_]/', '', (string)$page);
             </div>
             <h3 id="gModalTitle" class="modal-title">Título</h3>
             <p id="gModalMessage" class="modal-message">Mensagem do modal aqui.</p>
-            <label id="gModalInputLabel" for="gModalInput" class="modal-input-label" style="display:none;"></label>
-            <textarea id="gModalInput" class="modal-input" rows="3" maxlength="1000" style="display:none;"></textarea>
-            <p id="gModalInputError" class="modal-input-error" style="display:none;">Este campo é obrigatório.</p>
+            <label id="gModalInputLabel" for="gModalInput" class="modal-input-label" hidden></label>
+            <textarea id="gModalInput" class="modal-input" rows="3" maxlength="1000" hidden></textarea>
+            <p id="gModalInputError" class="modal-input-error" hidden>Este campo é obrigatório.</p>
 
             <div id="gModalActions" class="modal-actions">
                 <button id="gModalBtnConfirm" class="btn-modal btn-modal-confirm">Confirmar</button>

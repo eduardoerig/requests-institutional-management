@@ -92,13 +92,6 @@ $pageLink = function (int $n) use ($activeFilterStatus, $searchTerm, $searchDate
     return 'home?' . http_build_query(array_filter(['status' => $activeFilterStatus, 'q' => $searchTerm, 'data' => $searchDate, 'p' => $n > 1 ? $n : null]));
 };
 
-// Buscar notificações não lidas
-$unread_stmt = $pdo->prepare("SELECT COUNT(*) FROM notifications WHERE user_id = ? AND is_read = 0");
-$unread_stmt->execute([$_SESSION['id'] ?? 0]);
-$unread_count = $unread_stmt->fetchColumn();
-
-// Status stepper labels
-$stepperMap = ['P' => 0, 'Y' => 1, 'W' => 2, 'C' => 3, 'N' => -1];
 ?>
 <?php
 $pageHeading = [
@@ -125,107 +118,65 @@ $hasFilter = $activeFilterStatus || $searchTerm !== '' || $searchDate !== '';
         <h1><?= e($pageHeading) ?></h1>
         <p><?= $isAdmSub ? 'Pedidos da sua subdivisão.' : ($isGestor ? 'Pedidos do seu setor.' : 'Todos os pedidos da escola.') ?></p>
     </div>
-    <button type="button" onclick="exportToExcel()" class="btn"><i class="fa-solid fa-file-csv" aria-hidden="true"></i> Exportar planilha</button>
+    <button type="button" onclick="exportToExcel()" class="btn btn--ghost hide-mobile"><i class="fa-solid fa-download" aria-hidden="true"></i> Exportar planilha</button>
 </div>
 
-<nav class="pipeline" aria-label="Pedidos por etapa" style="<?= $isGestor ? 'grid-template-columns: repeat(3, 1fr);' : '' ?>">
+<nav class="pipeline" aria-label="Pedidos por etapa">
     <?php foreach ($pipeline as $code => [$label, $count]):
         $isOn = $activeFilterStatus === $code;
         $href = $isOn ? 'home' : 'home?status=' . $code;
     ?>
-        <a class="pipeline__step pipeline__step--<?= $code ?><?= $isOn ? ' is-active' : '' ?>" href="<?= e($href) ?>"<?= $isOn ? ' aria-current="true"' : '' ?>>
+        <a class="pipeline__step<?= $isOn ? ' is-active' : '' ?>" href="<?= e($href) ?>"<?= $isOn ? ' aria-current="true"' : '' ?>>
             <strong><?= (int)$count ?></strong>
             <span><?= e($label) ?></span>
         </a>
     <?php endforeach; ?>
 </nav>
 
-<p class="alerts-row">
-    <span class="<?= ($atrasadas ?? 0) > 0 ? 'is-bad' : '' ?>"><b><?= (int)($atrasadas ?? 0) ?></b> com prazo vencido</span>
-    <span class="<?= ($criticas ?? 0) > 0 ? 'is-bad' : '' ?>"><b><?= (int)($criticas ?? 0) ?></b> críticas</span>
-    <span><b><?= (int)($urgentes ?? 0) ?></b> com urgência alta ou crítica</span>
-    <span><b><?= (int)($total ?? 0) ?></b> no total</span>
-</p>
+<?php if (($atrasadas ?? 0) > 0 || ($criticas ?? 0) > 0): ?>
+    <p class="notice notice--bad">
+        <i class="fa-solid fa-circle-exclamation" aria-hidden="true"></i>
+        <span class="notice__body">
+            <span><?php if (($atrasadas ?? 0) > 0): ?><b><?= (int)$atrasadas ?> <?= (int)$atrasadas === 1 ? 'pedido' : 'pedidos' ?></b> <?= (int)$atrasadas === 1 ? 'passou' : 'passaram' ?> do prazo<?php endif; ?><?php if (($atrasadas ?? 0) > 0 && ($criticas ?? 0) > 0): ?>; <?php endif; ?><?php if (($criticas ?? 0) > 0): ?><b><?= (int)$criticas ?></b> com prioridade crítica<?php endif; ?>.</span>
+        </span>
+    </p>
+<?php endif; ?>
 
 <div class="dash-grid">
-    <section class="panel" aria-labelledby="tabelaTitulo">
-        <div class="panel__head" style="flex-wrap:wrap;">
-            <h2 id="tabelaTitulo"><?= e($activeFilterStatus ? $pageHeading : 'Pedidos') ?></h2>
-            <?php if ($activeFilterStatus): ?><a class="btn btn--sm btn--ghost" href="home">Ver todos</a><?php endif; ?>
-        </div>
-        <div class="panel__body" style="padding-bottom:6px;">
-            <form method="get" action="home" class="row" role="search" style="align-items:flex-end;">
+    <section aria-labelledby="tabelaTitulo">
+        <div class="toolbar">
+            <h2 id="tabelaTitulo" class="toolbar__title"><?= e($activeFilterStatus ? $pageHeading : 'Pedidos') ?> <span><?= $totalRows ?></span></h2>
+            <form method="get" action="home" class="toolbar__filters" role="search">
                 <?php if ($activeFilterStatus): ?><input type="hidden" name="status" value="<?= e($activeFilterStatus) ?>"><?php endif; ?>
-                <div class="field" style="flex:1 1 260px; margin:0;">
-                    <label for="dashSearch">Buscar</label>
-                    <div class="search-box">
-                        <i class="fas fa-search" aria-hidden="true"></i>
-                        <input type="search" name="q" id="dashSearch" value="<?= e($searchTerm) ?>" placeholder="Título, número ou solicitante">
-                    </div>
+                <div class="search-box">
+                    <i class="fas fa-search" aria-hidden="true"></i>
+                    <input type="search" name="q" value="<?= e($searchTerm) ?>" placeholder="Título, número ou quem pediu" aria-label="Buscar por título, número ou quem pediu">
                 </div>
-                <div class="field field--date" style="margin:0; width:180px;">
-                    <label for="dateFilter">Pedidos do dia</label>
-                    <input type="date" name="data" id="dateFilter" value="<?= e($searchDate) ?>">
-                </div>
-                <button type="submit" class="btn btn--dark"><i class="fa-solid fa-magnifying-glass" aria-hidden="true"></i> Buscar</button>
-                <?php if ($searchTerm !== '' || $searchDate !== ''): ?>
-                    <a class="btn btn--ghost" href="<?= e('home' . ($activeFilterStatus ? '?status=' . $activeFilterStatus : '')) ?>">Limpar busca</a>
+                <input type="date" name="data" value="<?= e($searchDate) ?>" aria-label="Pedidos feitos neste dia" title="Pedidos feitos neste dia" onchange="this.form.submit()">
+                <?php if ($hasFilter): ?>
+                    <a class="btn btn--ghost" href="home">Limpar</a>
                 <?php endif; ?>
             </form>
-            <p class="result-count" style="margin:12px 0 0;"><?= $totalRows ?> <?= $totalRows === 1 ? 'pedido encontrado' : 'pedidos encontrados' ?><?= $totalPages > 1 ? ', página ' . $currentPageNum . ' de ' . $totalPages : '' ?></p>
         </div>
 
-        <div class="table-wrap">
-            <table class="data-table data-table--stack">
-                <thead>
-                    <tr>
-                        <th scope="col">Nº</th>
-                        <th scope="col">Pedido</th>
-                        <th scope="col">Setor</th>
-                        <th scope="col">Prazo</th>
-                        <th scope="col">Situação</th>
-                        <th scope="col"><span class="visually-hidden">Ações</span></th>
-                    </tr>
-                </thead>
-                <tbody>
-                    <?php if (count($recent_requests) > 0): ?>
-                        <?php foreach ($recent_requests as $req):
-                            $st = strtoupper($req['status'] ?? 'P') ?: 'P';
-                            $pri = (int)($req['priority'] ?? 2);
-                            $tbl = $req['table'];
-                            $detailHref = 'request_detail?id=' . (int)$req['id'] . '&table=' . urlencode($tbl);
-                        ?>
-                            <tr>
-                                <td class="num">#<?= (int)$req['id'] ?></td>
-                                <td>
-                                    <a class="cell-title" href="<?= e($detailHref) ?>" style="color:inherit;"><?= e($req['title']) ?></a>
-                                    <div class="cell-sub">
-                                        <?= e($req['solicitor_name_formatted'] ?? '') ?><?php if (!empty($req['subdivision_name'])): ?>, <?= e($req['subdivision_name']) ?><?php endif; ?>
-                                        <?php if ($pri >= 3): ?> <span class="prio-tag prio-tag--<?= $pri ?>"><?= e(priorityLabel($pri)) ?></span><?php endif; ?>
-                                    </div>
-                                </td>
-                                <td data-label="Setor"><span class="sector-tag" data-sector="<?= e($tbl) ?>"><?= e(requestSectorName($tbl)) ?></span></td>
-                                <td data-label="Prazo"><?= getPrazoBadge($req['date'] ?? '', $st) ?></td>
-                                <td><span class="status-pill status-pill--<?= e($st) ?>"><?= e(statusLabel($st)) ?></span></td>
-                                <td style="text-align:right; white-space:nowrap;">
-                                    <?php if ($st === 'Y' && $isGestor): ?>
-                                        <button type="button" class="btn btn--sm btn--primary" onclick="globalRequestAction('start_progress', '<?= (int)$req['id'] ?>', 'ctd_<?= e($tbl) ?>_frm')">Começar</button>
-                                    <?php elseif ($st === 'W' && $isGestor): ?>
-                                        <button type="button" class="btn btn--sm btn--success" onclick="globalRequestAction('finish', '<?= (int)$req['id'] ?>', 'ctd_<?= e($tbl) ?>_frm')">Concluir</button>
-                                    <?php endif; ?>
-                                    <a class="btn btn--sm" href="<?= e($detailHref) ?>">Abrir</a>
-                                </td>
-                            </tr>
-                        <?php endforeach; ?>
-                    <?php else: ?>
-                        <tr><td colspan="6"><div class="empty-state"><i class="fa-regular fa-folder-open" aria-hidden="true"></i><p><?= $hasFilter ? 'Nenhum pedido com esses filtros.' : 'Ainda não há pedidos.' ?></p></div></td></tr>
-                    <?php endif; ?>
-                </tbody>
-            </table>
+        <div class="queue queue--sector queue--dash">
+            <?php if ($recent_requests): ?>
+                <?= renderQueueHead(['sector' => true]) ?>
+                <ul class="queue-list">
+                    <?php foreach ($recent_requests as $req):
+                        $st = strtoupper($req['status'] ?? 'P') ?: 'P';
+                        $req['context'] = [statusLabel($st), ['C' => 'ok', 'N' => 'bad'][$st] ?? ''];
+                    ?>
+                        <?= renderQueueRow($req, ['sector' => true, 'due' => !in_array($st, ['C', 'N'], true)]) ?>
+                    <?php endforeach; ?>
+                </ul>
+            <?php else: ?>
+                <div class="empty-state"><i class="fa-regular fa-folder-open" aria-hidden="true"></i><p><?= $hasFilter ? 'Nenhum pedido com esses filtros.' : 'Ainda não há pedidos.' ?></p></div>
+            <?php endif; ?>
         </div>
 
         <?php if ($totalPages > 1): ?>
-            <nav class="pager" aria-label="Páginas" style="padding-bottom:14px;">
+            <nav class="pager" aria-label="Páginas">
                 <?php if ($currentPageNum > 1): ?><a href="<?= e($pageLink($currentPageNum - 1)) ?>">Anterior</a><?php endif; ?>
                 <span class="is-current"><?= $currentPageNum ?> de <?= $totalPages ?></span>
                 <?php if ($currentPageNum < $totalPages): ?><a href="<?= e($pageLink($currentPageNum + 1)) ?>">Próxima</a><?php endif; ?>
@@ -233,54 +184,32 @@ $hasFilter = $activeFilterStatus || $searchTerm !== '' || $searchDate !== '';
         <?php endif; ?>
     </section>
 
-    <?php if (!$activeFilterStatus && ($total ?? 0) > 0): ?>
+    <?php if (!$activeFilterStatus && !empty($categoryCounts)): ?>
         <aside class="stack" aria-label="Resumo">
-            <section class="panel">
-                <div class="panel__head"><h2>Por situação</h2></div>
-                <div class="panel__body"><div class="chart-box"><canvas id="statusChart" aria-label="Pedidos por situação" role="img"></canvas></div></div>
-            </section>
+            <?php
+            $sectorRows = $categoryCounts ?? [];
+            arsort($sectorRows);
+            $sectorMax = max($sectorRows ?: [1]);
+            ?>
+            <?php if ($sectorRows): ?>
             <section class="panel">
                 <div class="panel__head"><h2>Por setor</h2></div>
-                <div class="panel__body"><div class="chart-box"><canvas id="categoryChart" aria-label="Pedidos por setor" role="img"></canvas></div></div>
+                <div class="panel__body">
+                    <ul class="bar-list">
+                        <?php foreach ($sectorRows as $sector => $count): ?>
+                            <li class="bar-list__row">
+                                <span><?= e(requestSectorName($sector)) ?></span><strong><?= (int)$count ?></strong>
+                                <span class="bar-list__track"><span class="bar-list__fill" style="--w: <?= round($count / $sectorMax * 100) ?>%"></span></span>
+                            </li>
+                        <?php endforeach; ?>
+                    </ul>
+                </div>
             </section>
+            <?php endif; ?>
         </aside>
     <?php endif; ?>
 </div>
 
-<?php if (!$activeFilterStatus && ($total ?? 0) > 0): ?>
-<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
-<script>
-(function () {
-    if (typeof Chart === 'undefined') return; // sem internet: os números da esteira continuam valendo
-    Chart.defaults.font.family = getComputedStyle(document.body).fontFamily;
-    Chart.defaults.color = '#565A63';
-
-    const statusData = <?= json_encode([
-        ['Aguardando aprovação', (int)($statusCounts['P'] ?? 0), '#D97706'],
-        ['Aprovadas', (int)($statusCounts['Y'] ?? 0), '#2563EB'],
-        ['Em atendimento', (int)($statusCounts['W'] ?? 0), '#7C3AED'],
-        ['Concluídas', (int)($statusCounts['C'] ?? 0), '#15803D'],
-        ['Recusadas', (int)($statusCounts['N'] ?? 0), '#B91C1C'],
-    ], JSON_UNESCAPED_UNICODE) ?>.filter(d => d[1] > 0);
-
-    new Chart(document.getElementById('statusChart'), {
-        type: 'doughnut',
-        data: { labels: statusData.map(d => d[0]), datasets: [{ data: statusData.map(d => d[1]), backgroundColor: statusData.map(d => d[2]), borderColor: '#fff', borderWidth: 2 }] },
-        options: { responsive: true, maintainAspectRatio: false, cutout: '62%', plugins: { legend: { position: 'right', labels: { boxWidth: 10, font: { size: 12 } } } } }
-    });
-
-    const sectorColors = { ti: '#DC2626', service: '#CA8A04', shop: '#059669', xerox: '#7C3AED', mkt: '#475569' };
-    const sectorNames = <?= json_encode(['ti' => 'TI', 'service' => 'Manutenção', 'shop' => 'Compras', 'xerox' => 'Reprografia', 'mkt' => 'Marketing'], JSON_UNESCAPED_UNICODE) ?>;
-    const cat = <?= json_encode($categoryCounts ?? []) ?>;
-    const keys = Object.keys(cat);
-    new Chart(document.getElementById('categoryChart'), {
-        type: 'bar',
-        data: { labels: keys.map(k => sectorNames[k] || k), datasets: [{ data: keys.map(k => cat[k]), backgroundColor: keys.map(k => sectorColors[k] || '#475569'), borderRadius: 6 }] },
-        options: { indexAxis: 'y', responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } }, scales: { x: { beginAtZero: true, ticks: { precision: 0 }, grid: { color: '#EEF0F3' } }, y: { grid: { display: false } } } }
-    });
-})();
-</script>
-<?php endif; ?>
 
 <script>
 function exportToExcel() {

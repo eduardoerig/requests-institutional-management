@@ -52,29 +52,29 @@ $full_role_labels = array_merge($role_labels, [
 
 ?>
 <div class="page-head">
-    <div>
+    <div class="page-head--hide-mobile">
         <h1>Usuários e setores</h1>
         <p>Cadastre pessoas, defina o que cada uma pode fazer e ligue os responsáveis aos setores.</p>
     </div>
-    <a href="api/export_accounts_csv.php" class="btn"><i class="fa-solid fa-file-csv" aria-hidden="true"></i> Exportar planilha</a>
+    <a href="api/export_accounts_csv.php" class="btn btn--ghost hide-mobile"><i class="fa-solid fa-file-csv" aria-hidden="true"></i> Exportar planilha</a>
 </div>
 
 <div class="users-layout">
-    <section class="panel" aria-labelledby="contasTitulo" style="min-width:0;">
-        <div class="panel__head" style="flex-wrap:wrap;">
-            <h2 id="contasTitulo"><i class="fa-solid fa-users" aria-hidden="true"></i> Contas <span id="userCount" class="sidebar-badge" style="background:var(--grafite); color:#fff;"></span></h2>
-            <div class="row" style="flex:1 1 520px; justify-content:flex-end;">
-                <div class="search-box" style="flex:1 1 220px;">
+    <section class="panel users-main" aria-labelledby="contasTitulo">
+        <div class="panel__head">
+            <h2 id="contasTitulo"><i class="fa-solid fa-users" aria-hidden="true"></i> Contas <span id="userCount" class="sidebar-badge"></span></h2>
+            <div class="toolbar__filters">
+                <div class="search-box">
                     <i class="fa-solid fa-search" aria-hidden="true"></i>
                     <input type="search" id="userSearch" placeholder="Buscar por nome ou login" aria-label="Buscar usuário">
                 </div>
-                <select id="roleFilter" aria-label="Filtrar por perfil" style="width:auto; flex:0 1 220px;">
+                <select id="roleFilter" aria-label="Filtrar por perfil">
                     <option value="all">Todos os perfis</option>
                     <?php foreach($role_labels as $key => $label): ?>
                         <option value="<?= e($key) ?>"><?= e($label) ?></option>
                     <?php endforeach; ?>
                 </select>
-                <select id="subdivisionFilter" aria-label="Filtrar por subdivisão" style="width:auto; flex:0 1 200px;">
+                <select id="subdivisionFilter" aria-label="Filtrar por subdivisão">
                     <option value="all">Todas as subdivisões</option>
                     <?php foreach($all_subdivisions as $sub): ?>
                         <option value="<?= (int)$sub['id'] ?>"><?= e($sub['name']) ?></option>
@@ -84,7 +84,7 @@ $full_role_labels = array_merge($role_labels, [
         </div>
 
         <div class="table-wrap">
-            <table id="tableUsers" style="width: 100%; border-collapse: collapse; font-size: 0.92rem;">
+            <table id="tableUsers" class="data-table users-table">
                 <thead>
                     <tr>
                         <th class="ac-th">Usuário</th>
@@ -93,8 +93,8 @@ $full_role_labels = array_merge($role_labels, [
                         <th class="ac-th">O que faz</th>
                         <th class="ac-th">Setores</th>
                         <th class="ac-th">Subdivisões</th>
-                        <th class="ac-th" style="text-align:center;">Status</th>
-                        <th class="ac-th" style="text-align:center;">Ações</th>
+                        <th class="ac-th is-center">Situação</th>
+                        <th class="ac-th is-center">Ações</th>
                     </tr>
                 </thead>
                 <tbody>
@@ -102,20 +102,19 @@ $full_role_labels = array_merge($role_labels, [
                         $isActive = ($u['status'] ?? 1) == 1;
                         $subIds = array_filter(explode(',', $u['all_subdivision_ids'] ?? ''));
                     ?>
-                    <tr class="user-row ac-row"
+                    <tr class="user-row ac-row<?= $isActive ? '' : ' is-inactive' ?>"
                         data-role="<?= $u['role'] ?>"
-                        data-subdivisions="<?= htmlspecialchars(implode(',', $subIds)) ?>"
-                        style="<?= !$isActive ? 'opacity:0.55;' : '' ?>">
+                        data-subdivisions="<?= htmlspecialchars(implode(',', $subIds)) ?>">
 
                         <!-- Usuário -->
                         <td class="ac-td">
-                            <div style="display:flex; align-items:center; gap:10px;">
-                                <div class="ac-avatar" style="background: <?= $isActive ? 'var(--primary)' : '#94a3b8' ?>;">
+                            <div class="ac-person">
+                                <div class="ac-avatar" aria-hidden="true">
                                     <?= e(mb_strtoupper(mb_substr((string)$u['name'], 0, 1))) ?>
                                 </div>
                                 <div>
-                                    <div class="user-name" style="font-weight:600; color:var(--text-main); white-space:nowrap;"><?= htmlspecialchars($u['name']) ?></div>
-                                    <div style="font-size:0.7rem; color:var(--text-muted);">#<?= (int)$u['id'] ?></div>
+                                    <div class="user-name"><?= htmlspecialchars($u['name']) ?></div>
+                                    <div class="ac-id">Nº <?= (int)$u['id'] ?></div>
                                 </div>
                             </div>
                         </td>
@@ -124,8 +123,6 @@ $full_role_labels = array_merge($role_labels, [
                         <td class="ac-td">
                             <input type="text" value="<?= htmlspecialchars($u['login']) ?>"
                                    class="row-login-input ac-input"
-                                   onfocus="this.style.borderColor='var(--primary)'"
-                                   onblur="this.style.borderColor='var(--border-color)'"
                                    oninput="markRowDirty(this)">
                         </td>
 
@@ -135,8 +132,6 @@ $full_role_labels = array_merge($role_labels, [
                                    class="row-phone-input ac-input"
                                    placeholder="5511999998888"
                                    maxlength="20"
-                                   onfocus="this.style.borderColor='var(--primary)'"
-                                   onblur="this.style.borderColor='var(--border-color)'"
                                    oninput="markRowDirty(this)"
                                    title="Formato internacional sem + (ex: 5511999998888)">
                         </td>
@@ -153,7 +148,7 @@ $full_role_labels = array_merge($role_labels, [
                         <!-- Setores -->
                         <td class="ac-td">
                             <?php if($u['all_sectors']): ?>
-                                <div class="sector-list" style="display:flex; flex-wrap:wrap; gap:3px;">
+                                <div class="sector-list">
                                     <?php foreach(explode(', ', $u['all_sectors']) as $stitle):
                                         $lbl = $categories[$stitle] ?? ucfirst($stitle);
                                     ?>
@@ -161,16 +156,16 @@ $full_role_labels = array_merge($role_labels, [
                                     <?php endforeach; ?>
                                 </div>
                             <?php else: ?>
-                                <span style="color:#cbd5e1; font-style:italic; font-size:0.75rem;">Nenhum</span>
+                                <span class="sub-none">Nenhum</span>
                             <?php endif; ?>
                         </td>
 
                         <!-- Subdivisões -->
                         <td class="ac-td">
-                            <div class="sub-popover-wrap" style="position:relative;">
+                            <div class="sub-popover-wrap">
 
                                 <!-- Exibição compacta: pills + botão editar -->
-                                <div class="sub-display" onclick="toggleSubPopover(<?= $u['id'] ?>)">
+                                <div class="sub-display" role="button" tabindex="0" onclick="toggleSubPopover(<?= $u['id'] ?>)">
                                     <?php
                                     $subNames = [];
                                     foreach ($all_subdivisions as $sub) {
@@ -189,7 +184,7 @@ $full_role_labels = array_merge($role_labels, [
                                     <?php else: ?>
                                         <span class="sub-none">Nenhuma</span>
                                     <?php endif; ?>
-                                    <i class="fa-solid fa-pen-to-square sub-edit-icon"></i>
+                                    <i class="fa-solid fa-pen-to-square sub-edit-icon" aria-hidden="true"></i>
                                 </div>
 
                                 <!-- Popover com checkboxes (oculto) -->
@@ -197,19 +192,18 @@ $full_role_labels = array_merge($role_labels, [
                                     <div class="sub-pop-arrow"></div>
                                     <p class="sub-pop-title"><i class="fa-solid fa-layer-group"></i> Subdivisões</p>
                                     <!-- Editor oculto mantido para compatibilidade com saveRowAccount -->
-                                    <div class="subdivision-editor" data-subdivision-editor data-user-id="<?= $u['id'] ?>" style="display:flex; flex-direction:column; gap:6px;">
+                                    <div class="subdivision-editor" data-subdivision-editor data-user-id="<?= $u['id'] ?>">
                                         <?php foreach($all_subdivisions as $sub): ?>
                                             <label class="sub-pop-check-label">
                                                 <input type="checkbox"
                                                        value="<?= $sub['id'] ?>"
                                                        <?= in_array((string)$sub['id'], $subIds, true) ? 'checked' : '' ?>
-                                                       onchange="syncSubDisplay(<?= $u['id'] ?>)"
-                                                       style="accent-color: var(--primary); width:14px; height:14px; flex-shrink:0; cursor:pointer;">
+                                                       onchange="syncSubDisplay(<?= $u['id'] ?>)">
                                                 <span><?= htmlspecialchars($sub['name']) ?></span>
                                             </label>
                                         <?php endforeach; ?>
                                     </div>
-                                    <div style="display:flex; gap:6px; margin-top:10px; border-top:1px solid #f1f5f9; padding-top:10px;">
+                                    <div class="popover-actions">
                                         <button onclick="saveSubsAndClose(<?= $u['id'] ?>, this)" class="sub-pop-btn sub-pop-save"><i class="fa-solid fa-floppy-disk"></i> Salvar</button>
                                         <button onclick="closeSubPopover(<?= $u['id'] ?>)" class="sub-pop-btn sub-pop-cancel">Cancelar</button>
                                     </div>
@@ -218,41 +212,41 @@ $full_role_labels = array_merge($role_labels, [
                         </td>
 
                         <!-- Status -->
-                        <td class="ac-td" style="text-align:center; white-space:nowrap;">
+                        <td class="ac-td is-center">
                             <label class="switch">
                                 <input type="checkbox" <?= $isActive ? 'checked' : '' ?> onchange="toggleUserStatus(<?= $u['id'] ?>, this.checked, this)" aria-label="Conta ativa">
                                 <span class="slider round"></span>
                             </label>
-                            <div style="font-size:0.8rem; margin-top:3px; font-weight:700; color: <?= $isActive ? 'var(--ok)' : 'var(--perigo)' ?>;">
+                            <div class="ac-status<?= $isActive ? '' : ' ac-status--off' ?>">
                                 <?= $isActive ? 'Ativa' : 'Inativa' ?>
                             </div>
                         </td>
 
                         <!-- Ações -->
-                        <td class="ac-td" style="text-align:center; white-space:nowrap;">
-                            <div style="display:flex; gap:4px; justify-content:center; align-items:center; margin-bottom:4px;">
+                        <td class="ac-td is-center">
+                            <div class="ac-actions">
                                 <button onclick="saveRowAccount(<?= $u['id'] ?>, this)" class="ac-btn ac-btn-save" title="Salvar alterações">
-                                    <i class="fa-solid fa-floppy-disk"></i>
+                                    <i class="fa-solid fa-floppy-disk" aria-hidden="true"></i>
                                 </button>
-                                <div class="pass-popover-wrap" style="position:relative;">
+                                <div class="pass-popover-wrap">
                                     <button onclick="togglePassPopover(<?= $u['id'] ?>, this)" class="ac-btn ac-btn-key" title="Alterar senha">
-                                        <i class="fa-solid fa-key"></i>
+                                        <i class="fa-solid fa-key" aria-hidden="true"></i>
                                     </button>
                                     <div id="passPopover_<?= $u['id'] ?>" class="pass-popover" style="display:none;">
                                         <div class="pass-popover-arrow"></div>
-                                        <p class="pass-popover-title"><i class="fa-solid fa-key"></i> Alterar Senha</p>
-                                        <input type="password" id="pop_newpass_<?= $u['id'] ?>" placeholder="Nova senha..." class="pass-popover-input" autocomplete="new-password">
-                                        <div style="display:flex; gap:6px; margin-top:8px;">
+                                        <p class="pass-popover-title">Nova senha</p>
+                                        <input type="password" id="pop_newpass_<?= $u['id'] ?>" placeholder="Mínimo 8 caracteres" class="pass-popover-input" autocomplete="new-password">
+                                        <div class="popover-actions">
                                             <button onclick="confirmPassChange(<?= $u['id'] ?>)" class="pass-pop-btn pass-pop-confirm">Confirmar</button>
                                             <button onclick="closePassPopover(<?= $u['id'] ?>)" class="pass-pop-btn pass-pop-cancel">Cancelar</button>
                                         </div>
                                     </div>
                                 </div>
                                 <button onclick="deleteUser(<?= $u['id'] ?>)" class="ac-btn ac-btn-del" title="Excluir usuário">
-                                    <i class="fa-solid fa-trash"></i>
+                                    <i class="fa-solid fa-trash" aria-hidden="true"></i>
                                 </button>
                             </div>
-                            <div class="row-save-state" style="font-size:0.8rem; color:var(--texto-2); font-weight:600;"></div>
+                            <div class="row-save-state" aria-live="polite"></div>
                         </td>
                     </tr>
                     <?php endforeach; ?>
@@ -288,7 +282,7 @@ $full_role_labels = array_merge($role_labels, [
                         </select>
                     </div>
                     <div class="field" id="subdivisionContainer">
-                        <label class="row" style="justify-content:space-between;">Subdivisão
+                        <label class="field__label-row">Subdivisão
                             <button type="button" class="btn btn--sm btn--ghost" onclick="addSubdivisionField()"><i class="fa-solid fa-plus" aria-hidden="true"></i> Outra</button>
                         </label>
                         <select name="new_subdivisions[]" aria-label="Subdivisão">
@@ -311,30 +305,30 @@ $full_role_labels = array_merge($role_labels, [
         <section class="panel" aria-labelledby="setoresTitulo">
             <div class="panel__head"><h2 id="setoresTitulo"><i class="fa-solid fa-building" aria-hidden="true"></i> Setores</h2></div>
             <div class="panel__body">
-                <ul class="list-links" style="margin:-8px -18px 12px;">
+                <ul class="sector-admin">
                     <?php foreach($all_sectors as $s):
                         $label = $categories[$s['title']] ?? ucfirst($s['title']);
                         $isSystem = areaTitleToSector((string)$s['title']) !== null;
                     ?>
-                        <li class="row" style="justify-content:space-between; padding:0 18px; min-height:48px; border-bottom:1px solid var(--linha);">
-                            <span style="font-weight:700;"><?= e($label) ?></span>
+                        <li>
+                            <span class="sector-admin__name"><?= e($label) ?></span>
                             <?php if ($isSystem): ?>
-                                <span class="muted" style="font-size:0.85rem;">Setor do sistema</span>
+                                <span class="sector-admin__note">Setor do sistema</span>
                             <?php else: ?>
                                 <button type="button" class="btn btn--sm btn--ghost" onclick="deleteSector(<?= (int)$s['id'] ?>)" aria-label="Excluir setor <?= e($label) ?>"><i class="fa-solid fa-trash-can" aria-hidden="true"></i> Excluir</button>
                             <?php endif; ?>
                         </li>
                     <?php endforeach; ?>
                 </ul>
-                <form id="formCreateSector" class="row">
-                    <input type="text" name="sector_title" placeholder="Nome do novo setor" required aria-label="Nome do novo setor" style="flex:1 1 160px; width:auto;">
-                    <button type="submit" class="btn btn--dark"><i class="fa-solid fa-plus" aria-hidden="true"></i> Criar</button>
+                <form id="formCreateSector" class="inline-form">
+                    <input type="text" name="sector_title" placeholder="Novo setor" required aria-label="Nome do novo setor">
+                    <button type="submit" class="btn"><i class="fa-solid fa-plus" aria-hidden="true"></i> Criar</button>
                 </form>
             </div>
         </section>
 
         <section class="panel" aria-labelledby="vinculoTitulo">
-            <div class="panel__head"><h2 id="vinculoTitulo"><i class="fa-solid fa-link" aria-hidden="true"></i> Ligar responsável a um setor</h2></div>
+            <div class="panel__head"><h2 id="vinculoTitulo"><i class="fa-solid fa-link" aria-hidden="true"></i> Responsável de setor</h2></div>
             <div class="panel__body">
                 <form id="formAssignSector">
                     <div class="field">
@@ -355,237 +349,13 @@ $full_role_labels = array_merge($role_labels, [
                             <?php endforeach; ?>
                         </select>
                     </div>
-                    <button type="submit" class="btn btn--dark btn--block"><i class="fa-solid fa-link" aria-hidden="true"></i> Ligar</button>
+                    <button type="submit" class="btn btn--block"><i class="fa-solid fa-link" aria-hidden="true"></i> Ligar</button>
                 </form>
             </div>
         </section>
     </aside>
 </div>
 
-<style>
-    /* === ACCOUNTS TABLE COMPACT UI === */
-    .ac-th {
-        padding: 10px 14px;
-        font-size: 0.85rem;
-        font-weight: 700;
-        color: var(--texto-2);
-        background: #FAFAFB;
-        border-bottom: 1px solid var(--linha);
-        white-space: nowrap;
-        text-align: left;
-    }
-    .ac-td {
-        padding: 10px 14px;
-        vertical-align: middle;
-        border-bottom: 1px solid var(--linha);
-    }
-    .ac-row:hover { background: #f8fafc; }
-    .ac-row:hover .ac-td { border-bottom-color: #e2e8f0; }
-    .ac-avatar {
-        width: 32px; height: 32px; border-radius: 50%;
-        color: #fff; display: flex; align-items: center;
-        justify-content: center; font-weight: 800; font-size: 0.85rem;
-        flex-shrink: 0;
-    }
-    .ac-input {
-        padding: 6px 10px;
-        border: 1px solid var(--border-color);
-        border-radius: 6px;
-        font-size: 0.92rem;
-        min-height: 40px;
-        transition: border-color 0.15s;
-        background: #fff;
-        width: 100%;
-    }
-    .ac-input:focus { border-color: var(--primary); }
-    .ac-pill {
-        background: #f1f5f9;
-        color: #475569;
-        padding: 2px 7px;
-        border-radius: 10px;
-        font-size: 0.8rem;
-        font-weight: 700;
-        border: 1px solid var(--linha);
-        white-space: nowrap;
-    }
-    .ac-subs-editor {
-        display: flex;
-        flex-direction: column;
-        gap: 4px;
-        max-height: 90px;
-        overflow-y: auto;
-        padding: 4px 0;
-    }
-    .ac-check-label {
-        display: flex;
-        align-items: center;
-        gap: 6px;
-        font-size: 0.72rem;
-        color: var(--text-main);
-        cursor: pointer;
-        white-space: nowrap;
-    }
-    .ac-btn {
-        width: 30px; height: 30px;
-        border: none; border-radius: 6px;
-        cursor: pointer; display: inline-flex;
-        align-items: center; justify-content: center;
-        font-size: 0.75rem; transition: opacity 0.15s, transform 0.1s;
-    }
-    .ac-btn:hover { opacity: 0.85; transform: scale(1.05); }
-    .ac-btn-save { background: #1e293b; color: #fff; }
-    .ac-btn-key  { background: #0f766e; color: #fff; }
-    .ac-btn-del  { background: #ef4444; color: #fff; }
-    /* Toggle Switch */
-    .switch { position: relative; display: inline-block; width: 34px; height: 20px; }
-    .switch input { opacity: 0; width: 0; height: 0; }
-    .slider { position: absolute; cursor: pointer; inset: 0; background: #cbd5e1; transition: .3s; }
-    .slider:before { position: absolute; content: ""; height: 14px; width: 14px; left: 3px; bottom: 3px; background: white; transition: .3s; }
-    input:checked + .slider { background: #10b981; }
-    input:checked + .slider:before { transform: translateX(14px); }
-    .slider.round { border-radius: 34px; }
-    .slider.round:before { border-radius: 50%; }
-    /* Card overrides */
-    .card { transform: none !important; cursor: default !important; transition: none !important; }
-    .card:hover { transform: none !important; background: var(--bg-card) !important; border-top-color: var(--border-color) !important; border-right-color: var(--border-color) !important; border-bottom-color: var(--border-color) !important; }
-    #userSearch:focus { border-color: var(--primary); box-shadow: 0 0 0 3px rgba(124,58,237,0.1); }
-    @media (max-width: 768px) {
-        #formCreateUser > div:first-child { grid-template-columns: 1fr !important; }
-        #userSearch { width: 100% !important; }
-    }
-    /* === PASSWORD POPOVER === */
-    .pass-popover-wrap { position: relative; display: inline-block; }
-    .pass-popover {
-        position: absolute;
-        bottom: calc(100% + 10px);
-        right: 0;
-        width: 210px;
-        background: #fff;
-        border: 1px solid #e2e8f0;
-        border-radius: 10px;
-        padding: 14px;
-        box-shadow: 0 8px 24px rgba(15,23,42,0.14);
-        z-index: 1000;
-        animation: popoverIn 0.15s ease;
-    }
-    .pass-popover-arrow {
-        position: absolute;
-        bottom: -7px;
-        right: 11px;
-        width: 12px; height: 12px;
-        background: #fff;
-        border-right: 1px solid #e2e8f0;
-        border-bottom: 1px solid #e2e8f0;
-        transform: rotate(45deg);
-    }
-    .pass-popover-title {
-        font-size: 0.75rem;
-        font-weight: 700;
-        color: var(--text-main);
-        margin: 0 0 10px;
-        display: flex;
-        align-items: center;
-        gap: 6px;
-    }
-    .pass-popover-title i { color: #0f766e; }
-    .pass-popover-input {
-        width: 100%;
-        padding: 7px 10px;
-        border: 1px solid var(--border-color);
-        border-radius: 6px;
-        font-size: 0.92rem;
-        min-height: 40px;
-        transition: border-color 0.15s;
-        box-sizing: border-box;
-    }
-    .pass-popover-input:focus { border-color: #0f766e; box-shadow: 0 0 0 2px rgba(15,118,110,0.12); }
-    .pass-pop-btn {
-        flex: 1;
-        padding: 6px 0;
-        border: none;
-        border-radius: 6px;
-        font-size: 0.75rem;
-        font-weight: 700;
-        cursor: pointer;
-        transition: opacity 0.15s;
-    }
-    .pass-pop-btn:hover { opacity: 0.85; }
-    .pass-pop-confirm { background: #0f766e; color: #fff; }
-    .pass-pop-cancel  { background: #f1f5f9; color: #64748b; }
-    @keyframes popoverIn {
-        from { opacity: 0; transform: translateY(6px); }
-        to   { opacity: 1; transform: translateY(0); }
-    }
-    /* === SUB-POPOVER (Subdivis\u00f5es) === */
-    .sub-display {
-        display: flex; flex-wrap: wrap; gap: 4px; align-items: center;
-        cursor: pointer; padding: 4px 6px; border-radius: 6px;
-        transition: background 0.15s; min-height: 28px;
-    }
-    .sub-display:hover { background: #f1f5f9; }
-    .sub-display:hover .sub-edit-icon { opacity: 1; }
-    .sub-pill {
-        background: #ede9fe; color: #6d28d9;
-        padding: 2px 8px; border-radius: 10px;
-        font-size: 0.62rem; font-weight: 700; white-space: nowrap;
-        border: 1px solid #ddd6fe;
-    }
-    .sub-pill-more {
-        background: #f1f5f9; color: #64748b; border-color: #e2e8f0;
-    }
-    .sub-none {
-        color: #cbd5e1; font-style: italic; font-size: 0.75rem;
-    }
-    .sub-edit-icon {
-        font-size: 0.65rem; color: #94a3b8;
-        opacity: 0; transition: opacity 0.15s; margin-left: 2px;
-    }
-    .sub-popover-wrap { position: relative; }
-    .sub-popover {
-        position: absolute;
-        bottom: calc(100% + 10px);
-        left: 0;
-        min-width: 200px;
-        max-width: 260px;
-        background: #fff;
-        border: 1px solid #e2e8f0;
-        border-radius: 10px;
-        padding: 14px;
-        box-shadow: 0 8px 24px rgba(15,23,42,0.14);
-        z-index: 999;
-        animation: popoverIn 0.15s ease;
-    }
-    .sub-pop-arrow {
-        position: absolute;
-        bottom: -7px; left: 16px;
-        width: 12px; height: 12px;
-        background: #fff;
-        border-right: 1px solid #e2e8f0;
-        border-bottom: 1px solid #e2e8f0;
-        transform: rotate(45deg);
-    }
-    .sub-pop-title {
-        font-size: 0.75rem; font-weight: 700;
-        color: var(--text-main); margin: 0 0 10px;
-        display: flex; align-items: center; gap: 6px;
-    }
-    .sub-pop-title i { color: var(--primary); }
-    .sub-pop-check-label {
-        display: flex; align-items: center; gap: 8px;
-        font-size: 0.78rem; color: var(--text-main);
-        cursor: pointer; padding: 4px 6px; border-radius: 6px;
-        transition: background 0.1s;
-    }
-    .sub-pop-check-label:hover { background: #f8fafc; }
-    .sub-pop-btn {
-        flex: 1; padding: 7px 0; border: none;
-        border-radius: 6px; font-size: 0.75rem; font-weight: 700;
-        cursor: pointer; transition: opacity 0.15s;
-    }
-    .sub-pop-btn:hover { opacity: 0.85; }
-    .sub-pop-save   { background: var(--primary); color: #fff; display:flex; align-items:center; justify-content:center; gap:5px; }
-    .sub-pop-cancel { background: #f1f5f9; color: #64748b; }
-</style>
 
 
 <script>
@@ -900,7 +670,7 @@ $full_role_labels = array_merge($role_labels, [
     async function saveUserChanges(id) { togglePassPopover(id); }
 
     // Função: Edição Direta de Campo (Role, Login)
-    function setRowState(row, message, color = 'var(--text-muted)', dirty = false) {
+    function setRowState(row, message, color = 'var(--texto-2)', dirty = false) {
     const saveState = row.querySelector('.row-save-state');
     if (saveState) {
         saveState.textContent = message;
@@ -912,11 +682,11 @@ $full_role_labels = array_merge($role_labels, [
 function markRowDirty(element) {
     const row = element.closest('.user-row');
     if (!row) return;
-    setRowState(row, 'Alteracoes pendentes', '#d97706', true);
+    setRowState(row, 'Alterações pendentes', 'var(--aviso)', true);
     const status = row.querySelector('.subdivision-save-status');
     if (status) {
-        status.textContent = 'Alteracoes pendentes';
-        status.style.color = '#d97706';
+        status.textContent = 'Alterações pendentes';
+        status.style.color = 'var(--aviso)';
     }
 }
 
@@ -944,10 +714,10 @@ async function saveRowAccount(id, button) {
         selectedSubdivisions.forEach(value => formData.append('subdivisions[]', value));
     }
 
-    setRowState(row, 'Salvando...', 'var(--text-muted)', false);
+    setRowState(row, 'Salvando...', 'var(--texto-2)', false);
     if (status) {
         status.textContent = 'Salvando...';
-        status.style.color = 'var(--text-muted)';
+        status.style.color = 'var(--texto-2)';
     }
 
     button.disabled = true;
@@ -959,10 +729,10 @@ async function saveRowAccount(id, button) {
         const response = await fetch('api/update_user_admin.php', { method: 'POST', body: withCsrf(formData) });
         const data = await response.json();
         if (!data.success) {
-            setRowState(row, 'Erro ao salvar', '#ef4444', true);
+            setRowState(row, 'Erro ao salvar', 'var(--perigo)', true);
             if (status) {
                 status.textContent = 'Erro ao salvar';
-                status.style.color = '#ef4444';
+                status.style.color = 'var(--perigo)';
             }
             showAlert({ title: 'Erro', message: data.message, type: 'error' });
             return;
@@ -970,19 +740,19 @@ async function saveRowAccount(id, button) {
 
         row.dataset.role = roleSelect?.value || row.dataset.role || '';
         row.dataset.subdivisions = selectedSubdivisions.join(',');
-        setRowState(row, 'Salvo', '#10b981', false);
+        setRowState(row, 'Salvo', 'var(--ok)', false);
         if (status) {
-            status.textContent = 'Subdivisoes salvas';
-            status.style.color = '#10b981';
+            status.textContent = 'Subdivisões salvas';
+            status.style.color = 'var(--ok)';
         }
         filterTable();
     } catch (e) {
-        setRowState(row, 'Erro ao salvar', '#ef4444', true);
+        setRowState(row, 'Erro ao salvar', 'var(--perigo)', true);
         if (status) {
             status.textContent = 'Erro ao salvar';
-            status.style.color = '#ef4444';
+            status.style.color = 'var(--perigo)';
         }
-        showAlert({ title: 'Erro', message: 'Nao foi possivel salvar os dados da linha.', type: 'error' });
+        showAlert({ title: 'Erro', message: 'Não foi possível salvar os dados da linha.', type: 'error' });
     } finally {
         button.disabled = false;
         editor.querySelectorAll('input[type="checkbox"]').forEach(input => input.disabled = false);
@@ -1058,7 +828,7 @@ async function saveRowAccount(id, button) {
         newSelect.value = '';
         const row = document.createElement('div');
         row.className = 'row';
-        row.style.flexWrap = 'nowrap';
+        row.classList.add('row--nowrap');
         row.appendChild(newSelect);
         const removeBtn = document.createElement('button');
         removeBtn.type = 'button';

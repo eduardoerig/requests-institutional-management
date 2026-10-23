@@ -45,6 +45,43 @@ class RequestManager {
         self::$userSubdivisionMap = null;
     }
 
+    /**
+     * Filtro de subdivisão (coordenação): pedidos da subdivisão ou de quem pertence a ela.
+     * @return array{0: string, 1: array} trecho SQL (começa com " AND") e parâmetros
+     */
+    private static function subdivisionFilter($subdivisionId): array
+    {
+        if ($subdivisionId === null || (is_array($subdivisionId) && empty($subdivisionId))) {
+            return ['', []];
+        }
+        $ids = is_array($subdivisionId) ? array_values($subdivisionId) : [$subdivisionId];
+        $in = implode(',', array_fill(0, count($ids), '?'));
+        return [" AND (
+            r.subdivision_id IN ($in)
+            OR EXISTS (
+                SELECT 1
+                FROM cfg_user_subdivision cus
+                WHERE cus.id_user = r.created_by
+                  AND cus.id_subdivision IN ($in)
+            )
+        )", array_merge($ids, $ids)];
+    }
+
+    /** Quantos pedidos aguardam aprovação (contador do menu), numa consulta só e com o mesmo filtro de getRequests */
+    public static function countPending($pdo, $subdivisionId = null): int
+    {
+        $parts = [];
+        $params = [];
+        foreach (allowedRequestTables() as $sector) {
+            [$subSql, $subParams] = self::subdivisionFilter($subdivisionId);
+            $parts[] = "(SELECT COUNT(*) FROM `ctd_{$sector}_frm` r WHERE r.status = 'P'$subSql)";
+            $params = array_merge($params, $subParams);
+        }
+        $stmt = $pdo->prepare('SELECT ' . implode(' + ', $parts));
+        $stmt->execute($params);
+        return (int)$stmt->fetchColumn();
+    }
+
     public static function getRequests($pdo, $userId = null, $managingUserId = null, $status = null, $specificSector = null, $searchText = null, $order = 'DESC', $excludeStatuses = [], $dateStart = null, $dateEnd = null, $subdivisionId = null) {
         $cacheKey = md5(serialize(func_get_args() ? array_slice(func_get_args(), 1) : []));
         if (isset(self::$requestCache[$cacheKey])) {
@@ -144,36 +181,10 @@ class RequestManager {
                 }
 
                 // Filtro por subdivisão
-                if ($subdivisionId !== null) {
-                    if (is_array($subdivisionId)) {
-                        if (!empty($subdivisionId)) {
-                            $placeholders = implode(',', array_fill(0, count($subdivisionId), '?'));
-                            $query .= " AND (
-                                r.subdivision_id IN ($placeholders)
-                                OR EXISTS (
-                                    SELECT 1
-                                    FROM cfg_user_subdivision cus
-                                    WHERE cus.id_user = r.created_by
-                                      AND cus.id_subdivision IN ($placeholders)
-                                )
-                            )";
-                            $params = array_merge($params, $subdivisionId, $subdivisionId);
-                        }
-                    } else {
-                        $query .= " AND (
-                            r.subdivision_id = ?
-                            OR EXISTS (
-                                SELECT 1
-                                FROM cfg_user_subdivision cus
-                                WHERE cus.id_user = r.created_by
-                                  AND cus.id_subdivision = ?
-                            )
-                        )";
-                        $params[] = $subdivisionId;
-                        $params[] = $subdivisionId;
-                    }
-                }
-                
+                [$subSql, $subParams] = self::subdivisionFilter($subdivisionId);
+                $query .= $subSql;
+                $params = array_merge($params, $subParams);
+
                 $stmt = $pdo->prepare($query);
                 $stmt->execute($params);
                 $res = $stmt->fetchAll(PDO::FETCH_ASSOC);

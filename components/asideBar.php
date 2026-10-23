@@ -17,17 +17,9 @@ $currentStatus = $_GET['status'] ?? '';
 $badge_pendentes = 0;
 $badge_inbox = 0;
 
-// Buscar notificações não lidas
-$badge_notifs = 0;
-if ($sidebar_user_id) {
-    $stmtNotifs = $pdo->prepare("SELECT COUNT(*) FROM notifications WHERE user_id = ? AND is_read = 0");
-    $stmtNotifs->execute([$sidebar_user_id]);
-    $badge_notifs = (int)$stmtNotifs->fetchColumn();
-}
-
 if ($canApprove) {
     $subdivisionFilter = $isAdmSub ? ($_SESSION['subdivision_ids'] ?? null) : null;
-    $badge_pendentes = (int)(RequestManager::getRequests($pdo, null, null, 'P', null, null, 'DESC', [], null, null, $subdivisionFilter)['stats']['pendentes'] ?? 0);
+    $badge_pendentes = RequestManager::countPending($pdo, $subdivisionFilter);
 }
 if ($canManage) {
     require_once __DIR__ . '/../classes/RequestInbox.php';

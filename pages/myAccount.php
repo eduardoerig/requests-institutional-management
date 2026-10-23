@@ -18,11 +18,11 @@ $role_labels = [
     </div>
 
     <?php if ($force_reset == 1): ?>
-        <div class="next-step" role="alert">
+        <div class="notice notice--warn" role="alert">
             <i class="fa-solid fa-key" aria-hidden="true"></i>
-            <div>
-                <strong>Crie sua senha pessoal.</strong> Você entrou com uma senha temporária. Troque agora para continuar usando o sistema.
-                <div class="approve-box"><button type="button" class="btn btn--primary" onclick="document.getElementById('btnOpenChangePass').click()">Criar minha senha</button></div>
+            <div class="notice__body">
+                <p><strong>Crie sua senha pessoal.</strong> Você entrou com uma senha temporária. Troque agora para continuar usando o sistema.</p>
+                <div><button type="button" class="btn btn--primary" onclick="document.getElementById('btnOpenChangePass').click()">Criar minha senha</button></div>
             </div>
         </div>
     <?php endif; ?>
@@ -32,11 +32,11 @@ $role_labels = [
             <div class="profile-head">
                 <div class="avatar-lg" aria-hidden="true"><?= e(mb_strtoupper(mb_substr((string)($user['name'] ?? 'U'), 0, 1))) ?></div>
                 <div>
-                    <h2 style="font-size:1.3rem;"><?= e($user['name'] ?? 'Usuário') ?></h2>
+                    <h2 class="profile-head__name"><?= e($user['name'] ?? 'Usuário') ?></h2>
                     <p class="muted"><?= e($role_labels[$user['role']] ?? 'Solicitante') ?></p>
                 </div>
             </div>
-            <dl class="info-grid mt-16" style="margin-bottom:0;">
+            <dl class="info-grid profile-info">
                 <div class="info-item"><dt>Usuário para entrar</dt><dd><?= e($user['login'] ?? '') ?></dd></div>
                 <?php if (!empty($_SESSION['subdivision_names'])): ?>
                     <div class="info-item"><dt>Subdivisão</dt><dd><?= e(implode(', ', $_SESSION['subdivision_names'])) ?></dd></div>
@@ -58,7 +58,7 @@ $role_labels = [
 <div class="modal-overlay" id="modalChangePass">
     <div class="modal-card" role="dialog" aria-modal="true" aria-labelledby="changePassTitle">
         <div class="modal-header">
-            <h3 id="changePassTitle" class="modal-title" style="margin:0;">Criar nova senha</h3>
+            <h3 id="changePassTitle" class="modal-title">Criar nova senha</h3>
             <button type="button" class="modal-close" id="btnCloseModal" aria-label="Fechar"><i class="fa-solid fa-xmark" aria-hidden="true"></i></button>
         </div>
 
@@ -77,8 +77,8 @@ $role_labels = [
                 <label for="passwordConfirm">Repita a nova senha</label>
                 <input id="passwordConfirm" type="password" required minlength="8" autocomplete="new-password" placeholder="Digite a mesma senha">
             </div>
-            <label class="row" style="min-height:44px; cursor:pointer;">
-                <input type="checkbox" id="showPasswords" style="width:20px; height:20px; accent-color: var(--laranja);"> Mostrar senhas
+            <label class="check-line">
+                <input type="checkbox" id="showPasswords"> Mostrar senhas
             </label>
             <p id="passError" class="field-error" role="alert" hidden></p>
 

@@ -14,8 +14,8 @@ $isGestorHelp = isGestorRole($roleHelp);
         <ol class="help-steps">
             <li><span class="help-num">1</span><div><strong>Toque no botão laranja "Novo"</strong> (no computador: "Nova requisição", no menu).</div></li>
             <li><span class="help-num">2</span><div><strong>Escolha o tipo de pedido</strong>: TI, manutenção, compras, impressão colorida ou marketing.</div></li>
-            <li><span class="help-num">3</span><div><strong>Preencha o formulário</strong>. Os campos com <span class="req">*</span> são obrigatórios.</div></li>
-            <li><span class="help-num">4</span><div><strong>Clique em "Enviar requisição"</strong>. Pronto! Anote o número que aparece na tela.</div></li>
+            <li><span class="help-num">3</span><div><strong>Preencha o formulário</strong>: o que você precisa, os detalhes e para quando. Se estiver parando uma aula ou o trabalho, marque "É urgente" e diga por quê.</div></li>
+            <li><span class="help-num">4</span><div><strong>Clique em "Enviar pedido"</strong>. O pedido abre na tela com o número dele, e você recebe um aviso no sino quando a situação mudar.</div></li>
         </ol>
         </div>
     </section>
@@ -23,7 +23,7 @@ $isGestorHelp = isGestorRole($roleHelp);
     <section class="panel">
         <div class="panel__head"><h2>Para acompanhar</h2></div>
         <div class="panel__body">
-        <p>Abra <a href="myRequests">Minhas requisições</a>. Cada pedido mostra a situação em palavras:</p>
+        <p>Abra <a href="myRequests">Minhas requisições</a>. "Em andamento" mostra onde cada pedido está agora; "Concluídas" guarda os que terminaram. Dentro do pedido, a situação aparece em palavras:</p>
         <ul class="help-status">
             <?php foreach (statusLabels() as $code => $label): ?>
                 <li><span class="status-pill status-pill--<?= e($code) ?>"><?= e($label) ?></span>

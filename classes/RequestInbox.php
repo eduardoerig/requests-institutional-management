@@ -1,13 +1,13 @@
 <?php
 /**
- * Caixa do setor: monta as abas de trabalho de um ou mais setores (ctd_area.id).
+ * Filas de trabalho, no modelo dos sistemas de chamados: cada aba diz de quem é a vez.
  *
- *  novos      aprovados, sob responsabilidade do setor, ainda não começados
- *  andamento  em atendimento, sob responsabilidade do setor
- *  chegaram   encaminhamentos pendentes para o setor (transferência ou ajuda)
- *  ajudando   ajudas aceitas pelo setor, ainda não devolvidas
- *  enviados   encaminhamentos feitos pelo setor nos últimos 30 dias (com a resposta)
- *  concluidos concluídos sob responsabilidade do setor (os 100 mais recentes)
+ *  fazer      o setor precisa agir (grupos: chegaram, novos, andamento, ajudando)
+ *  esperando  pedidos do setor parados à espera de outro setor (transferência ou ajuda em aberto)
+ *  historico  concluídos pelo setor e pedidos transferidos para outro setor (os 100 mais recentes)
+ *
+ * Também monta a fila da tela Aprovar pedidos (approvals). As telas de lista e o
+ * Anterior/Próximo da página do pedido usam estas mesmas funções, na mesma ordem.
  */
 
 require_once __DIR__ . '/RequestForwardService.php';
@@ -16,13 +16,41 @@ require_once __DIR__ . '/../config/security.php';
 class RequestInbox
 {
     public const TABS = [
+        'fazer' => 'Para fazer',
+        'esperando' => 'Esperando',
+        'historico' => 'Histórico',
+    ];
+
+    /** Grupos de "Para fazer", na ordem do trabalho */
+    public const GROUPS = [
+        'chegaram' => 'Chegaram de outros setores',
         'novos' => 'Novos',
         'andamento' => 'Em atendimento',
-        'chegaram' => 'Chegaram para mim',
-        'ajudando' => 'Ajudando',
-        'enviados' => 'Enviados',
-        'concluidos' => 'Concluídos',
+        'ajudando' => 'Ajudando outro setor',
     ];
+
+    /** Abas antigas (links salvos e avisos antigos) */
+    public const LEGACY_TABS = [
+        'novos' => 'fazer',
+        'andamento' => 'fazer',
+        'chegaram' => 'fazer',
+        'ajudando' => 'fazer',
+        'enviados' => 'esperando',
+        'concluidos' => 'historico',
+    ];
+
+    private const HISTORY_LIMIT = 100;
+
+    /** Recusa ou devolução de ajuda continua aparecendo na linha do pedido por estes dias */
+    private const RECENT_REPLY_DAYS = 14;
+
+    /** Caixas já montadas nesta requisição (o menu e a página usam a mesma) */
+    private static array $built = [];
+
+    public static function clearCache(): void
+    {
+        self::$built = [];
+    }
 
     /**
      * @param int[] $areaIds setores considerados
@@ -31,9 +59,16 @@ class RequestInbox
     public static function build(PDO $pdo, array $areaIds): array
     {
         $areaIds = array_values(array_unique(array_map('intval', $areaIds)));
+        sort($areaIds);
+        $memoKey = implode(',', $areaIds);
+        return self::$built[$memoKey] ??= self::assemble($pdo, $areaIds);
+    }
+
+    private static function assemble(PDO $pdo, array $areaIds): array
+    {
         $tabs = array_fill_keys(array_keys(self::TABS), []);
         if (!$areaIds) {
-            return ['tabs' => $tabs, 'counts' => array_map('count', $tabs)];
+            return ['tabs' => $tabs, 'counts' => self::countRows($tabs)];
         }
 
         // 1) Encaminhamentos que envolvem estes setores + transferências que definem o responsável
@@ -75,10 +110,10 @@ class RequestInbox
             }
         }
 
-        $requests = [];
+        $parts = [];
+        $params = [];
         foreach (allowedRequestTables() as $sector) {
             $where = [];
-            $params = [];
             if (isset($originSlugs[$sector])) {
                 $where[] = "r.status IN ('Y', 'W', 'F', 'C')";
             }
@@ -87,19 +122,21 @@ class RequestInbox
                 $where[] = 'r.id IN (' . implode(',', array_fill(0, count($ids), '?')) . ')';
                 $params = array_merge($params, $ids);
             }
-            if (!$where) {
-                continue;
+            if ($where) {
+                $parts[] = "SELECT '$sector' AS req_table, r.id, r.title, r.date, r.created_at, r.status, r.priority, r.created_by, r.subdivision_id,
+                        u.name AS solicitor_name, sub.name AS subdivision_name
+                    FROM `ctd_{$sector}_frm` r
+                    LEFT JOIN ctd_users u ON u.id = r.created_by
+                    LEFT JOIN ctd_subdivision sub ON sub.id = r.subdivision_id
+                    WHERE " . implode(' OR ', $where);
             }
-            $q = $pdo->prepare("
-                SELECT r.*, u.name AS solicitor_name, sub.name AS subdivision_name
-                FROM `ctd_{$sector}_frm` r
-                LEFT JOIN ctd_users u ON u.id = r.created_by
-                LEFT JOIN ctd_subdivision sub ON sub.id = r.subdivision_id
-                WHERE " . implode(' OR ', $where) . "
-                ORDER BY r.id DESC
-            ");
+        }
+        $requests = [];
+        if ($parts) {
+            $q = $pdo->prepare(implode(' UNION ALL ', $parts)); // uma ida ao banco para todos os setores
             $q->execute($params);
             foreach ($q->fetchAll(PDO::FETCH_ASSOC) as $row) {
+                $sector = $row['req_table'];
                 $row['table'] = $sector;
                 $row['st_raw'] = strtoupper((string)($row['status'] ?? 'P')) ?: 'P';
                 $row['solicitor_name_formatted'] = self::shortName($row['solicitor_name'] ?? '');
@@ -109,7 +146,7 @@ class RequestInbox
             }
         }
 
-        // 3) Encaminhamento em aberto por pedido
+        // 3) Encaminhamento em aberto e o último enviado por estes setores, por pedido
         $open = [];
         $lastSent = [];
         foreach ($myForwards as $f) {
@@ -124,45 +161,91 @@ class RequestInbox
             }
         }
 
-        // 4) Distribuir nas abas
+        // 4) Quem começou o atendimento e quem concluiu (do histórico)
+        $people = self::statusPeople($pdo, array_keys($requests));
+
+        // 5) Cada pedido vai para uma aba só: a de quem precisa agir agora
+        $recent = date('Y-m-d H:i:s', strtotime('-' . self::RECENT_REPLY_DAYS . ' days'));
         foreach ($requests as $key => $row) {
             $isMine = in_array((int)$row['owner_area_id'], $areaIds, true);
             $fwd = $open[$key] ?? null;
+            $toMe = $fwd && in_array((int)$fwd['to_area_id'], $areaIds, true);
+            $fromMe = $fwd && in_array((int)$fwd['from_area_id'], $areaIds, true);
+            $sent = $lastSent[$key] ?? null;
+            $row['worker_name'] = $people[$key]['worker'] ?? '';
+            $row['context'] = ['', ''];
             if ($fwd) {
                 $row['open_forward'] = $fwd;
             }
-            if ($isMine && $row['st_raw'] === 'Y') {
-                $tabs['novos'][] = $row;
-            } elseif ($isMine && $row['st_raw'] === 'W') {
-                $tabs['andamento'][] = $row;
-            } elseif ($isMine && $row['st_raw'] === 'C') {
-                $tabs['concluidos'][] = $row;
-            }
-            if ($fwd && in_array((int)$fwd['to_area_id'], $areaIds, true)) {
-                if ($fwd['status'] === 'pending') {
-                    $tabs['chegaram'][] = $row + ['inbox_forward' => $fwd];
+
+            if ($toMe && $fwd['status'] === 'pending') {
+                $row['group'] = 'chegaram';
+                $row['context'] = [$fwd['from_label'] . ($fwd['mode'] === 'help' ? ' pede ajuda' : ' quer transferir'), 'in'];
+                $tabs['fazer'][] = $row;
+            } elseif ($toMe) {
+                $row['group'] = 'ajudando';
+                $row['context'] = ['Ajudando ' . $fwd['from_label'], ''];
+                $tabs['fazer'][] = $row;
+            } elseif ($isMine && $fromMe) {
+                $row['group'] = 'esperando';
+                if ($fwd['mode'] === 'transfer') {
+                    $row['context'] = ['Aguardando ' . $fwd['to_label'] . ' aceitar', ''];
+                } elseif ($fwd['status'] === 'pending') {
+                    $row['context'] = ['Aguardando ' . $fwd['to_label'] . ' responder', ''];
                 } else {
-                    $tabs['ajudando'][] = $row + ['inbox_forward' => $fwd];
+                    $row['context'] = [$fwd['to_label'] . ' está ajudando', ''];
                 }
+                $tabs['esperando'][] = $row;
+            } elseif ($isMine && in_array($row['st_raw'], ['Y', 'W'], true)) {
+                $row['group'] = $row['st_raw'] === 'Y' ? 'novos' : 'andamento';
+                $reply = self::replyContext($sent, $recent);
+                if ($reply) {
+                    $row['context'] = $reply;
+                } elseif ($row['group'] === 'andamento' && $row['worker_name'] !== '') {
+                    $row['context'] = ['com ' . self::firstName($row['worker_name']), ''];
+                }
+                $tabs['fazer'][] = $row;
+            } elseif ($isMine && $row['st_raw'] === 'C') {
+                $closedAt = (string)($people[$key]['closed_at'] ?? '');
+                $closer = (string)($people[$key]['closer'] ?? '');
+                $row['group'] = 'historico';
+                $row['closed_at'] = $closedAt !== '' ? $closedAt : (string)$row['created_at'];
+                $row['context'] = ['Concluído'
+                    . ($closer !== '' ? ' por ' . self::firstName($closer) : '')
+                    . ($closedAt !== '' ? ' em ' . date('d/m', strtotime($closedAt)) : ''), ''];
+                $tabs['historico'][] = $row;
+            } elseif (!$isMine && $sent && $sent['mode'] === 'transfer' && in_array($sent['status'], ['accepted', 'completed'], true)) {
+                $when = (string)($sent['responded_at'] ?: $sent['created_at']);
+                $row['group'] = 'historico';
+                $row['closed_at'] = $when;
+                $row['context'] = ['Transferido para ' . $sent['to_label'] . ' em ' . date('d/m', strtotime($when)), ''];
+                $tabs['historico'][] = $row;
             }
         }
 
-        $cut = date('Y-m-d H:i:s', strtotime('-30 days'));
-        foreach ($lastSent as $key => $f) {
-            if (isset($requests[$key]) && ($f['created_at'] >= $cut || $f['status'] === 'pending' || ($f['mode'] === 'help' && $f['status'] === 'accepted'))) {
-                $tabs['enviados'][] = $requests[$key] + ['inbox_forward' => $f];
+        // Ordem: grupos na ordem do trabalho e prazo mais próximo primeiro; histórico do mais recente
+        $groupOrder = array_flip(array_keys(self::GROUPS));
+        usort($tabs['fazer'], fn($a, $b) => ($groupOrder[$a['group']] <=> $groupOrder[$b['group']]) ?: self::byDeadline($a, $b));
+        usort($tabs['esperando'], [self::class, 'byDeadline']);
+        usort($tabs['historico'], fn($a, $b) => strcmp((string)$b['closed_at'], (string)$a['closed_at']));
+        $tabs['historico'] = array_slice($tabs['historico'], 0, self::HISTORY_LIMIT);
+
+        foreach ($tabs as $tab => $rows) {
+            foreach ($rows as $i => $row) {
+                $tabs[$tab][$i]['tab'] = $tab;
             }
         }
 
-        // Ordem: prazo mais próximo primeiro nas filas de trabalho; mais recentes nas demais
-        foreach (['novos', 'andamento', 'chegaram', 'ajudando'] as $tab) {
-            usort($tabs[$tab], [self::class, 'byDeadline']);
-        }
-        usort($tabs['enviados'], fn($a, $b) => strcmp($b['inbox_forward']['created_at'], $a['inbox_forward']['created_at']));
-        usort($tabs['concluidos'], fn($a, $b) => strcmp((string)$b['created_at'], (string)$a['created_at']));
-        $tabs['concluidos'] = array_slice($tabs['concluidos'], 0, 100);
+        return ['tabs' => $tabs, 'counts' => self::countRows($tabs)];
+    }
 
-        return ['tabs' => $tabs, 'counts' => array_map('count', $tabs)];
+    /** Linhas da aba, na ordem da tela; com busca, procura nas três abas */
+    public static function rowsFor(array $inbox, string $tab, string $q = ''): array
+    {
+        if (trim($q) !== '') {
+            return self::search(array_merge(...array_values($inbox['tabs'])), $q);
+        }
+        return $inbox['tabs'][$tab] ?? [];
     }
 
     /** Busca por título, número ou solicitante */
@@ -187,7 +270,160 @@ class RequestInbox
         return RequestForwardService::userAreaIds($pdo, $userId);
     }
 
-    private static function byDeadline(array $a, array $b): int
+    /** Áreas da caixa com o filtro de setor do admin aplicado */
+    public static function areasFor(PDO $pdo, int $userId, string $role, int $areaFilter = 0): array
+    {
+        $areaIds = array_map('intval', self::areasForUser($pdo, $userId, $role));
+        if (isGlobalAdminRole($role) && $areaFilter > 0 && in_array($areaFilter, $areaIds, true)) {
+            return [$areaFilter];
+        }
+        return $areaIds;
+    }
+
+    /** Grupos da aba "Em andamento" de Minhas requisições */
+    public const MINE_GROUPS = [
+        'resposta' => 'Com resposta do setor',
+        'aprovacao' => 'Aguardando aprovação',
+        'setor' => 'Com o setor',
+    ];
+
+    /**
+     * Pedidos de quem pede: "andamento" (por grupo) e "concluidas" (concluídos e recusados).
+     * Cada linha ganha context (de quem é a vez, em uma frase), subline (o setor) e group.
+     * Com $q, as duas listas trazem só o que bate com o título ou o número.
+     */
+    public static function forRequester(PDO $pdo, int $userId, string $q = ''): array
+    {
+        require_once __DIR__ . '/../components/request_card.php';
+        $rows = RequestManager::getRequests($pdo, $userId)['requests'];
+        $byKey = [];
+        foreach ($rows as $row) {
+            $byKey[$row['table'] . ':' . (int)$row['id']] = $row;
+        }
+        $people = self::statusPeople($pdo, array_keys($byKey));
+        [$lastComment, $transferredTo] = self::requesterSignals($pdo, array_keys($byKey));
+
+        $recent = date('Y-m-d H:i:s', strtotime('-' . self::RECENT_REPLY_DAYS . ' days'));
+        $needle = mb_strtolower(ltrim($q, '#'));
+        $out = ['andamento' => [], 'concluidas' => []];
+        foreach ($byKey as $key => $row) {
+            if ($needle !== '' && (string)$row['id'] !== $needle && mb_strpos(mb_strtolower((string)$row['title']), $needle) === false) {
+                continue;
+            }
+            $st = $row['st_raw'];
+            $sector = isset($transferredTo[$key])
+                ? RequestForwardService::areaLabel($pdo, $transferredTo[$key])
+                : requestSectorName((string)$row['table']);
+            $worker = $people[$key]['worker'] ?? '';
+            $closedAt = $people[$key]['closed_at'] ?? '';
+            $comment = $lastComment[$key] ?? null;
+            $row['subline'] = $sector;
+            $row['closed_at'] = $closedAt;
+
+            if ($st === 'C') {
+                $row['context'] = ['Concluído' . ($closedAt !== '' ? ' em ' . date('d/m', strtotime($closedAt)) : ''), 'ok'];
+                $out['concluidas'][] = $row;
+                continue;
+            }
+            if ($st === 'N') {
+                $row['context'] = ['Recusado', 'bad'];
+                $out['concluidas'][] = $row;
+                continue;
+            }
+            if ($comment && (int)$comment['user_id'] !== $userId && $comment['created_at'] >= $recent) {
+                $row['group'] = 'resposta';
+                $row['context'] = [self::firstName((string)$comment['user_name']) . ' respondeu', 'in'];
+            } elseif ($st === 'P') {
+                $row['group'] = 'aprovacao';
+                $row['context'] = ['Aguardando a coordenação', ''];
+            } else {
+                $row['group'] = 'setor';
+                $row['context'] = match (true) {
+                    $st === 'W' && $worker !== '' => [$sector . ', ' . self::firstName($worker) . ' atendendo', ''],
+                    $st === 'W' => ['Em atendimento em ' . $sector, ''],
+                    $st === 'Y' => ['Aprovado, na fila de ' . $sector, ''],
+                    default => ['Com ' . $sector, ''],
+                };
+            }
+            $out['andamento'][] = $row;
+        }
+
+        $order = array_flip(array_keys(self::MINE_GROUPS));
+        usort($out['andamento'], fn($a, $b) => ($order[$a['group']] <=> $order[$b['group']]) ?: self::byDeadline($a, $b));
+        usort($out['concluidas'], fn($a, $b) => strcmp((string)($b['closed_at'] ?: $b['created_at']), (string)($a['closed_at'] ?: $a['created_at'])));
+        $out['counts'] = ['andamento' => count($out['andamento']), 'concluidas' => count($out['concluidas'])];
+        return $out;
+    }
+
+    /** Última mensagem da conversa e setor que recebeu por transferência, por pedido */
+    private static function requesterSignals(PDO $pdo, array $keys): array
+    {
+        if (!$keys) {
+            return [[], []];
+        }
+        $bySector = [];
+        foreach ($keys as $key) {
+            [$tbl, $id] = explode(':', $key);
+            $bySector[$tbl][] = (int)$id;
+        }
+        $conds = [];
+        $params = [];
+        foreach ($bySector as $tbl => $ids) {
+            $conds[] = '(request_table = ? AND request_id IN (' . implode(',', array_fill(0, count($ids), '?')) . '))';
+            $params = array_merge($params, [$tbl], $ids);
+        }
+        $where = implode(' OR ', $conds);
+
+        $last = [];
+        $stmt = $pdo->prepare("SELECT request_table, request_id, user_id, user_name, created_at FROM request_comments WHERE $where ORDER BY id ASC");
+        $stmt->execute($params);
+        foreach ($stmt->fetchAll(PDO::FETCH_ASSOC) as $c) {
+            $last[$c['request_table'] . ':' . $c['request_id']] = $c;
+        }
+
+        $owner = [];
+        $stmt = $pdo->prepare("SELECT request_table, request_id, to_area_id FROM request_forwards WHERE mode = 'transfer' AND status IN ('accepted', 'completed') AND ($where) ORDER BY id ASC");
+        $stmt->execute($params);
+        foreach ($stmt->fetchAll(PDO::FETCH_ASSOC) as $f) {
+            $owner[$f['request_table'] . ':' . $f['request_id']] = (int)$f['to_area_id'];
+        }
+        return [$last, $owner];
+    }
+
+    /**
+     * Fila da tela Aprovar pedidos: pendentes, prazo mais próximo primeiro.
+     * $subdivisionIds: subdivisões da coordenação (null = todas, para o admin geral).
+     * @return array{all: array, rows: array}
+     */
+    public static function approvals(PDO $pdo, ?array $subdivisionIds, string $sector = '', string $q = ''): array
+    {
+        $all = RequestManager::getRequests($pdo, null, null, 'P', null, null, 'DESC', [], null, null, $subdivisionIds)['requests'] ?? [];
+        $today = strtotime(date('Y-m-d'));
+        foreach ($all as &$r) {
+            $r['table'] = str_replace(['ctd_', '_frm'], '', strtolower((string)($r['table'] ?? '')));
+            // Há quanto tempo o pedido espera a decisão
+            $days = (int)round(($today - strtotime(date('Y-m-d', strtotime((string)$r['created_at'])))) / 86400);
+            $r['context'] = [$days <= 0 ? 'Hoje' : ($days === 1 ? 'Ontem' : 'Há ' . $days . ' dias'), $days >= 3 ? 'in' : ''];
+        }
+        unset($r);
+        usort($all, [self::class, 'byDeadline']);
+
+        $term = mb_strtolower(trim($q));
+        $rows = array_values(array_filter($all, function ($r) use ($sector, $term) {
+            if ($sector !== '' && $r['table'] !== $sector) {
+                return false;
+            }
+            if ($term === '') {
+                return true;
+            }
+            $hay = mb_strtolower(($r['title'] ?? '') . ' #' . ($r['id'] ?? '') . ' ' . ($r['solicitor_name'] ?? ''));
+            return mb_strpos($hay, $term) !== false;
+        }));
+        return ['all' => $all, 'rows' => $rows];
+    }
+
+    /** Prazo mais próximo primeiro; sem prazo por último; empate: mais recente primeiro */
+    public static function byDeadline(array $a, array $b): int
     {
         $da = (string)($a['date'] ?? '');
         $db = (string)($b['date'] ?? '');
@@ -199,6 +435,74 @@ class RequestInbox
         return $ha && $da !== $db ? strcmp($da, $db) : strcmp((string)$b['created_at'], (string)$a['created_at']);
     }
 
+    /** Contadores por aba e por grupo de "Para fazer" (o menu usa novos + chegaram) */
+    private static function countRows(array $tabs): array
+    {
+        $counts = array_map('count', $tabs);
+        foreach (array_keys(self::GROUPS) as $group) {
+            $counts[$group] = 0;
+        }
+        foreach ($tabs['fazer'] as $row) {
+            $counts[$row['group']]++;
+        }
+        return $counts;
+    }
+
+    /** Resposta recente a um encaminhamento feito pelo setor: o pedido voltou com recado */
+    private static function replyContext(?array $sent, string $since): ?array
+    {
+        if (!$sent || empty($sent['responded_at']) || $sent['responded_at'] < $since) {
+            return null;
+        }
+        if ($sent['status'] === 'refused') {
+            return [$sent['to_label'] . ' recusou o encaminhamento', 'bad'];
+        }
+        if ($sent['status'] === 'returned') {
+            return [$sent['to_label'] . ' devolveu a ajuda', 'in'];
+        }
+        return null;
+    }
+
+    /**
+     * Quem começou o atendimento (ou reabriu) e quem concluiu, por pedido.
+     * @param string[] $keys "tabela:id"
+     */
+    public static function statusPeople(PDO $pdo, array $keys): array
+    {
+        $bySector = [];
+        foreach ($keys as $key) {
+            [$tbl, $id] = explode(':', $key);
+            $bySector[$tbl][] = (int)$id;
+        }
+        $people = [];
+        if (!$bySector) {
+            return $people;
+        }
+        $conds = [];
+        $params = [statusLabel('W'), statusLabel('W'), statusLabel('C')];
+        foreach ($bySector as $tbl => $ids) {
+            $conds[] = '(request_table = ? AND request_id IN (' . implode(',', array_fill(0, count($ids), '?')) . '))';
+            $params = array_merge($params, [$tbl], $ids);
+        }
+        $stmt = $pdo->prepare('
+            SELECT request_table, request_id, user_name, created_at, (new_value = ?) AS is_start
+            FROM request_history
+            WHERE new_value IN (?, ?) AND (' . implode(' OR ', $conds) . ')
+            ORDER BY id ASC
+        ');
+        $stmt->execute($params);
+        foreach ($stmt->fetchAll(PDO::FETCH_ASSOC) as $h) {
+            $key = $h['request_table'] . ':' . $h['request_id'];
+            if ((int)$h['is_start'] === 1) {
+                $people[$key]['worker'] = (string)$h['user_name'];
+            } else {
+                $people[$key]['closer'] = (string)$h['user_name'];
+                $people[$key]['closed_at'] = (string)$h['created_at'];
+            }
+        }
+        return $people;
+    }
+
     private static function shortName(string $name): string
     {
         $parts = preg_split('/\s+/', trim($name));
@@ -206,5 +510,11 @@ class RequestInbox
             return '—';
         }
         return count($parts) > 1 ? $parts[0] . ' ' . end($parts) : $parts[0];
+    }
+
+    private static function firstName(string $name): string
+    {
+        $parts = preg_split('/\s+/', trim($name));
+        return $parts && $parts[0] !== '' ? $parts[0] : $name;
     }
 }

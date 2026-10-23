@@ -155,7 +155,7 @@ async function updateNotifications() {
 function setNotifCount(count, bump) {
     notifState.unread = count;
     notifBadge.textContent = count > 99 ? '99+' : count;
-    notifBadge.style.display = count > 0 ? 'grid' : 'none';
+    notifBadge.hidden = !(count > 0);
     notifBtn.setAttribute('aria-label', count > 0 ? `Avisos: ${count} não lidos` : 'Avisos');
     document.title = (count > 0 ? `(${count}) ` : '') + notifState.baseTitle;
     const markAll = document.getElementById('notif-mark-all');
@@ -287,14 +287,9 @@ function showNotifPop(n) {
     if (open) open.addEventListener('click', () => { dismiss(); openNotification(n.id, link); });
 }
 
-// Abre o pedido do aviso: no painel da fila quando ele está na lista, senão a página
+// Abre o pedido do aviso na página dele
 function openNotification(id, link) {
     if (id) markNotifRead(id, true);
-    const m = /request_detail\?id=(\d+)&table=([a-z]+)/.exec(link);
-    if (m && window.innerWidth >= 900 && document.getElementById('requestPanel')) {
-        const row = document.querySelector(`[data-queue] .row-item[data-table="${m[2]}"][data-id="${m[1]}"]`);
-        if (row) { openInPanel(m[2], m[1], row); closeNotifDropdown(); return; }
-    }
     window.location.href = link;
 }
 
@@ -302,10 +297,7 @@ function openNotification(id, link) {
 function refreshForNotifications(fresh) {
     const links = fresh.map(n => String(n.link || ''));
     if (document.querySelector('[data-queue]') && typeof refreshAfterChange === 'function') {
-        const panelView = document.querySelector('#requestPanel .request-view');
-        const typing = panelView?.querySelector('[data-chat-form] textarea')?.value.trim();
-        refreshAfterChange({ keepPanel: !!typing });
-        if (typing) reloadChat(panelView);
+        refreshAfterChange();
         return;
     }
     document.querySelectorAll('.request-view').forEach(view => {
@@ -323,13 +315,12 @@ function refreshForNotifications(fresh) {
 
 async function reloadRequestView(view) {
     try {
-        const html = await (await fetch(`api/request_view.php?id=${view.dataset.id}&table=${view.dataset.table}&context=page`)).text();
+        const html = await (await fetch(`api/request_view.php?id=${view.dataset.id}&table=${view.dataset.table}`)).text();
         const box = document.createElement('div');
         box.innerHTML = html;
         const fresh = box.querySelector('.request-view');
         if (!fresh) return;
         view.replaceWith(fresh);
-        initRequestView(fresh.parentElement);
         fresh.classList.add('just-updated');
     } catch (err) { /* mantém a versão atual */ }
 }
@@ -506,7 +497,8 @@ function validateRequestForm(form) {
         file: 'Informe qual arquivo deve ser impresso.',
         qtd: 'Informe quantas cópias (número maior que zero).',
         model: 'Escolha uma opção.',
-        outros_texto: 'Descreva qual é a outra opção.'
+        outros_texto: 'Descreva qual é a outra opção.',
+        urgent_reason: 'Conte por que é urgente.'
     };
     let firstInvalid = null;
     const checkedGroups = new Set();
@@ -543,27 +535,11 @@ function validateRequestForm(form) {
     return true;
 }
 
-function showRequestSuccess(container, data) {
-    const id = parseInt(data.id, 10);
-    const title = document.querySelector('.form_request #title')?.value || '';
-    container.innerHTML = `
-        <div class="request-success" role="status">
-            <h2><i class="fa-solid fa-circle-check" style="color:var(--ok)" aria-hidden="true"></i> Pedido enviado</h2>
-            <div class="ficha ficha--hero" data-sector="${escapeHtml(data.table)}">
-                <span class="ficha__stub"><span class="ficha__num"><small>Nº</small>${id}</span><span class="ficha__sector-bar" aria-hidden="true"></span></span>
-                <span class="ficha__body">
-                    <span class="ficha__title">${escapeHtml(title)}</span>
-                    <span><span class="status-pill status-pill--P">Aguardando aprovação</span></span>
-                </span>
-            </div>
-            <p>Anote o número <strong>${id}</strong>. Você recebe um aviso no sino <i class="fa-solid fa-bell" aria-hidden="true"></i> quando a situação mudar.</p>
-            <div class="request-success__actions">
-                <a class="btn btn--primary" href="${escapeHtml(safeInternalLink(data.link))}"><i class="fa-solid fa-eye" aria-hidden="true"></i> Ver meu pedido</a>
-                <a class="btn" href="new_request"><i class="fa-solid fa-plus" aria-hidden="true"></i> Fazer outro</a>
-                <a class="btn" href="myRequests"><i class="fa-solid fa-list" aria-hidden="true"></i> Meus pedidos</a>
-            </div>
-        </div>`;
-    container.scrollIntoView({ behavior: 'smooth', block: 'start' });
+// Data de hoje + n dias, no formato do campo de data
+function isoInDays(n) {
+    const d = new Date();
+    d.setDate(d.getDate() + n);
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 }
 
 function bindFormRequests() {
@@ -572,6 +548,34 @@ function bindFormRequests() {
 
     // Data mínima = hoje
     form_requests.querySelectorAll('input[type="date"]').forEach(input => { input.min = todayIso(); });
+
+    // Atalhos de data: um toque preenche o campo
+    form_requests.querySelectorAll('[data-date-quick]').forEach(box => {
+        const input = box.closest('.form-group').querySelector('input[type="date"]');
+        [['Amanhã', 1], ['Em 1 semana', 7], ['Em 2 semanas', 14]].forEach(([label, days]) => {
+            const btn = document.createElement('button');
+            btn.type = 'button';
+            btn.className = 'chip-btn';
+            btn.textContent = label;
+            btn.addEventListener('click', () => {
+                input.value = isoInDays(days);
+                input.dispatchEvent(new Event('input', { bubbles: true }));
+            });
+            box.appendChild(btn);
+        });
+    });
+
+    // "É urgente" pede o motivo
+    const urgent = form_requests.querySelector('[data-urgent]');
+    const urgentReason = form_requests.querySelector('[data-urgent-reason]');
+    if (urgent && urgentReason) {
+        urgent.addEventListener('change', () => {
+            const reason = urgentReason.querySelector('input');
+            urgentReason.hidden = !urgent.checked;
+            reason.required = urgent.checked;
+            if (urgent.checked) reason.focus(); else reason.value = '';
+        });
+    }
 
     // Campo "Outro" do marketing
     const radioOutros = document.getElementById('radio_outros');
@@ -615,7 +619,8 @@ function bindFormRequests() {
 
         const data = await fetchAjax("config/addRequest.php", formData);
         if (data && data.success) {
-            showRequestSuccess(document.getElementById('dynamicForm') || form_requests.parentElement, data);
+            flashToast(`Pedido nº ${parseInt(data.id, 10)} enviado. Você recebe um aviso quando a coordenação aprovar.`);
+            window.location.href = safeInternalLink(data.link);
             return;
         }
 
@@ -688,7 +693,7 @@ async function globalRequestAction(action, id, table, value = '') {
             if (action === 'delete') {
                 setTimeout(() => { window.location.href = 'myRequests'; }, 900);
             } else {
-                refreshAfterChange();
+                refreshAfterChange({ advance: action === 'finish', message: data.message });
             }
         } else {
             showToast(data.message || 'Não foi possível concluir a ação.', 'error');
@@ -805,53 +810,61 @@ async function postForm(url, fields) {
     }
 }
 
-// Depois de uma ação: no painel da fila, recarrega lista + painel sem sair da tela; na página, recarrega a página
+// Pedido: mostra ou esconde as mudanças automáticas no meio da conversa
+document.addEventListener('click', (e) => {
+    const btn = e.target.closest('[data-history-toggle]');
+    if (!btn) return;
+    const feed = btn.closest('.rv-talk')?.querySelector('[data-chat-feed]');
+    if (!feed) return;
+    const on = feed.classList.toggle('show-all');
+    btn.setAttribute('aria-pressed', on ? 'true' : 'false');
+    btn.textContent = on ? 'Esconder histórico' : 'Mostrar histórico completo';
+});
+
+// Avisos que sobrevivem à troca de página (ex.: "Pedido concluído" ao abrir o próximo da fila)
+function flashToast(message) {
+    try { sessionStorage.setItem('sisreq-flash', message); } catch (e) { /* sem armazenamento: só não mostra */ }
+}
+
+document.addEventListener('DOMContentLoaded', () => {
+    let message = null;
+    try {
+        message = sessionStorage.getItem('sisreq-flash');
+        sessionStorage.removeItem('sisreq-flash');
+    } catch (e) { /* nada a mostrar */ }
+    if (message) showToast(message, 'success');
+});
+
+/**
+ * Depois de uma ação.
+ * Na lista (Caixa, Aprovar): recarrega a lista e as abas no lugar.
+ * Na página do pedido: com opts.advance e uma fila de origem, abre o próximo pedido
+ * (ou volta para a lista quando a fila acabou); sem isso, recarrega a página.
+ */
 async function refreshAfterChange(opts = {}) {
     const queue = document.querySelector('[data-queue]');
     if (!queue) {
+        const page = document.querySelector('.detail-page[data-back]');
+        if (opts.advance && page) {
+            const next = page.dataset.next;
+            const done = opts.message ? opts.message.trim() + ' ' : '';
+            flashToast(done + (next ? 'Este é o próximo da fila.' : 'Esse era o último da fila.'));
+            setTimeout(() => { window.location.href = next || page.dataset.back; }, 300);
+            return;
+        }
         setTimeout(() => location.reload(), 700);
         return;
     }
-    const panel = document.getElementById('requestPanel');
-    const key = panel ? panel.dataset.key : null;
-    const advance = queue.hasAttribute('data-advance');
-    const rows = [...queue.querySelectorAll('.row-item')];
-    const oldIndex = key ? rows.findIndex(r => r.dataset.table + ':' + r.dataset.id === key) : -1;
     try {
         const html = await (await fetch(queue.dataset.url || location.href, { headers: { 'X-Requested-With': 'fetch' } })).text();
         const doc = new DOMParser().parseFromString(html, 'text/html');
         const fresh = doc.querySelector('[data-queue]');
-        if (fresh) {
-            // o painel continua o mesmo elemento (evita piscar)
-            const freshPanel = fresh.querySelector('#requestPanel');
-            if (freshPanel && panel) freshPanel.replaceWith(panel);
-            queue.replaceWith(fresh);
-        }
+        if (fresh) queue.replaceWith(fresh);
         document.querySelectorAll('[data-sync]').forEach(el => {
             const twin = doc.querySelector(`[data-sync="${el.dataset.sync}"]`);
             if (twin) el.replaceWith(twin);
         });
-        bindQueue();
-        if (!key) return;
-        if (opts.keepPanel) {
-            const current = document.querySelector(`[data-queue] .row-item[data-table="${key.split(':')[0]}"][data-id="${key.split(':')[1]}"]`);
-            if (current) current.classList.add('selected');
-            return;
-        }
-        const [table, id] = key.split(':');
-        const row = document.querySelector(`[data-queue] .row-item[data-table="${table}"][data-id="${id}"]`);
-        if (row || !advance) {
-            openInPanel(table, id, row);
-            return;
-        }
-        // Aprovar pedidos: o pedido decidido sai da lista, abre o próximo
-        const next = document.querySelectorAll('[data-queue] .row-item')[Math.max(0, oldIndex)] || document.querySelector('[data-queue] .row-item');
-        if (next) {
-            openInPanel(next.dataset.table, next.dataset.id, next);
-        } else if (panel) {
-            panel.innerHTML = '<div class="empty-state"><i class="fa-regular fa-circle-check" aria-hidden="true"></i><p>Tudo em dia: nenhum pedido aguardando.</p></div>';
-            delete panel.dataset.key;
-        }
+        document.body.classList.remove('has-bulk');
     } catch (err) {
         location.reload();
     }
@@ -859,6 +872,21 @@ async function refreshAfterChange(opts = {}) {
 
 function requestAct(action, id, table, value = '') {
     return globalRequestAction(action, id, table, value);
+}
+
+// Imprimir sem sair da tela: carrega a folha num iframe oculto e abre o diálogo de impressão
+function printRequest(event, url) {
+    if (event.ctrlKey || event.metaKey || event.shiftKey || event.button === 1) return true; // nova aba, se a pessoa quiser
+    event.preventDefault();
+    document.getElementById('printFrame')?.remove();
+    const frame = document.createElement('iframe');
+    frame.id = 'printFrame';
+    frame.title = 'Impressão';
+    frame.style.cssText = 'position:fixed;right:0;bottom:0;width:0;height:0;border:0;visibility:hidden;';
+    // Com embed=1 a própria folha chama print() depois que as fontes carregam
+    frame.src = url + (url.includes('?') ? '&' : '?') + 'embed=1';
+    document.body.appendChild(frame);
+    return false;
 }
 
 async function decideRequest(value, id, table) {
@@ -878,7 +906,7 @@ async function decideRequest(value, id, table) {
     const data = await postForm('config/aprovRequest.php', { action: 'post', id, table, value, reason });
     if (!data) return;
     showToast(data.message, data.success ? 'success' : 'error');
-    if (data.success) refreshAfterChange();
+    if (data.success) refreshAfterChange({ advance: true, message: data.message });
 }
 
 async function forwardAct(action, forwardId) {
@@ -907,11 +935,11 @@ async function forwardAct(action, forwardId) {
     const data = await postForm('api/request_forwards.php', fields);
     if (!data) return;
     showToast(data.message, data.success ? 'success' : 'error');
-    if (data.success) refreshAfterChange();
+    if (data.success) refreshAfterChange({ advance: action === 'refuse' || action === 'return', message: data.message });
 }
 
 // ---------------------------------------------------------------------
-// Conversa (funciona em qualquer visão do pedido, inclusive no painel)
+// Atividade do pedido: o pedido, os eventos e a conversa numa linha do tempo só
 // ---------------------------------------------------------------------
 document.addEventListener('submit', async (e) => {
     const form = e.target.closest('[data-chat-form]');
@@ -927,7 +955,8 @@ document.addEventListener('submit', async (e) => {
     if (data && data.success) {
         form.reset();
         textarea.style.height = '';
-        reloadChat(form.closest('.request-view'));
+        await reloadChat(form.closest('.request-view'));
+        form.scrollIntoView({ block: 'nearest' });
     } else if (data) {
         showToast(data.message || 'Não foi possível enviar a mensagem.', 'error');
     }
@@ -946,81 +975,31 @@ document.addEventListener('input', (e) => {
     if (area) { area.style.height = ''; area.style.height = area.scrollHeight + 'px'; }
 });
 
+// Atualiza a linha do tempo sem recarregar a página (só redesenha se algo mudou)
 async function reloadChat(view) {
     const feed = view && view.querySelector('[data-chat-feed]');
     if (!feed || document.hidden) return;
     try {
-        const html = await (await fetch(`api/get_comments.php?id=${feed.dataset.id}&table=${feed.dataset.table}`)).text();
-        if (feed.innerHTML.trim() === html.trim()) return;
-        const atBottom = feed.scrollHeight - feed.scrollTop <= feed.clientHeight + 150;
-        feed.innerHTML = html;
-        if (atBottom) feed.scrollTop = feed.scrollHeight;
+        const response = await fetch(`api/get_comments.php?id=${feed.dataset.id}&table=${feed.dataset.table}`);
+        if (!response.ok) return;
+        const box = document.createElement('div');
+        box.innerHTML = await response.text();
+        if (box.innerHTML !== feed.innerHTML) feed.innerHTML = box.innerHTML;
     } catch (err) { /* tenta de novo no próximo ciclo */ }
 }
 
-function initRequestView(root = document) {
-    root.querySelectorAll('[data-chat-feed]').forEach(feed => { feed.scrollTop = feed.scrollHeight; });
-    if (window.innerWidth >= 900) {
-        root.querySelectorAll('.rv-timeline[data-open-desktop]').forEach(d => d.setAttribute('open', ''));
-    }
-}
-
 setInterval(() => document.querySelectorAll('.request-view').forEach(reloadChat), 15000);
-document.addEventListener('DOMContentLoaded', () => initRequestView());
-
-// ---------------------------------------------------------------------
-// Filas (Caixa do setor, Aprovar pedidos): lista à esquerda, pedido à direita
-// ---------------------------------------------------------------------
-async function openInPanel(table, id, row) {
-    const panel = document.getElementById('requestPanel');
-    if (!panel) return false;
-    document.querySelectorAll('[data-queue] .row-item').forEach(r => r.classList.remove('selected'));
-    if (row) row.classList.add('selected');
-    panel.setAttribute('aria-busy', 'true');
-    try {
-        const response = await fetch(`api/request_view.php?id=${encodeURIComponent(id)}&table=${encodeURIComponent(table)}`);
-        panel.innerHTML = await response.text();
-        panel.dataset.key = table + ':' + id;
-        initRequestView(panel);
-        if (typeof updateNotifications === 'function') updateNotifications(); // abrir o pedido marcou os avisos dele como lidos
-        const url = new URL(location.href);
-        url.searchParams.set('sel', table + ':' + id);
-        history.replaceState(null, '', url);
-    } catch (err) {
-        panel.innerHTML = '<div class="empty-state"><p>Não foi possível abrir o pedido. Tente de novo.</p></div>';
-    }
-    panel.removeAttribute('aria-busy');
-    return true;
-}
-
-function bindQueue() {
-    document.querySelectorAll('[data-queue] .row-item').forEach(row => {
-        row.addEventListener('click', (e) => {
-            if (window.innerWidth < 900 || !document.getElementById('requestPanel')) return; // celular: abre a página do pedido
-            e.preventDefault();
-            openInPanel(row.dataset.table, row.dataset.id, row);
-        });
-    });
-}
-
-document.addEventListener('DOMContentLoaded', () => {
-    bindQueue();
-    if (window.innerWidth < 900) return;
-    const sel = new URL(location.href).searchParams.get('sel');
-    const first = sel
-        ? document.querySelector(`[data-queue] .row-item[data-table="${sel.split(':')[0]}"][data-id="${sel.split(':')[1]}"]`)
-        : document.querySelector('[data-queue] .row-item');
-    if (first) openInPanel(first.dataset.table, first.dataset.id, first);
-});
 
 // ---------------------------------------------------------------------
 // Escolher vários pedidos e resolver de uma vez (Aprovar, Começar, Concluir)
 // ---------------------------------------------------------------------
-function bulkPicked() {
-    return [...document.querySelectorAll('[data-queue] [data-pick]:checked')].map(i => {
-        const [table, id] = i.value.split(':');
-        return { table, id };
-    });
+function bulkPicked(group = '') {
+    return [...document.querySelectorAll('[data-queue] [data-pick]:checked')]
+        .filter(i => !group || i.dataset.group === group)
+        .map(i => {
+            const [table, id] = i.value.split(':');
+            return { table, id };
+        });
 }
 
 function updateBulkBar() {
@@ -1030,7 +1009,14 @@ function updateBulkBar() {
     const n = bulkPicked().length;
     bar.hidden = n === 0;
     bar.querySelector('[data-bulk-count]').textContent = n === 1 ? '1 selecionado' : `${n} selecionados`;
-    document.querySelectorAll('[data-queue] [data-pick]').forEach(i => i.closest('.row-wrap')?.classList.toggle('picked', i.checked));
+    // Botões por grupo: "Começar atendimento (2)" só aparece quando há novos marcados
+    bar.querySelectorAll('[data-bulk-group]').forEach(btn => {
+        const k = bulkPicked(btn.dataset.bulkGroup).length;
+        btn.hidden = k === 0;
+        const label = btn.querySelector('[data-bulk-n]');
+        if (label) label.textContent = `(${k})`;
+    });
+    picks.forEach(i => i.closest('.queue-row')?.classList.toggle('picked', i.checked));
     const all = document.querySelector('[data-queue] [data-pick-all]');
     if (all) {
         all.checked = n > 0 && n === picks.length;
@@ -1054,7 +1040,7 @@ document.addEventListener('click', async (e) => {
     }
     const btn = e.target.closest('[data-bulk-action]');
     if (!btn) return;
-    const items = bulkPicked();
+    const items = bulkPicked(btn.dataset.bulkGroup || '');
     if (!items.length) return;
     const action = btn.dataset.bulkAction;
     const n = items.length;

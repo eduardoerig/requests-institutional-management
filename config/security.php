@@ -353,7 +353,10 @@ function userIsRequestOwner(PDO $pdo, array $request, string $sector, int $userI
         return false;
     }
     require_once __DIR__ . '/../classes/RequestForwardService.php';
-    $ownerArea = requestOwnerAreaId($pdo, (int)($request['id'] ?? 0), $sector);
+    // Quem já calculou o responsável (Caixa, página do pedido) manda em owner_area_id e poupa a consulta
+    $ownerArea = array_key_exists('owner_area_id', $request)
+        ? ($request['owner_area_id'] !== null ? (int)$request['owner_area_id'] : null)
+        : requestOwnerAreaId($pdo, (int)($request['id'] ?? 0), $sector);
     return RequestForwardService::userInArea($pdo, $userId, $ownerArea);
 }
 
@@ -415,19 +418,34 @@ function userCanActOnRequest(PDO $pdo, array $request, string $sector, int $user
         || userCanManageOriginalRequest($pdo, $request, $sector, $userId, $role);
 }
 
+/**
+ * Setores (ctd_area) lidos uma vez por requisição: [id => título], em ordem de id.
+ * A tabela é pequena e muito consultada; o banco fica longe, então cada consulta evitada conta.
+ */
+function areaTitles(PDO $pdo, bool $refresh = false): array
+{
+    static $titles = null;
+    if ($titles === null || $refresh) {
+        $titles = [];
+        foreach ($pdo->query('SELECT id, title FROM ctd_area ORDER BY id')->fetchAll(PDO::FETCH_ASSOC) as $row) {
+            $titles[(int)$row['id']] = (string)$row['title'];
+        }
+    }
+    return $titles;
+}
+
 function getAreaIdBySector(PDO $pdo, string $sector): ?int
 {
     $aliases = sectorAreaAliases($sector);
     if (empty($aliases)) {
         return null;
     }
-
-    $placeholders = implode(',', array_fill(0, count($aliases), '?'));
-    $stmt = $pdo->prepare("SELECT id FROM ctd_area WHERE LOWER(title) IN ($placeholders) ORDER BY id LIMIT 1");
-    $stmt->execute($aliases);
-    $areaId = $stmt->fetchColumn();
-
-    return $areaId ? (int)$areaId : null;
+    foreach (areaTitles($pdo) as $id => $title) {
+        if (in_array(mb_strtolower(trim($title)), $aliases, true)) {
+            return $id;
+        }
+    }
+    return null;
 }
 
 function ensureUserAreaForRole(PDO $pdo, int $userId, string $role): void

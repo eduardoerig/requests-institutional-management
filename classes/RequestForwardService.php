@@ -28,18 +28,12 @@ class RequestForwardService
 
     public static function areaLabel(PDO $pdo, ?int $areaId): string
     {
-        static $cache = [];
         if (!$areaId) {
             return 'Setor';
         }
-        if (!isset($cache[$areaId])) {
-            $stmt = $pdo->prepare('SELECT title FROM ctd_area WHERE id = ?');
-            $stmt->execute([$areaId]);
-            $title = (string)$stmt->fetchColumn();
-            $slug = areaTitleToSector($title);
-            $cache[$areaId] = $slug ? self::sectorName($slug) : ($title !== '' ? ucfirst($title) : 'Setor');
-        }
-        return $cache[$areaId];
+        $title = areaTitles($pdo)[$areaId] ?? '';
+        $slug = areaTitleToSector($title);
+        return $slug ? self::sectorName($slug) : ($title !== '' ? ucfirst($title) : 'Setor');
     }
 
     public static function sectorName(string $slug): string
@@ -55,9 +49,7 @@ class RequestForwardService
         if (!$areaId) {
             return null;
         }
-        $stmt = $pdo->prepare('SELECT title FROM ctd_area WHERE id = ?');
-        $stmt->execute([$areaId]);
-        return areaTitleToSector((string)$stmt->fetchColumn());
+        return areaTitleToSector(areaTitles($pdo)[$areaId] ?? '');
     }
 
     public static function originAreaId(PDO $pdo, string $sector): ?int
@@ -86,12 +78,14 @@ class RequestForwardService
     public static function availableAreas(PDO $pdo, ?int $excludeAreaId = null): array
     {
         $areas = [];
-        foreach ($pdo->query('SELECT id, title FROM ctd_area ORDER BY title')->fetchAll(PDO::FETCH_ASSOC) as $row) {
-            $slug = areaTitleToSector((string)$row['title']);
-            if ($slug === null || (int)$row['id'] === (int)$excludeAreaId) {
+        $titles = areaTitles($pdo);
+        uasort($titles, 'strcasecmp');
+        foreach ($titles as $id => $title) {
+            $slug = areaTitleToSector($title);
+            if ($slug === null || $id === (int)$excludeAreaId) {
                 continue;
             }
-            $areas[] = ['id' => (int)$row['id'], 'slug' => $slug, 'label' => self::sectorName($slug)];
+            $areas[] = ['id' => $id, 'slug' => $slug, 'label' => self::sectorName($slug)];
         }
         return $areas;
     }
