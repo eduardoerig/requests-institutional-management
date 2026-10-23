@@ -7,6 +7,7 @@ require_once __DIR__ . '/../config/session.php';
 require_once __DIR__ . '/../config/conn.php';
 require_once __DIR__ . '/../config/security.php';
 requireLoginJson($pdo);
+session_write_close(); // só leitura: não segura a sessão das outras abas e requisições
 
 header('Content-Type: application/json; charset=UTF-8');
 header('Cache-Control: no-store');

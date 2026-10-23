@@ -6,6 +6,9 @@ $host = getenv('DB_HOST') ?: '';
 $dbname = getenv('DB_NAME') ?: '';
 $user = getenv('DB_USER') ?: '';
 $pass = getenv('DB_PASS') ?: '';
+// Conexão persistente: reaproveita a conexão entre requisições (útil com banco remoto, cada conexão nova
+// custa várias idas e voltas). Ligar só se o banco aceitar uma conexão aberta por processo do PHP.
+$persistent = filter_var(getenv('DB_PERSISTENT') ?: '0', FILTER_VALIDATE_BOOLEAN);
 
 if ($host === '' || $dbname === '' || $user === '') {
     $localConfig = __DIR__ . '/conn.local.php';
@@ -16,6 +19,7 @@ if ($host === '' || $dbname === '' || $user === '') {
             $dbname = $local['dbname'] ?? $dbname;
             $user = $local['user'] ?? $user;
             $pass = $local['pass'] ?? $pass;
+            $persistent = (bool)($local['persistent'] ?? $persistent);
         }
     }
 }
@@ -25,7 +29,7 @@ try {
         throw new RuntimeException('Credenciais de banco nao configuradas no ambiente.');
     }
 
-    $pdo = new PDO("mysql:host=$host;dbname=$dbname;charset=utf8mb4", $user, $pass);
+    $pdo = new PDO("mysql:host=$host;dbname=$dbname;charset=utf8mb4", $user, $pass, $persistent ? [PDO::ATTR_PERSISTENT => true] : []);
     $pdo->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
     $pdo->setAttribute(PDO::ATTR_DEFAULT_FETCH_MODE, PDO::FETCH_ASSOC);
     // Horário de Brasília em PHP e MySQL (prazos e "atrasadas" consistentes)

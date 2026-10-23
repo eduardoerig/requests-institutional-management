@@ -8,4 +8,7 @@ return [
     'dbname' => 'requests2',
     'user' => 'root',
     'pass' => '',
+    // true reaproveita a conexão entre requisições (mais rápido com banco remoto).
+    // Use só se o banco aceitar uma conexão aberta por processo do PHP.
+    'persistent' => false,
 ];
