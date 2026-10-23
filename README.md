@@ -104,7 +104,7 @@ php tests/run.php                    # 67 verificações de fluxo, permissão e 
 
 ## 🚥 Situações da requisição
 
-Toda tela usa os mesmos nomes (`statusLabel()` em `config/security.php`):
+Toda tela usa os mesmos nomes (`statusLabel()` em `includes/helpers.php`):
 
 | Código | Nome na tela | Significado |
 | :---: | :--- | :--- |
