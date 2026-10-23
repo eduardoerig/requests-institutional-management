@@ -198,7 +198,7 @@ $dotColor = ['P' => '#B45309', 'W' => '#2563EB', 'C' => '#15803D', 'N' => '#B91C
 <main class="sheet">
     <header class="sheet-head">
         <div class="sheet-head__brand">
-            <img src="assets/img/logoMartin.png" alt="Colégio Martin Luther">
+            <img src="<?= e(orgSetting('org_logo')) ?>" alt="<?= e(orgSetting('org_name')) ?>">
             <span>SisReq, pedidos internos</span>
         </div>
         <div class="sheet-head__num">
@@ -246,7 +246,7 @@ $dotColor = ['P' => '#B45309', 'W' => '#2563EB', 'C' => '#15803D', 'N' => '#B91C
         <div><strong>Recebido por</strong><span>Nome e data ____/____/________</span></div>
     </section>
 
-    <footer class="sheet-foot">SisReq, Colégio Martin Luther. Requisição Nº <?= e($number) ?>.</footer>
+    <footer class="sheet-foot">SisReq<?= orgSetting('org_name') !== 'SisReq' ? ', ' . e(orgSetting('org_name')) : '' ?>. Requisição Nº <?= e($number) ?>.</footer>
 </main>
 
 <?php if ($embed): ?>

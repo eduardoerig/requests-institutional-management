@@ -1,11 +1,11 @@
 <main class="login-screen">
     <section class="login-form-col">
         <div class="login-card">
-            <img src="assets/img/logoMartin.png" alt="Colégio Martin Luther" class="login-card__school">
-            <p class="login-card__app">SisReq, pedidos internos da escola</p>
+            <img src="<?= e(orgSetting('org_logo')) ?>" alt="<?= e(orgSetting('org_name')) ?>" class="login-card__school">
+            <p class="login-card__app">SisReq, pedidos internos</p>
 
             <h1>Entrar no SisReq</h1>
-            <p class="login-card__lead">Use o usuário e a senha que a escola passou para você.</p>
+            <p class="login-card__lead">Use o usuário e a senha que a administração passou para você.</p>
 
             <form id="frm_login" class="form-auth form-login">
                 <div class="field">
@@ -25,7 +25,7 @@
             </form>
 
             <p class="login-card__help">
-                Esqueceu a senha ou ainda não tem acesso? Fale com a administração da escola.
+                Esqueceu a senha ou ainda não tem acesso? Fale com a administração.
                 Ela cria uma senha temporária para você.
             </p>
         </div>

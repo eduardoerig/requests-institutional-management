@@ -56,7 +56,8 @@ Desenvolvido com uma interface moderna, sofisticadamente clean e responsiva (Mob
  ┣ 📂 assets/       # Estilos globais (style.css, mobile.css), Scripts e Imagens
  ┣ 📂 classes/      # Camada de Negócio e Repositórios (Ex: RequestManager.php)
  ┣ 📂 components/   # Fragmentos de Layout Reutilizáveis (Sidebar, Navbar)
- ┣ 📂 config/       # Variáveis de ambiente e conexão PDO
+ ┣ 📂 config/       # Variáveis de ambiente, conexão PDO e sessão
+ ┣ 📂 includes/     # Funções de apoio: helpers.php (escape, JSON, CSRF) e auth.php (perfis e permissões)
  ┣ 📂 database/     # schema.sql, migrations/, migrate.php e scripts de linha de comando
  ┣ 📂 tests/        # Testes de integração (php tests/run.php)
  ┗ 📂 pages/        # Controladores e Views Principais da Aplicação

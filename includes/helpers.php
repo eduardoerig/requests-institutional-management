@@ -12,6 +12,32 @@ class UserMessage extends Exception
 }
 
 /**
+ * Marca da instituição (white label): ORG_NAME/ORG_LOGO no ambiente ou org_name/org_logo
+ * em config/conn.local.php. Sem configuração, usa a marca neutra do SisReq.
+ */
+function orgSetting(string $key): string
+{
+    static $local = null;
+    $defaults = ['org_name' => 'SisReq', 'org_logo' => 'assets/img/LogoFavConSisreq.png'];
+
+    $value = getenv(strtoupper($key));
+    if ($value === false || $value === '') {
+        if ($local === null) {
+            $file = __DIR__ . '/../config/conn.local.php';
+            $local = is_file($file) ? (require $file) : [];
+            $local = is_array($local) ? $local : [];
+        }
+        $value = (string)($local[$key] ?? '');
+    }
+    // Logo só de dentro de assets/ (nada de caminho de fora ou endereço externo)
+    if ($key === 'org_logo' && (!str_starts_with($value, 'assets/') || str_contains($value, '..'))) {
+        $value = '';
+    }
+
+    return $value !== '' ? $value : ($defaults[$key] ?? '');
+}
+
+/**
  * Escapa texto para saída HTML.
  */
 function e($value): string

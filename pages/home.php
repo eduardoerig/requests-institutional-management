@@ -116,7 +116,7 @@ $hasFilter = $activeFilterStatus || $searchTerm !== '' || $searchDate !== '';
 <div class="page-head">
     <div class="page-head--hide-mobile">
         <h1><?= e($pageHeading) ?></h1>
-        <p><?= $isAdmSub ? 'Pedidos da sua subdivisão.' : ($isGestor ? 'Pedidos do seu setor.' : 'Todos os pedidos da escola.') ?></p>
+        <p><?= $isAdmSub ? 'Pedidos da sua subdivisão.' : ($isGestor ? 'Pedidos do seu setor.' : 'Todos os pedidos.') ?></p>
     </div>
     <button type="button" onclick="exportToExcel()" class="btn btn--ghost hide-mobile"><i class="fa-solid fa-download" aria-hidden="true"></i> Exportar planilha</button>
 </div>
