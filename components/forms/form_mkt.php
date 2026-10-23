@@ -1,23 +1,16 @@
 <form class="form_request" novalidate>
     <input type="hidden" name="type" value="mkt">
 
-    <p class="form-intro">Use para pedir <strong>artes e materiais de divulgação</strong>: posts, banners, panfletos, convites etc.</p>
-
     <div class="form-group">
-        <label for="title">Título <span class="req">*</span></label>
+        <label for="title">O que você precisa? <span class="req">*</span></label>
         <input type="text" name="title" id="title" required maxlength="80" placeholder="Ex.: Divulgação da festa junina">
-        <span>Uma frase curta que resuma o pedido.</span>
     </div>
     <div class="form-group">
-        <label for="end">Para quando você precisa? <span class="req">*</span></label>
-        <input type="date" name="end" id="end" required>
-    </div>
-    <div class="form-group">
-        <label for="details">Explique o que você precisa <span class="req">*</span></label>
-        <textarea name="details" id="details" required rows="5" placeholder="Textos que devem aparecer, cores, tamanho e qualquer referência."></textarea>
+        <label for="details">Detalhes <span class="req">*</span></label>
+        <textarea name="details" id="details" required rows="4" placeholder="Textos que devem aparecer, cores, tamanho e qualquer referência."></textarea>
     </div>
     <fieldset class="form-group">
-        <legend>Onde a peça será usada? <span class="req">*</span></legend>
+        <legend>Onde vai ser usado? <span class="req">*</span></legend>
         <div class="aplication_select">
             <label><input type="radio" class="model_radius" name="model" value="Whatsapp" required> WhatsApp</label>
             <label><input type="radio" class="model_radius" name="model" value="Instagram"> Instagram</label>
@@ -31,14 +24,24 @@
         </div>
     </fieldset>
     <div class="form-group">
-        <label for="obs">Observações <small>(opcional)</small></label>
-        <input type="text" name="obs" id="obs" maxlength="2000" placeholder="Algo mais que ajude quem vai aprovar ou atender">
+        <label for="end">Para quando? <span class="req">*</span></label>
+        <div class="date-field">
+            <input type="date" name="end" id="end" required>
+            <span class="date-quick" data-date-quick></span>
+        </div>
     </div>
 
 <!--PRIORIDADE-->
 
+    <details class="form-more">
+        <summary>Mais alguma coisa? <small>(opcional)</small></summary>
+        <div class="form-group">
+            <label for="obs" class="visually-hidden">Observações</label>
+            <textarea name="obs" id="obs" rows="2" maxlength="2000" placeholder="Sala, horário, contato ou algo que ajude quem vai aprovar ou atender"></textarea>
+        </div>
+    </details>
+
     <div class="form-submit-bar">
-        <p class="form-required-hint"><span class="req">*</span> Campos obrigatórios</p>
-        <button type="submit"><i class="fa-solid fa-paper-plane" aria-hidden="true"></i> Enviar requisição</button>
+        <button type="submit"><i class="fa-solid fa-paper-plane" aria-hidden="true"></i> Enviar pedido</button>
     </div>
 </form>

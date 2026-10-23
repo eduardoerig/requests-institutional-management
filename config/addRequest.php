@@ -53,9 +53,16 @@ if ($title === '') {
 if (!in_array($priority, [1, 2, 3, 4], true)) {
     $priority = 2;
 }
-// Marcação legada de "urgente" vira prioridade alta
-if (!empty($_POST['urgent']) && $priority < 3) {
-    $priority = 3;
+// "É urgente" vira prioridade alta; o motivo vai no começo das observações
+if (!empty($_POST['urgent'])) {
+    $priority = max($priority, 3);
+    $urgentReason = postText('urgent_reason', 255);
+    if ($urgentReason === '' && isset($_POST['urgent_reason'])) {
+        fail('Conte por que o pedido é urgente.');
+    }
+    if ($urgentReason !== '') {
+        $obs = mb_substr('Urgente: ' . $urgentReason . ($obs !== '' ? "\n" . $obs : ''), 0, 2000);
+    }
 }
 $urgent = $priority >= 3 ? 1 : 0;
 

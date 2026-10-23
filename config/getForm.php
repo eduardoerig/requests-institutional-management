@@ -21,15 +21,15 @@ if ($formName === '' || !preg_match('/^form_[a-z_]+\.php$/', $formName) || !is_f
 
 $formHtml = file_get_contents($formFile);
 
-// Urgência em botões grandes (substitui o antigo campo "urgente")
+// Quem pede só diz se é urgente (e por quê); o nível de urgência fica com o setor
 $priorityHtml = '
-    <fieldset class="form-group priority-picker">
-        <legend>Qual a urgência? <span class="req">*</span></legend>
-        <label class="priority-option"><input type="radio" name="priority" value="1"><span><strong>Baixa</strong><small>Sem pressa</small></span></label>
-        <label class="priority-option"><input type="radio" name="priority" value="2" checked><span><strong>Normal</strong><small>No prazo pedido</small></span></label>
-        <label class="priority-option"><input type="radio" name="priority" value="3"><span><strong>Alta</strong><small>Precisa ser rápido</small></span></label>
-        <label class="priority-option"><input type="radio" name="priority" value="4"><span><strong>Crítica</strong><small>Está parando o trabalho</small></span></label>
-    </fieldset>
+    <div class="form-group urgent-field">
+        <label class="check-line"><input type="checkbox" name="urgent" value="1" id="urgent" data-urgent> É urgente: está parando uma aula ou o trabalho</label>
+        <div class="urgent-field__reason" data-urgent-reason hidden>
+            <label for="urgent_reason">Por que é urgente? <span class="req">*</span></label>
+            <input type="text" name="urgent_reason" id="urgent_reason" maxlength="255" placeholder="Ex.: a turma do 5º ano está sem projetor">
+        </div>
+    </div>
 ';
 
 if (strpos($formHtml, '<!--PRIORIDADE-->') !== false) {
