@@ -12,42 +12,59 @@ function attachCsrfToken(payload) {
     return payload;
 }
 
+// Lê a resposta como JSON; erro do servidor sem JSON (HTML, corpo vazio) não é confundido com falta de conexão
+async function readJson(response) {
+    if (!(response.headers.get('content-type') || '').includes('json')) {
+        const err = new Error('Resposta inesperada do servidor');
+        err.serverStatus = response.status;
+        throw err;
+    }
+    return response.json();
+}
+
+function requestErrorMessage(err) {
+    return err && err.serverStatus
+        ? `Erro no servidor (código ${err.serverStatus}). Tente de novo em instantes.`
+        : 'Sem conexão. Verifique a internet e tente de novo.';
+}
+
 async function fetchAjax(path, formData) {
     const overlay = document.querySelector('.loading-overlay');
     if (overlay) overlay.style.display = "flex";
+    let data;
     try {
         const resp = await fetch(path, {
             method: "POST",
             body: attachCsrfToken(formData)
         });
-        const data = await resp.json();
-
-        if (!data.success && data.redirect) {
-            window.location.href = data.redirect;
-            return false;
-        }
-
-        if (data.success) {
-            return data;
-        } else {
-            // Se showToast for preferido globalmente ou showAlert não existir
-            if (typeof showAlert === 'function') {
-                await showAlert({ title: 'Atenção', message: data.message || 'Não foi possível concluir a operação.', type: 'warning' });
-            } else {
-                showToast(data.message || 'Não foi possível concluir a operação.', 'error');
-            }
-            return false;
-        }
+        data = await readJson(resp);
     } catch (e) {
+        // Esconde o carregamento antes do alerta para não prender a tela atrás dele
+        if (overlay) overlay.style.display = "none";
         if (typeof showAlert === 'function') {
-            await showAlert({ title: 'Erro de Comunicação', message: 'Não foi possível completar a requisição. Verifique sua conexão.', type: 'error' });
+            await showAlert({ title: 'Não foi possível concluir', message: requestErrorMessage(e), type: 'error' });
         } else {
-            showToast('Erro de comunicação. Verifique sua conexão.', 'error');
+            showToast(requestErrorMessage(e), 'error');
         }
         return false;
-    } finally {
-        if (overlay) overlay.style.display = "none";
     }
+    if (overlay) overlay.style.display = "none";
+
+    if (!data.success && data.redirect) {
+        window.location.href = data.redirect;
+        return false;
+    }
+
+    if (data.success) {
+        return data;
+    }
+    // Se showToast for preferido globalmente ou showAlert não existir
+    if (typeof showAlert === 'function') {
+        await showAlert({ title: 'Atenção', message: data.message || 'Não foi possível concluir a operação.', type: 'warning' });
+    } else {
+        showToast(data.message || 'Não foi possível concluir a operação.', 'error');
+    }
+    return false;
 }
 
 // =====================================================================
@@ -126,7 +143,13 @@ async function updateNotifications() {
     notifState.loading = true;
     notifState.lastFetch = Date.now();
     try {
-        const response = await fetch('api/get_notifications.php', { cache: 'no-store' });
+        // Sem resposta em 15 s desiste deste ciclo (senão o sino para de atualizar)
+        const signal = typeof AbortSignal.timeout === 'function' ? AbortSignal.timeout(15000) : undefined;
+        const response = await fetch('api/get_notifications.php', { cache: 'no-store', signal });
+        if (response.status === 401) {
+            window.location.href = 'login';
+            return;
+        }
         if (!response.ok) return;
         const data = await response.json();
         const items = data.notifications || [];
@@ -297,7 +320,9 @@ function openNotification(id, link) {
 function refreshForNotifications(fresh) {
     const links = fresh.map(n => String(n.link || ''));
     if (document.querySelector('[data-queue]') && typeof refreshAfterChange === 'function') {
-        refreshAfterChange();
+        // Com pedidos marcados para resolver de uma vez, não redesenha a fila (perderia a seleção);
+        // o sino já mostra o aviso e a fila atualiza depois da ação em lote
+        if (!document.body.classList.contains('has-bulk')) refreshAfterChange();
         return;
     }
     document.querySelectorAll('.request-view').forEach(view => {
@@ -679,8 +704,8 @@ async function globalRequestAction(action, id, table, value = '') {
             method: 'POST',
             body: attachCsrfToken(formData)
         });
-        
-        const data = await response.json();
+
+        const data = await readJson(response);
 
         if (!data.success && data.redirect) {
             window.location.href = data.redirect;
@@ -700,7 +725,7 @@ async function globalRequestAction(action, id, table, value = '') {
         }
     } catch (error) {
         console.error("Erro fatal", error);
-        showToast("Falha na comunicação com o servidor.", "error");
+        showToast(requestErrorMessage(error), "error");
     } finally {
         if (overlay) overlay.style.display = "none";
     }
@@ -798,14 +823,14 @@ async function postForm(url, fields) {
     Object.entries(fields).forEach(([k, v]) => body.append(k, v ?? ''));
     try {
         const response = await fetch(url, { method: 'POST', body: attachCsrfToken(body) });
-        const data = await response.json();
+        const data = await readJson(response);
         if (!data.success && data.redirect) {
             window.location.href = data.redirect;
             return null;
         }
         return data;
     } catch (err) {
-        showToast('Sem conexão. Tente de novo.', 'error');
+        showToast(requestErrorMessage(err), 'error');
         return null;
     }
 }
@@ -945,13 +970,17 @@ document.addEventListener('submit', async (e) => {
     const form = e.target.closest('[data-chat-form]');
     if (!form) return;
     e.preventDefault();
+    // Enter repetido enquanto a mensagem ainda está indo não envia de novo
+    if (form.dataset.busy) return;
     const textarea = form.querySelector('textarea');
     const text = textarea.value.trim();
     if (!text) { textarea.focus(); return; }
     const btn = form.querySelector('button');
+    form.dataset.busy = '1';
     btn.disabled = true;
     const data = await postForm('api/add_comment.php', { id: form.dataset.id, table: form.dataset.table, comment: text });
     btn.disabled = false;
+    delete form.dataset.busy;
     if (data && data.success) {
         form.reset();
         textarea.style.height = '';
@@ -978,14 +1007,18 @@ document.addEventListener('input', (e) => {
 // Atualiza a linha do tempo sem recarregar a página (só redesenha se algo mudou)
 async function reloadChat(view) {
     const feed = view && view.querySelector('[data-chat-feed]');
-    if (!feed || document.hidden) return;
+    // Uma atualização por vez: com o banco lento, os ciclos não se acumulam
+    if (!feed || document.hidden || feed.dataset.loading) return;
+    feed.dataset.loading = '1';
     try {
         const response = await fetch(`api/get_comments.php?id=${feed.dataset.id}&table=${feed.dataset.table}`);
         if (!response.ok) return;
         const box = document.createElement('div');
         box.innerHTML = await response.text();
         if (box.innerHTML !== feed.innerHTML) feed.innerHTML = box.innerHTML;
-    } catch (err) { /* tenta de novo no próximo ciclo */ }
+    } catch (err) { /* tenta de novo no próximo ciclo */ } finally {
+        delete feed.dataset.loading;
+    }
 }
 
 setInterval(() => document.querySelectorAll('.request-view').forEach(reloadChat), 15000);
