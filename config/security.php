@@ -313,6 +313,7 @@ function getRequestRow(PDO $pdo, string $sector, int $id): ?array
 /**
  * O usuário participou (enviando ou recebendo) de algum encaminhamento deste pedido?
  * Dá direito a VER o pedido e conversar, não a agir sobre ele.
+ * Quem recebeu e recusou (ou teve o envio cancelado) não continua vendo o pedido.
  */
 function userHasForwardAccess(PDO $pdo, int $userId, int $requestId, string $sector): bool
 {
@@ -324,7 +325,8 @@ function userHasForwardAccess(PDO $pdo, int $userId, int $requestId, string $sec
     $stmt = $pdo->prepare("
         SELECT COUNT(*)
         FROM request_forwards rf
-        JOIN cfg_user_area cua ON cua.id_area IN (rf.to_area_id, rf.from_area_id)
+        JOIN cfg_user_area cua ON cua.id_area = rf.from_area_id
+            OR (cua.id_area = rf.to_area_id AND rf.status NOT IN ('refused', 'cancelled'))
         WHERE rf.request_id = ? AND rf.request_table = ? AND cua.id_user = ?
     ");
     $stmt->execute([$requestId, $normalizedSector, $userId]);

@@ -210,6 +210,12 @@ class RequestForwardService
 
         try {
             $pdo->beginTransaction();
+            // Trava o pedido e confere de novo: dois cliques ao mesmo tempo não abrem dois encaminhamentos
+            $pdo->prepare("SELECT id FROM `ctd_{$sector}_frm` WHERE id = ? FOR UPDATE")->execute([$reqId]);
+            if ($open = self::openForward($pdo, $reqId, $sector)) {
+                $pdo->rollBack();
+                return self::fail('Este pedido já tem um encaminhamento em aberto com ' . $open['to_label'] . '. Aguarde a resposta ou cancele o envio.');
+            }
             $pdo->prepare("
                 INSERT INTO request_forwards (request_id, request_table, from_area_id, forwarded_by, to_area_id, mode, observation, status, previous_status)
                 VALUES (?, ?, ?, ?, ?, ?, ?, 'pending', ?)

@@ -103,7 +103,7 @@ $full_role_labels = array_merge($role_labels, [
                         $subIds = array_filter(explode(',', $u['all_subdivision_ids'] ?? ''));
                     ?>
                     <tr class="user-row ac-row<?= $isActive ? '' : ' is-inactive' ?>"
-                        data-role="<?= $u['role'] ?>"
+                        data-role="<?= e($u['role']) ?>"
                         data-subdivisions="<?= htmlspecialchars(implode(',', $subIds)) ?>">
 
                         <!-- Usuário -->
@@ -140,7 +140,7 @@ $full_role_labels = array_merge($role_labels, [
                         <td class="ac-td">
                             <select class="row-role-select ac-input" onchange="markRowDirty(this)">
                                 <?php foreach($full_role_labels as $key => $label): ?>
-                                    <option value="<?= $key ?>" <?= $u['role'] == $key ? 'selected' : '' ?>><?= $label ?></option>
+                                    <option value="<?= e($key) ?>" <?= $u['role'] == $key ? 'selected' : '' ?>><?= e($label) ?></option>
                                 <?php endforeach; ?>
                             </select>
                         </td>
@@ -152,7 +152,7 @@ $full_role_labels = array_merge($role_labels, [
                                     <?php foreach(explode(', ', $u['all_sectors']) as $stitle):
                                         $lbl = $categories[$stitle] ?? ucfirst($stitle);
                                     ?>
-                                        <span class="ac-pill"><?= $lbl ?></span>
+                                        <span class="ac-pill"><?= e($lbl) ?></span>
                                     <?php endforeach; ?>
                                 </div>
                             <?php else: ?>

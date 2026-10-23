@@ -214,9 +214,9 @@ $hasFilter = $activeFilterStatus || $searchTerm !== '' || $searchDate !== '';
 <script>
 function exportToExcel() {
     const params = new URLSearchParams({
-        search: <?= json_encode($searchTerm) ?>,
-        status: <?= json_encode((string)$activeFilterStatus) ?>,
-        date: <?= json_encode($searchDate) ?>
+        search: <?= json_encode($searchTerm, JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT) ?>,
+        status: <?= json_encode((string)$activeFilterStatus, JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT) ?>,
+        date: <?= json_encode($searchDate, JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT) ?>
     });
     window.location.href = `api/export_requests.php?${params.toString()}`;
 }
