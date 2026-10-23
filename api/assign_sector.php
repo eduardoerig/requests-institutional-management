@@ -8,7 +8,7 @@ header('Content-Type: application/json');
 
 // Proteção: apenas administradores
 $current_role = $_SESSION['role'] ?? 'solicitante';
-if (!in_array($current_role, ['admin', 'adm'])) {
+if (!isGlobalAdminRole($current_role)) {
     echo json_encode(['success' => false, 'message' => 'Acesso negado.']);
     exit;
 }

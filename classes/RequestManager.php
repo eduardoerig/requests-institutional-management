@@ -47,12 +47,16 @@ class RequestManager {
 
     /**
      * Filtro de subdivisão (coordenação): pedidos da subdivisão ou de quem pertence a ela.
+     * null = sem filtro (admin geral); lista vazia = coordenação sem subdivisão, não vê nada.
      * @return array{0: string, 1: array} trecho SQL (começa com " AND") e parâmetros
      */
     private static function subdivisionFilter($subdivisionId): array
     {
-        if ($subdivisionId === null || (is_array($subdivisionId) && empty($subdivisionId))) {
+        if ($subdivisionId === null) {
             return ['', []];
+        }
+        if (is_array($subdivisionId) && empty($subdivisionId)) {
+            return [' AND 1 = 0', []];
         }
         $ids = is_array($subdivisionId) ? array_values($subdivisionId) : [$subdivisionId];
         $in = implode(',', array_fill(0, count($ids), '?'));
@@ -104,7 +108,8 @@ class RequestManager {
         $tables = [];
         if ($specificSector && $specificSector !== 'all') {
             $normalizedSector = normalizeRequestTable((string)$specificSector);
-            if ($normalizedSector === null) {
+            // Gestor só filtra entre os próprios setores; outro setor no filtro não devolve nada
+            if ($normalizedSector === null || ($managingUserId && !in_array($normalizedSector, $allowedSectors, true))) {
                 return [
                     'requests' => [],
                     'stats' => [

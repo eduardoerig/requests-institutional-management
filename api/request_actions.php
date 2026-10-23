@@ -21,7 +21,7 @@ if (!$data) {
     $data = $_POST;
 }
 
-$id = $data['id'] ?? null;
+$id = (int)($data['id'] ?? 0);
 $table = $data['table'] ?? null;
 $action = $data['action'] ?? null;
 $role = $_SESSION['role'] ?? 'solicitante';
