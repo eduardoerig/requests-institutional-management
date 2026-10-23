@@ -420,13 +420,18 @@ class RequestForwardService
     /** Avisa todos os responsáveis ativos de um setor (menos quem fez a ação) */
     private static function notifyArea(PDO $pdo, int $areaId, int $exceptUserId, string $title, string $message, string $link): void
     {
-        $stmt = $pdo->prepare("
-            SELECT DISTINCT u.id FROM ctd_users u
-            JOIN cfg_user_area cua ON cua.id_user = u.id
-            WHERE cua.id_area = ? AND u.status = 1
-        ");
-        $stmt->execute([$areaId]);
-        RequestManager::notifyMany($pdo, array_map('intval', $stmt->fetchAll(PDO::FETCH_COLUMN)), $title, $message, $link, $exceptUserId);
+        // Roda depois do commit: falha aqui vai para o log e não vira erro na tela
+        try {
+            $stmt = $pdo->prepare("
+                SELECT DISTINCT u.id FROM ctd_users u
+                JOIN cfg_user_area cua ON cua.id_user = u.id
+                WHERE cua.id_area = ? AND u.status = 1
+            ");
+            $stmt->execute([$areaId]);
+            RequestManager::notifyMany($pdo, array_map('intval', $stmt->fetchAll(PDO::FETCH_COLUMN)), $title, $message, $link, $exceptUserId);
+        } catch (Throwable $e) {
+            error_log("RequestForwardService::notifyArea area=$areaId \"$title\": " . $e->getMessage());
+        }
     }
 
     private static function link(int $reqId, string $sector): string

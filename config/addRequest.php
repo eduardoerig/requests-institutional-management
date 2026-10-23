@@ -45,17 +45,16 @@ $sectorLabel = $types[$typeKey]['label'];
 $title = postText('title', 255);
 $end = postText('end', 10);
 $obs = postText('obs', 2000);
-$priority = (int)($_POST['priority'] ?? 2);
+// Quem pede não escolhe o nível: nasce Normal (ou Alta se for urgente) e o setor ajusta depois
+$priority = 2;
+$urgentReason = '';
 
 if ($title === '') {
     fail('Escreva um título curto para a sua requisição.');
 }
-if (!in_array($priority, [1, 2, 3, 4], true)) {
-    $priority = 2;
-}
 // "É urgente" vira prioridade alta; o motivo vai no começo das observações
 if (!empty($_POST['urgent'])) {
-    $priority = max($priority, 3);
+    $priority = 3;
     $urgentReason = postText('urgent_reason', 255);
     if ($urgentReason === '' && isset($_POST['urgent_reason'])) {
         fail('Conte por que o pedido é urgente.');
@@ -95,6 +94,9 @@ switch ($sector) {
         $file = postText('file', 255);
         $qtdRaw = trim((string)($_POST['qtd'] ?? ''));
         $model = postText('model', 50);
+        if ($file === '') {
+            fail('Informe onde está o arquivo para imprimir.');
+        }
         if ($qtdRaw === '' || !ctype_digit($qtdRaw) || (int)$qtdRaw < 1 || (int)$qtdRaw > 100000) {
             fail('Informe quantas cópias você precisa (número maior que zero).');
         }
@@ -145,19 +147,24 @@ try {
 }
 
 // ---- Avisar quem aprova: administradores gerais + administradores da subdivisão ----
+// O pedido já foi gravado: falha nos avisos vai para o log e não vira erro na tela (evita reenvio duplicado)
 $link = "request_detail?id=$newId&table=$sector";
-$approverIds = array_column(RequestManager::getAdmins($pdo), 'id');
-if ($subdivision_id) {
-    $approverIds = array_merge($approverIds, array_column(RequestManager::getSubdivisionAdmins($pdo, (int)$subdivision_id), 'id'));
+try {
+    $approverIds = array_column(RequestManager::getAdmins($pdo), 'id');
+    if ($subdivision_id) {
+        $approverIds = array_merge($approverIds, array_column(RequestManager::getSubdivisionAdmins($pdo, (int)$subdivision_id), 'id'));
+    }
+    RequestManager::notifyMany(
+        $pdo,
+        array_values(array_unique(array_map('intval', $approverIds))),
+        ($urgent ? 'Urgente: pedido' : 'Pedido') . " nº $newId para aprovar",
+        "$userName pediu: \"$title\" ($sectorLabel)." . ($urgentReason !== '' ? " Motivo da urgência: $urgentReason" : ''),
+        $link,
+        $userId
+    );
+} catch (Throwable $e) {
+    error_log("addRequest.php: avisos do pedido $sector/$newId: " . $e->getMessage());
 }
-RequestManager::notifyMany(
-    $pdo,
-    array_values(array_unique(array_map('intval', $approverIds))),
-    "Pedido nº $newId para aprovar",
-    "$userName pediu: \"$title\" ($sectorLabel).",
-    $link,
-    $userId
-);
 
 jsonResponse([
     'success' => true,

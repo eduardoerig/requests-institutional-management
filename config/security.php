@@ -135,7 +135,8 @@ function requireCsrfTokenFromRequest(): void
     if (!validateCsrfToken($token)) {
         http_response_code(403);
         header('Content-Type: application/json');
-        echo json_encode(['success' => false, 'message' => 'Token CSRF invalido ou ausente.']);
+        // Acontece com a página aberta há muito tempo (a sessão expirou e o token mudou)
+        echo json_encode(['success' => false, 'message' => 'Esta página ficou aberta por muito tempo. Recarregue a página e tente de novo.']);
         exit;
     }
 }

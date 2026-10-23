@@ -88,6 +88,16 @@ $reqTitle = $reqData['title'] ?? "Requisição #$id";
 $createdBy = $reqData['created_by'] ?? 0;
 $link = "request_detail?id=$id&table=$table";
 
+// A decisão já foi gravada: falha ao buscar destinatários vai para o log e não vira erro na tela
+$safeRecipients = function (callable $fetch) use ($id, $table): array {
+    try {
+        return $fetch();
+    } catch (Throwable $e) {
+        error_log("aprovRequest.php: destinatários dos avisos de $table/$id: " . $e->getMessage());
+        return [];
+    }
+};
+
 // ---- Notificar o Solicitante ----
 if ($createdBy) {
     RequestManager::notify(
@@ -100,7 +110,7 @@ if ($createdBy) {
 
 // ---- Notificar Gestores do Setor (quando aprovada) ----
 if ($value === 'Y') {
-    $managers = RequestManager::getManagersForSector($pdo, $table);
+    $managers = $safeRecipients(fn() => RequestManager::getManagersForSector($pdo, $table));
     foreach ($managers as $manager) {
         if ($manager['id'] == $user_id) continue; // Não notificar quem aprovou
         if ($manager['id'] == $createdBy) continue; // Já notificado acima
@@ -114,7 +124,7 @@ if ($value === 'Y') {
 }
 
 // ---- Notificar Admins (quando aprovada/recusada por outro admin) ----
-$admins = RequestManager::getAdmins($pdo);
+$admins = $safeRecipients(fn() => RequestManager::getAdmins($pdo));
 foreach ($admins as $admin) {
     if ($admin['id'] == $user_id) continue;
     if ($admin['id'] == $createdBy) continue;

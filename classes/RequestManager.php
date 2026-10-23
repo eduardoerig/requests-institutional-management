@@ -354,8 +354,9 @@ class RequestManager {
         try {
             $stmt = $pdo->prepare("INSERT INTO notifications (user_id, title, message, link) VALUES (?, ?, ?, ?)");
             $stmt->execute([$userId, $title, $message, $link]);
-        } catch (Exception $e) {
-            // Silently fail
+        } catch (Throwable $e) {
+            // Aviso é acessório: não derruba a ação, mas fica no log
+            error_log("RequestManager::notify user=$userId \"$title\": " . $e->getMessage());
         }
     }
 
@@ -376,15 +377,28 @@ class RequestManager {
         try {
             $stmt = $pdo->prepare("INSERT INTO request_history (request_id, request_table, user_id, user_name, action, old_value, new_value) VALUES (?, ?, ?, ?, ?, ?, ?)");
             $stmt->execute([$reqId, $reqTable, $userId, $userName, $action, $oldValue, $newValue]);
-        } catch (Exception $e) {
-            // Silently fail
+        } catch (Throwable $e) {
+            error_log("RequestManager::addHistory $reqTable/$reqId \"$action\": " . $e->getMessage());
+            // Dentro de uma transação o histórico faz parte da operação: sem ele, desfaz tudo
+            if ($pdo->inTransaction()) {
+                throw $e;
+            }
         }
     }
 
     /**
      * Notifica todos os interessados em uma requisição (Solicitante, Gestores do Setor e Admins).
+     * Roda depois da ação já gravada: falha aqui vai para o log e não vira erro na tela.
      */
     public static function notifyStakeholders($pdo, $reqData, $sector, $title, $message, $link, $excludeUserId = null, $notifyAdmins = true) {
+        try {
+            self::sendStakeholderNotifications($pdo, $reqData, $sector, $title, $message, $link, $excludeUserId, $notifyAdmins);
+        } catch (Throwable $e) {
+            error_log("RequestManager::notifyStakeholders $sector/" . ($reqData['id'] ?? '?') . " \"$title\": " . $e->getMessage());
+        }
+    }
+
+    private static function sendStakeholderNotifications($pdo, $reqData, $sector, $title, $message, $link, $excludeUserId, $notifyAdmins) {
         $createdBy = (int)($reqData['created_by'] ?? 0);
         $subdivisionId = $reqData['subdivision_id'] ?? null;
         $notified = $excludeUserId ? [$excludeUserId] : [];
