@@ -243,6 +243,46 @@ if (!function_exists('renderRequestView')) {
     }
 
     /**
+     * Próximo passo para quem trabalha no pedido (setor, coordenação, administração), em uma frase.
+     * Nomeia o botão a usar; devolve HTML já escapado ('' quando não há nada a dizer).
+     */
+    function requestStaffGuide(string $status, ?array $open, bool $openIsForMe, bool $openIsFromMe, bool $canApprove, bool $canWork, bool $canReopen, bool $canForward, string $ownerLabel, string $sectorName): string
+    {
+        $b = fn(string $label) => '<strong>' . e($label) . '</strong>';
+        if ($open && $openIsForMe && $open['status'] === 'pending') {
+            return $open['mode'] === 'transfer'
+                ? e($open['from_label']) . ' quer passar este pedido para vocês. Toque em ' . $b('Aceitar e assumir') . ' ou recuse dizendo o motivo.'
+                : e($open['from_label']) . ' pediu a ajuda de vocês. Toque em ' . $b('Aceitar ajudar') . ' ou recuse dizendo o motivo.';
+        }
+        if ($open && $openIsForMe && $open['mode'] === 'help' && $open['status'] === 'accepted') {
+            return 'Vocês estão ajudando ' . e($open['from_label']) . '. Quando terminar a sua parte, toque em ' . $b('Devolver com retorno') . '.';
+        }
+        if ($open && $openIsFromMe) {
+            if ($open['mode'] === 'transfer') {
+                return 'Esperando ' . e($open['to_label']) . ' aceitar a transferência. Nada a fazer agora; você recebe um aviso.';
+            }
+            return ($open['status'] === 'pending' ? 'Vocês pediram ajuda a ' . e($open['to_label']) . '.' : e($open['to_label']) . ' está ajudando.')
+                . ' Sigam com o atendimento; dá para concluir depois que devolverem.';
+        }
+        if ($canApprove) {
+            return 'Leia o pedido e decida. ' . $b('Aprovar') . ' envia para ' . e($sectorName) . '; ' . $b('Recusar') . ' pede um motivo para quem pediu.';
+        }
+        if ($canWork && $status === 'Y') {
+            return 'Toque em ' . $b('Começar atendimento') . ' quando iniciar.' . ($canForward ? ' Se for de outro setor, use ' . $b('Encaminhar') . '.' : '');
+        }
+        if ($canWork && $status === 'W') {
+            return 'Quando terminar, toque em ' . $b('Concluir') . '. Quem pediu é avisado na hora.';
+        }
+        return match ($status) {
+            'P' => 'Esperando a coordenação aprovar. Depois disso o pedido entra na Caixa de ' . e($ownerLabel) . '.',
+            'Y' => 'Aprovado. Esperando ' . e($ownerLabel) . ' começar o atendimento.',
+            'W' => e($ownerLabel) . ' está atendendo.',
+            'C' => $canReopen ? 'Pedido concluído. Se precisar refazer, use ' . $b('Reabrir pedido') . ' em ••• (mais opções).' : '',
+            default => '',
+        };
+    }
+
+    /**
      * "Quem está envolvido": quem pediu, a coordenação (quem aprovou ou recusou), o setor
      * responsável agora e os setores chamados para ajudar ou que já tiveram o pedido.
      * Cada item: ['name' => 'TI · Carlos', 'role' => 'Responsável agora', 'tone' => 'owner']
@@ -455,7 +495,9 @@ if (!function_exists('renderRequestView')) {
         $now = [
             'P' => 'Seu pedido aguarda a aprovação da coordenação.',
             'Y' => "Seu pedido foi aprovado. O setor de $ownerLabel vai começar o atendimento.",
-            'F' => "Seu pedido foi aprovado. O setor de $ownerLabel vai começar o atendimento.",
+            'F' => $open && $open['mode'] === 'transfer'
+                ? "Seu pedido está passando de {$open['from_label']} para {$open['to_label']}. Você recebe um aviso quando for aceito."
+                : "Seu pedido foi aprovado. O setor de $ownerLabel vai começar o atendimento.",
             'W' => "O setor de $ownerLabel está atendendo.",
             'C' => "Seu pedido foi concluído pelo setor de $ownerLabel.",
             'N' => 'Pedido recusado.',
@@ -497,6 +539,7 @@ if (!function_exists('renderRequestView')) {
         $actionsHtml = implode('', $sideButtons) . $mainButton;
         $canCancelForward = $openIsFromMe && $open['status'] === 'pending' && !$openIsForMe;
         $hasMenu = $canReopen || $canCancelForward || $canCancelRequest;
+        $guide = $isStaff ? requestStaffGuide($status, $open, (bool)$openIsForMe, (bool)$openIsFromMe, $canApprove, $canWork, $canReopen, $canForward, $ownerLabel, $sectorName) : '';
 
         // Detalhes
         $props = [];
@@ -567,6 +610,9 @@ if (!function_exists('renderRequestView')) {
                 <?php if ($isUrgent): ?><span class="badge-urgent">Urgente</span><?php endif; ?>
                 <?= $deadlineFlag ?>
             </div>
+            <?php if ($guide !== ''): ?>
+                <p class="rv-guide"><i class="fa-solid fa-circle-arrow-right" aria-hidden="true"></i> <span><?= $guide ?></span></p>
+            <?php endif; ?>
         </div>
         <?php if ($actionsHtml !== ''): ?>
             <div class="rv-actions rv-actions--head"><?= $actionsHtml ?></div>

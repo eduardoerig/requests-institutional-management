@@ -26,6 +26,7 @@ if (!$canManage) {
 require_once __DIR__ . '/../classes/RequestManager.php';
 require_once __DIR__ . '/../classes/RequestForwardService.php';
 require_once __DIR__ . '/../components/request_card.php';
+require_once __DIR__ . '/../components/welcome_card.php';
 
 // Pegar setores permitidos para este usuário
 $allowedSectors = [];
@@ -121,6 +122,7 @@ foreach (array_keys($map) as $s) {
 $visibleKeys = [];
 $lateList = [];
 $urgentList = [];
+$urgentPending = [];  // urgentes esperando aprovação (só para quem aprova)
 foreach ($everything as $r) {
     $st = $normStatus($r);
     $sector = (string)($r['sector'] ?? '');
@@ -135,6 +137,8 @@ foreach ($everything as $r) {
             $lateList[] = $r;
         } elseif ($isUrgent($r) && $st !== 'P') {
             $urgentList[] = $r;
+        } elseif ($isUrgent($r) && !$isGestor) {
+            $urgentPending[] = $r;
         }
     }
 }
@@ -178,9 +182,16 @@ $pairs = array_slice($pairs, 0, 5, true);
 $forwardAges = array_map(fn($f) => $daysSince($f['created_at']), $openForwards);
 $forwardAvg = $forwardAges ? array_sum($forwardAges) / count($forwardAges) : null;
 
-// "Precisa de atenção": atrasados (mais atrasado primeiro), urgentes, parados com outro setor
+// "Precisa de atenção": urgentes esperando aprovação, atrasados (mais atrasado primeiro), urgentes, parados com outro setor
 usort($lateList, fn($a, $b) => strcmp((string)$a['date'], (string)$b['date']));
 $attention = [];
+foreach ($urgentPending as $r) {
+    $attention[] = [
+        'href' => $reqLink($r) . '&from=approve', 'title' => 'Nº ' . (int)$r['id'] . ' · ' . ($r['title'] ?? 'Sem título'),
+        'meta' => requestSectorName((string)$r['sector']) . ' · urgente · esperando sua aprovação',
+        'kind' => 'warn',
+    ];
+}
 foreach ($lateList as $r) {
     $d = $daysSince($r['date']);
     $attention[] = [
@@ -253,6 +264,25 @@ $scopeText = $isAdmSub ? 'Pedidos da sua subdivisão' : ($isGestor ? 'Pedidos do
         <button type="button" onclick="exportToExcel()" class="btn"><i class="fa-solid fa-download" aria-hidden="true"></i> Exportar planilha</button>
     </header>
 
+    <?= renderWelcomeCard($role, (int)$_SESSION['id']) ?>
+
+    <section class="dash-card dash-attention<?= $attention ? '' : ' is-calm' ?>" aria-labelledby="atencaoTitulo">
+        <div class="dash-card__head"><h2 id="atencaoTitulo"><?= $attention ? 'Comece por aqui' : 'Tudo em dia' ?></h2></div>
+        <?php if ($attention): ?>
+            <ul class="attn-list">
+                <?php foreach ($attention as $item): ?>
+                    <li><a class="attn-item" href="<?= e($item['href']) ?>">
+                        <span class="attn-item__title"><?= e($item['title']) ?></span>
+                        <span class="attn-item__meta<?= $item['kind'] ? ' attn-item__meta--' . e($item['kind']) : '' ?>"><?= e($item['meta']) ?></span>
+                    </a></li>
+                <?php endforeach; ?>
+            </ul>
+            <?php if ($attentionMore > 0): ?><p class="dash-card__foot">E mais <?= (int)$attentionMore ?>. Veja a lista abaixo.</p><?php endif; ?>
+        <?php else: ?>
+            <p class="dash-card__empty"><i class="fa-solid fa-circle-check" aria-hidden="true"></i> Nada atrasado, urgente ou parado. Quando algo precisar de você, aparece aqui.</p>
+        <?php endif; ?>
+    </section>
+
     <section class="dash-stages" aria-label="Pedidos por etapa">
         <?php foreach ($stages as [$code, $label, $value, $note, $kind]):
             $tag = $code ? 'a' : 'div';
@@ -266,6 +296,8 @@ $scopeText = $isAdmSub ? 'Pedidos da sua subdivisão' : ($isGestor ? 'Pedidos do
         <?php endforeach; ?>
     </section>
 
+    <details class="dash-more">
+    <summary class="dash-more__toggle"><i class="fa-solid fa-chart-simple" aria-hidden="true"></i> Ver números da operação <i class="fa-solid fa-chevron-down dash-more__chev" aria-hidden="true"></i></summary>
     <div class="dash-cols">
         <section class="dash-card dash-load" aria-labelledby="cargaTitulo">
             <div class="dash-card__head">
@@ -293,23 +325,6 @@ $scopeText = $isAdmSub ? 'Pedidos da sua subdivisão' : ($isGestor ? 'Pedidos do
         </section>
 
         <div class="dash-side">
-            <section class="dash-card dash-attention<?= $attention ? '' : ' is-calm' ?>" aria-labelledby="atencaoTitulo">
-                <div class="dash-card__head"><h2 id="atencaoTitulo">Precisa de atenção</h2></div>
-                <?php if ($attention): ?>
-                    <ul class="attn-list">
-                        <?php foreach ($attention as $item): ?>
-                            <li><a class="attn-item" href="<?= e($item['href']) ?>">
-                                <span class="attn-item__title"><?= e($item['title']) ?></span>
-                                <span class="attn-item__meta<?= $item['kind'] ? ' attn-item__meta--' . e($item['kind']) : '' ?>"><?= e($item['meta']) ?></span>
-                            </a></li>
-                        <?php endforeach; ?>
-                    </ul>
-                    <?php if ($attentionMore > 0): ?><p class="dash-card__foot">E mais <?= (int)$attentionMore ?>. Veja a lista abaixo.</p><?php endif; ?>
-                <?php else: ?>
-                    <p class="dash-card__empty"><i class="fa-solid fa-circle-check" aria-hidden="true"></i> Nada atrasado, urgente ou parado.</p>
-                <?php endif; ?>
-            </section>
-
             <section class="dash-card" aria-labelledby="ajudaTitulo">
                 <div class="dash-card__head">
                     <h2 id="ajudaTitulo">Quem pede ajuda a quem</h2>
@@ -334,6 +349,7 @@ $scopeText = $isAdmSub ? 'Pedidos da sua subdivisão' : ($isGestor ? 'Pedidos do
             </section>
         </div>
     </div>
+    </details>
 
     <section class="dash-table" aria-labelledby="tabelaTitulo">
         <div class="toolbar">

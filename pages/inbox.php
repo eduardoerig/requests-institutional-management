@@ -8,6 +8,7 @@
  */
 require_once __DIR__ . '/../classes/RequestInbox.php';
 require_once __DIR__ . '/../components/request_card.php';
+require_once __DIR__ . '/../components/welcome_card.php';
 
 $role = $_SESSION['role'] ?? 'solicitante';
 $userId = (int)$_SESSION['id'];
@@ -135,8 +136,8 @@ if ($tab === 'fazer' && !$searching) {
 
 $emptyText = [
     'fazer' => 'Nada para fazer agora. Quando a coordenação aprovar um pedido do seu setor, ele aparece aqui.',
-    'esperando' => 'Nenhum pedido esperando outro setor.',
-    'historico' => 'Nenhum pedido concluído ou transferido ainda.',
+    'esperando' => 'Nenhum pedido esperando outro setor. Quando vocês encaminharem um pedido, ele fica aqui até a resposta.',
+    'historico' => 'Nada por aqui ainda. Os pedidos que vocês concluírem ou transferirem ficam guardados nesta aba.',
 ][$tab];
 
 $stats = [
@@ -152,6 +153,7 @@ $stats = [
         <h1><?= $isGlobalAdmin ? 'Caixa dos setores' : 'Caixa do setor' ?></h1>
     </div>
 </div>
+<?php if (!$isGlobalAdmin): ?><?= renderWelcomeCard($role, (int)$_SESSION['id']) ?><?php endif; ?>
 
 <div class="inbox-stats" data-sync="inbox-stats" aria-label="Resumo da Caixa">
     <?php foreach ($stats as [$label, $value, $kind, $target]): ?>

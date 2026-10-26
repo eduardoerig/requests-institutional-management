@@ -851,6 +851,21 @@ function flashToast(message) {
     try { sessionStorage.setItem('sisreq-flash', message); } catch (e) { /* sem armazenamento: só não mostra */ }
 }
 
+// Boas-vindas do primeiro acesso (components/welcome_card.php): aparece até a pessoa tocar em "Entendi"
+document.addEventListener('DOMContentLoaded', () => {
+    const card = document.querySelector('[data-welcome]');
+    if (!card) return;
+    const key = 'sisreq-welcome-' + card.dataset.welcome;
+    let seen = false;
+    try { seen = localStorage.getItem(key) === '1'; } catch (e) { /* sem armazenamento: mostra sempre */ }
+    if (seen) return;
+    card.hidden = false;
+    card.querySelector('[data-welcome-close]')?.addEventListener('click', () => {
+        try { localStorage.setItem(key, '1'); } catch (e) { /* só não lembra */ }
+        card.remove();
+    });
+});
+
 document.addEventListener('DOMContentLoaded', () => {
     let message = null;
     try {

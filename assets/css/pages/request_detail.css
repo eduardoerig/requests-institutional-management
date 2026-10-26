@@ -32,6 +32,22 @@
 .rv-tags .status-pill, .rv-tags .badge-urgent { min-height: 24px; }
 .rv-tags .flag { font-size: var(--t-xs); }
 
+/* Próximo passo (setor, coordenação, admin): uma frase dizendo o que fazer agora */
+.rv-guide {
+    display: flex;
+    gap: 8px;
+    align-items: flex-start;
+    margin: 4px 0 0;
+    padding: 10px 12px;
+    border-radius: var(--r-2);
+    background: var(--laranja-claro);
+    font-size: var(--t-sm);
+    line-height: 1.45;
+    color: var(--texto);
+}
+.rv-guide i { margin-top: 2px; color: var(--laranja-escuro); }
+.rv-guide strong { font-weight: 700; }
+
 /* Etapas: no celular só as barras (o texto continua para leitores de tela) */
 .steps4.steps4--refused { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 .steps4--refused li.is-now::before { background: var(--perigo); }

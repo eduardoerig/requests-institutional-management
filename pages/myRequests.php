@@ -6,6 +6,7 @@
  */
 require_once __DIR__ . '/../classes/RequestInbox.php';
 require_once __DIR__ . '/../components/my_request_card.php';
+require_once __DIR__ . '/../components/welcome_card.php';
 
 $userId = (int)$_SESSION['id'];
 $q = mb_substr(trim((string)($_GET['q'] ?? '')), 0, 100);
@@ -59,7 +60,9 @@ if (!$searching && $tab === 'andamento') {
 }
 
 $tabLink = fn(string $t) => 'myRequests?tab=' . $t;
-$emptyText = $tab === 'andamento' ? 'Nenhum pedido em andamento.' : 'Nenhum pedido concluído ainda.';
+$emptyText = $tab === 'andamento'
+    ? 'Nenhum pedido em andamento. Precisa de algo? Toque em Nova requisição.'
+    : 'Nenhum pedido concluído ainda. Quando o setor terminar um pedido seu, ele vem para cá.';
 $firstName = explode(' ', trim((string)($_SESSION['name'] ?? '')))[0];
 ?>
 <div class="mr">
@@ -70,6 +73,7 @@ $firstName = explode(' ', trim((string)($_SESSION['name'] ?? '')))[0];
         </div>
         <a href="new_request" class="btn btn--primary mr-head__new"><i class="fa-solid fa-plus" aria-hidden="true"></i> Nova requisição</a>
     </header>
+    <?= renderWelcomeCard((string)($_SESSION['role'] ?? ''), $userId) ?>
 
 <?php if ($total === 0 && !$searching): ?>
     <div class="empty-big card">

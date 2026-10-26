@@ -94,7 +94,7 @@ $subtitle = $total === 0
         <div class="empty-state approve-done" data-approve-done hidden><i class="fa-regular fa-circle-check" aria-hidden="true"></i><p><strong>Tudo em dia.</strong> Nenhum pedido esperando sua decisão.</p></div>
         <?= renderBulkBar(['approve' => ['Aprovar', 'btn--primary', 'fa-check'], 'refuse' => ['Recusar', '', 'fa-xmark']]) ?>
     <?php else: ?>
-        <div class="empty-state"><i class="fa-regular fa-circle-check" aria-hidden="true"></i><p><?= $total === 0 ? 'Tudo em dia: nenhum pedido aguardando aprovação.' : 'Nada encontrado com esses filtros.' ?></p></div>
+        <div class="empty-state"><i class="fa-regular fa-circle-check" aria-hidden="true"></i><p><?= $total === 0 ? 'Tudo em dia: nenhum pedido aguardando aprovação. Quando alguém pedir algo, o pedido aparece aqui e você recebe um aviso.' : 'Nada encontrado com esses filtros.' ?></p></div>
     <?php endif; ?>
 </section>
 

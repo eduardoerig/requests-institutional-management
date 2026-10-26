@@ -1600,7 +1600,26 @@ a.bar-list__row:hover { background: var(--fundo); }
     body.has-bulk .queue { margin-bottom: 130px; }
 }
 
-/* ---------- 25. Navegação suave ---------- */
+/* ---------- 25. Boas-vindas do primeiro acesso ---------- */
+.welcome { display: grid; gap: 14px; padding: 16px; border: 1px solid var(--laranja-borda); border-radius: var(--r-3); background: var(--superficie); }
+.welcome[hidden] { display: none; }
+.welcome__head h2 { margin: 0; font-size: var(--t-lg); font-weight: 700; }
+.welcome__head p { margin: 4px 0 0; font-size: var(--t-sm); color: var(--texto-2); }
+.welcome__steps { list-style: none; margin: 0; padding: 0; display: grid; gap: 10px; }
+.welcome__steps li { display: flex; gap: 10px; align-items: flex-start; font-size: var(--t-sm); line-height: 1.45; }
+.welcome__num {
+    flex: none; display: grid; place-items: center;
+    width: 24px; height: 24px; border-radius: var(--r-pill);
+    background: var(--laranja-claro); color: var(--laranja-escuro);
+    font-size: var(--t-xs); font-weight: 700;
+}
+.welcome__foot { display: flex; justify-content: flex-end; gap: 8px; }
+@media (min-width: 900px) {
+    .welcome { padding: 20px; }
+    .welcome__steps { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 16px; }
+}
+
+/* ---------- 26. Navegação suave ---------- */
 /* Troca de página com um esmaecer curto (navegadores com View Transitions); o menu fica parado */
 @view-transition { navigation: auto; }
 .sidebar { view-transition-name: sidebar; }
