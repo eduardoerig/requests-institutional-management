@@ -168,3 +168,26 @@ function requireCsrfTokenFromRequest(): void
         exit;
     }
 }
+
+/**
+ * Senha temporária gerada no servidor (mesmo alfabeto de database/reset_password.php:
+ * sem caracteres ambíguos 0/O, 1/l/I). Nunca registrar o valor em log.
+ */
+function generateTempPassword(int $length = 12): string
+{
+    $alphabet = 'ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnpqrstuvwxyz23456789';
+    $max = strlen($alphabet) - 1;
+    $password = '';
+    for ($i = 0; $i < $length; $i++) {
+        $password .= $alphabet[random_int(0, $max)];
+    }
+    return $password;
+}
+
+/**
+ * Formato aceito para o usuário de entrada (login): letras, números, ponto, hífen e sublinhado.
+ */
+function isValidLoginFormat(string $login): bool
+{
+    return (bool)preg_match('/^[A-Za-z0-9._-]{2,100}$/', $login);
+}

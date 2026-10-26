@@ -63,6 +63,39 @@ if ($removesAdmin) {
 }
 
 try {
+    if ($action === 'reset_password') {
+        // Senha temporária gerada no servidor; aparece uma única vez para o administrador
+        if ($userId === (int)$_SESSION['id']) {
+            jsonResponse(['success' => false, 'message' => 'Para trocar a sua própria senha, use "Minha conta".']);
+        }
+        $stmtLogin = $pdo->prepare('SELECT login FROM ctd_users WHERE id = ?');
+        $stmtLogin->execute([$userId]);
+        $targetLogin = $stmtLogin->fetchColumn();
+        if ($targetLogin === false) {
+            jsonResponse(['success' => false, 'message' => 'Usuário não encontrado.']);
+        }
+
+        $tempPassword = generateTempPassword();
+        $pdo->prepare('UPDATE ctd_users SET password = ?, force_reset = 1 WHERE id = ?')
+            ->execute([password_hash($tempPassword, PASSWORD_DEFAULT), $userId]);
+        try {
+            // Libera tentativas bloqueadas desse login (tabela opcional)
+            $pdo->prepare('DELETE FROM login_attempts WHERE login = ?')->execute([(string)$targetLogin]);
+        } catch (PDOException $e) {
+            // tabela ausente: nada a liberar
+        }
+
+        jsonResponse([
+            'success' => true,
+            'message' => 'Senha temporária gerada. A pessoa cria a própria senha no próximo acesso.',
+            'temp_password' => $tempPassword,
+        ]);
+    }
+
+    if ($action !== 'update' && $action !== 'delete') {
+        jsonResponse(['success' => false, 'message' => 'Ação inválida.']);
+    }
+
     if ($action === 'delete') {
         // 1. Verificar se existem chamados vinculados a este usuário em QUALQUER uma das tabelas de setor
         $stmtTables = $pdo->query("SHOW TABLES LIKE 'ctd_%_frm'");
@@ -73,7 +106,7 @@ try {
             if ($stmtCheck->fetchColumn() > 0) {
                 echo json_encode([
                     'success' => false,
-                    'message' => 'Este usuário possui chamados registrados (Tabela: '.$tableName.'). Por segurança, inative a conta em vez de excluí-la para preservar o histórico.'
+                    'message' => 'Esta pessoa já fez pedidos no sistema. Para preservar o histórico, desative a conta em vez de excluí-la.'
                 ]);
                 exit;
             }
@@ -100,11 +133,36 @@ try {
     $fields = [];
     $params = [];
     $newRole = null;
+    $oldRole = null;
     $subdivisionSync = null;
 
+    if (!$is_self && isset($_POST['name'])) {
+        $nameVal = trim((string)$_POST['name']);
+        $nameLen = mb_strlen($nameVal);
+        if ($nameLen < 1 || $nameLen > 150) {
+            jsonResponse(['success' => false, 'message' => 'O nome precisa ter entre 1 e 150 caracteres.', 'field' => 'name']);
+        }
+        $fields[] = "name = ?";
+        $params[] = $nameVal;
+    }
     if (isset($_POST['login'])) {
+        $loginVal = trim((string)$_POST['login']);
+        $stmtCurLogin = $pdo->prepare("SELECT login FROM ctd_users WHERE id = ?");
+        $stmtCurLogin->execute([$userId]);
+        $currentLogin = (string)$stmtCurLogin->fetchColumn();
+        // Só valida quando muda (contas antigas podem ter logins fora do formato atual)
+        if ($loginVal !== $currentLogin) {
+            if (!isValidLoginFormat($loginVal)) {
+                jsonResponse(['success' => false, 'message' => 'Usuário inválido: use letras, números, ponto, hífen ou sublinhado (sem espaços nem acentos).', 'field' => 'login']);
+            }
+            $chkLogin = $pdo->prepare("SELECT id FROM ctd_users WHERE login = ? AND id != ?");
+            $chkLogin->execute([$loginVal, $userId]);
+            if ($chkLogin->fetch()) {
+                jsonResponse(['success' => false, 'message' => 'Este usuário já existe. Escolha outro.', 'field' => 'login']);
+            }
+        }
         $fields[] = "login = ?";
-        $params[] = trim($_POST['login']);
+        $params[] = $loginVal;
     }
     if (isset($_POST['phone'])) {
         $phoneVal = preg_replace('/\D/', '', trim($_POST['phone']));
@@ -140,6 +198,11 @@ try {
                 exit;
             }
         }
+
+        $stmtOldRole = $pdo->prepare("SELECT role FROM ctd_users WHERE id = ?");
+        $stmtOldRole->execute([$userId]);
+        $oldRole = $stmtOldRole->fetchColumn();
+        $oldRole = $oldRole === false ? null : (string)$oldRole;
 
         $fields[] = "role = ?";
         $params[] = $newRole;
@@ -237,6 +300,14 @@ try {
             }
         }
         if ($newRole !== null) {
+            // Trocou de setor pelo perfil: deixa de responder pelo setor do perfil antigo
+            $oldSector = $oldRole !== null ? roleDefaultSector($oldRole) : null;
+            if ($oldSector !== null && $oldSector !== roleDefaultSector($newRole)) {
+                $oldAreaId = getAreaIdBySector($pdo, $oldSector);
+                if ($oldAreaId) {
+                    $pdo->prepare("DELETE FROM cfg_user_area WHERE id_user = ? AND id_area = ?")->execute([$userId, $oldAreaId]);
+                }
+            }
             ensureUserAreaForRole($pdo, (int)$userId, $newRole);
         }
         $pdo->commit();

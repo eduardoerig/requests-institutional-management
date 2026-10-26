@@ -75,6 +75,13 @@ if ((int)($user['status'] ?? 1) !== 1) {
 
 clearLoginFailures($pdo, $login, $ip);
 
+// Último acesso (tela Usuários e setores). A coluna vem da migração 003; sem ela, o login segue normalmente.
+try {
+    $pdo->prepare('UPDATE ctd_users SET last_login_at = NOW() WHERE id = ?')->execute([(int)$user['id']]);
+} catch (Throwable $e) {
+    // coluna ainda não criada: ignora
+}
+
 // Nova identidade de sessão após autenticar (evita fixação de sessão)
 session_regenerate_id(true);
 

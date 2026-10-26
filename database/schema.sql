@@ -127,6 +127,7 @@ CREATE TABLE `ctd_users` (
   `status` tinyint(1) NOT NULL DEFAULT '1',
   `force_reset` tinyint(1) NOT NULL DEFAULT '0',
   `subdivision_id` int DEFAULT NULL,
+  `last_login_at` datetime DEFAULT NULL COMMENT 'Último acesso (gravado no login)',
   PRIMARY KEY (`id`) USING BTREE,
   UNIQUE KEY `uq_login` (`login`),
   UNIQUE KEY `uq_phone` (`phone`),
