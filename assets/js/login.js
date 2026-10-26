@@ -1,4 +1,4 @@
-// Tela de login: mostrar/ocultar senha e animação do caminho de um pedido (GSAP)
+// Tela de login: mostrar/ocultar senha e o cartão de exemplo que mostra um pedido andando pelas etapas
 (function () {
     const toggle = document.querySelector('#toggle_password');
     const password = document.querySelector('#password');
@@ -12,121 +12,72 @@
         });
     }
 
-    const board = document.querySelector('.login-board');
-    if (!board) return;
+    const card = document.querySelector('.auth-demo__card');
+    if (!card) return;
+    // O cartão só aparece no computador; sem movimento quando a pessoa pede menos animação
+    if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) return;
 
-    const card = board.querySelector('.flow-card');
-    const steps = [...board.querySelectorAll('.flow__step')];
-    const fill = board.querySelector('.flow__fill');
-    const packet = board.querySelector('.flow__packet');
-    const badge = card.querySelector('.flow-card__done');
+    const $ = (name) => card.querySelector(`[data-demo="${name}"]`);
     const el = {
-        num: card.querySelector('.flow-card__num'),
-        status: card.querySelector('.flow-card__status'),
-        statusText: card.querySelector('.flow-card__status-text'),
-        title: card.querySelector('.flow-card__title'),
-        sector: card.querySelector('.flow-card__sector'),
-        sectorIcon: card.querySelector('.flow-card__sector > i'),
-        sectorName: card.querySelector('.flow-card__sector-name'),
-        log: card.querySelector('.flow-card__log'),
+        num: $('num'), sector: $('sector'), pill: $('pill'), title: $('title'),
+        steps: [...$('steps').children], avatar: $('avatar'), msg: $('msg'),
     };
 
-    // Pedidos de exemplo, um por setor, que se revezam a cada volta
+    // Pedidos de exemplo, um por setor, cada um passando pelas 4 etapas
     const examples = [
-        { sector: 'TI', icon: 'fa-desktop', title: 'Projetor da sala 12 sem imagem', who: 'pela professora Ana' },
-        { sector: 'Manutenção', icon: 'fa-wrench', title: 'Torneira pingando no banheiro do 2º andar', who: 'pela coordenação do Fundamental' },
-        { sector: 'Compras', icon: 'fa-cart-shopping', title: 'Papel A4 para a secretaria', who: 'pela secretaria' },
-        { sector: 'Impressão', icon: 'fa-print', title: 'Provas do 9º ano, 120 cópias', who: 'pelo professor Carlos' },
-        { sector: 'Marketing', icon: 'fa-bullhorn', title: 'Banner da Feira de Ciências', who: 'pela direção' },
+        { sector: 'TI', avatar: 'TI', title: 'Projetor da sala 12 sem imagem', work: 'Trocamos o cabo HDMI. Passo aí às 14h para testar com você.' },
+        { sector: 'Manutenção', avatar: 'MA', title: 'Torneira pingando no banheiro do 2º andar', work: 'A peça chegou. Fazemos a troca amanhã cedo.' },
+        { sector: 'Compras', avatar: 'CO', title: '5 resmas de papel A4 para a secretaria', work: 'Pedido feito ao fornecedor. Chega até sexta.' },
+        { sector: 'Reprografia', avatar: 'RE', title: '120 cópias da avaliação do 9º ano', work: 'Impressão em andamento, fica pronta às 10h.' },
     ];
     const states = [
-        { cls: 'is-sent', label: 'Aguardando aprovação', log: (ex) => `Pedido enviado ${ex.who}.` },
-        { cls: 'is-approved', label: 'Aprovado', log: () => 'Aprovado pela coordenação.' },
-        { cls: 'is-working', label: 'Em andamento', log: (ex) => `Setor de ${ex.sector} começou o atendimento.` },
-        { cls: 'is-done', label: 'Concluído', log: () => 'Pronto! Quem pediu já foi avisado.' },
+        { pill: 'P', label: 'Aguardando aprovação', msg: () => 'Pedido enviado. A coordenação decide e você recebe um aviso.' },
+        { pill: 'Y', label: 'Aprovado', msg: (ex) => `Aprovado. Agora está na fila de ${ex.sector}.` },
+        { pill: 'W', label: 'Em atendimento', msg: (ex) => ex.work },
+        { pill: 'C', label: 'Concluído', msg: () => 'Pronto! Quem pediu já foi avisado.' },
     ];
-    const positions = ['12.5%', '37.5%', '62.5%', '87.5%'];
 
     let current = 0;
+    let step = 2;
     let number = 427;
 
-    function showExample(ex) {
-        el.num.textContent = `#${String(number).padStart(4, '0')}`;
+    function render() {
+        const ex = examples[current];
+        const st = states[step];
+        el.num.textContent = String(number);
+        el.sector.textContent = ex.sector;
         el.title.textContent = ex.title;
-        el.sectorIcon.className = `fa-solid ${ex.icon}`;
-        el.sectorName.textContent = ex.sector;
-    }
-
-    function setState(index) {
-        const ex = examples[current];
-        const state = states[index];
-        states.forEach((s) => card.classList.remove(s.cls));
-        card.classList.add(state.cls);
-        el.statusText.textContent = state.label;
-        el.log.textContent = state.log(ex);
-        steps.forEach((step, i) => step.classList.toggle('is-on', i <= index));
-    }
-
-    const reduceMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-    if (!window.gsap || reduceMotion) {
-        // Sem animação: mostra o pedido já concluído, parado
-        showExample(examples[0]);
-        setState(3);
-        fill.style.transform = 'scaleX(1)';
-        return;
-    }
-
-    const gsap = window.gsap;
-
-    function pulseStatus(tl, at) {
-        tl.fromTo(el.status, { scale: 0.85 }, { scale: 1, duration: 0.45, ease: 'back.out(3)' }, at);
-    }
-
-    function advance(tl, index, at) {
-        tl.to(packet, { left: positions[index], duration: 0.9, ease: 'power2.inOut' }, at)
-          .to(fill, { scaleX: index / 3, duration: 0.9, ease: 'power2.inOut' }, at)
-          .call(setState, [index], `${at}+=0.85`)
-          .fromTo(steps[index].querySelector('.flow__dot'), { scale: 0.7 }, { scale: 1, duration: 0.5, ease: 'back.out(3)' }, `${at}+=0.85`);
-        pulseStatus(tl, `${at}+=0.85`);
-    }
-
-    function runCycle() {
-        const ex = examples[current];
-        showExample(ex);
-        setState(0);
-        gsap.set(fill, { scaleX: 0 });
-        gsap.set(packet, { left: positions[0], opacity: 0 });
-        gsap.set(badge, { opacity: 0, scale: 0.4 });
-
-        const tl = gsap.timeline({
-            delay: 0.4,
-            onComplete: () => {
-                current = (current + 1) % examples.length;
-                number += 1;
-                runCycle();
-            },
+        el.avatar.textContent = ex.avatar;
+        el.msg.textContent = st.msg(ex);
+        el.pill.className = `status-pill status-pill--${st.pill}`;
+        el.pill.textContent = st.label;
+        el.steps.forEach((li, i) => {
+            li.classList.toggle('is-done', i < step || (step === 3 && i === 3));
+            li.classList.toggle('is-now', i === step && step !== 3);
         });
-
-        tl.fromTo(card, { y: 22, opacity: 0, scale: 0.97 }, { y: 0, opacity: 1, scale: 1, duration: 0.7, ease: 'power3.out' }, 0)
-          .to(packet, { opacity: 1, duration: 0.3 }, 0.5);
-        pulseStatus(tl, 0.5);
-
-        advance(tl, 1, 1.8);
-        advance(tl, 2, 3.8);
-        advance(tl, 3, 5.8);
-
-        tl.to(badge, { opacity: 1, scale: 1, duration: 0.5, ease: 'back.out(2.5)' }, 6.7)
-          .to(packet, { opacity: 0, duration: 0.4 }, 7.2)
-          .to(card, { y: -14, opacity: 0, duration: 0.5, ease: 'power2.in' }, 9)
-          .call(() => steps.forEach((step) => step.classList.remove('is-on')), null, 9.4)
-          .to(fill, { scaleX: 0, duration: 0.5, ease: 'power2.inOut' }, 9.2);
     }
 
-    runCycle();
+    function tick() {
+        if (step < 3) {
+            step += 1;
+            render();
+            return;
+        }
+        // Troca de pedido: some, muda o conteúdo, volta
+        card.classList.add('is-leaving');
+        setTimeout(() => {
+            current = (current + 1) % examples.length;
+            number += 1;
+            step = 0;
+            render();
+            card.classList.remove('is-leaving');
+        }, 350);
+    }
 
-    // Aba em segundo plano: pausa tudo para não gastar processamento
+    let timer = setInterval(tick, 2600);
+    // Aba em segundo plano: para o ciclo para não gastar processamento
     document.addEventListener('visibilitychange', () => {
-        if (document.hidden) gsap.globalTimeline.pause();
-        else gsap.globalTimeline.resume();
+        clearInterval(timer);
+        if (!document.hidden) timer = setInterval(tick, 2600);
     });
 })();

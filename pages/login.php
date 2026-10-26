@@ -1,68 +1,64 @@
-<main class="login-screen">
-    <section class="login-form-col">
-        <div class="login-card">
-            <img src="<?= e(orgSetting('org_logo')) ?>" alt="<?= e(orgSetting('org_name')) ?>" class="login-card__school">
-            <p class="login-card__app">SisReq, pedidos internos</p>
+<main class="auth">
+    <section class="auth__form-col">
+        <div class="auth__panel">
+            <div class="auth-brand">
+                <span class="auth-brand__mark"><img src="<?= e(orgSetting('org_logo')) ?>" alt=""></span>
+                <span class="auth-brand__text">
+                    <strong>SisReq</strong>
+                    <span><?= e(orgSetting('org_name')) ?></span>
+                </span>
+            </div>
 
-            <h1>Entrar no SisReq</h1>
-            <p class="login-card__lead">Use o usuário e a senha que a administração passou para você.</p>
+            <div class="auth-intro">
+                <h1>Entrar</h1>
+                <p>Peça, acompanhe cada etapa e converse com quem está resolvendo.</p>
+            </div>
 
-            <form id="frm_login" class="form-auth form-login">
-                <div class="field">
-                    <label for="user">Usuário</label>
-                    <input type="text" id="user" name="user" autocomplete="username" autocapitalize="none" spellcheck="false" required>
-                </div>
+            <form id="frm_login" class="auth-form form-auth form-login">
+                <div class="auth-form__fields">
+                    <div class="field">
+                        <label for="user">Usuário</label>
+                        <input type="text" id="user" name="user" autocomplete="username" autocapitalize="none" spellcheck="false" placeholder="seu.usuario" required>
+                    </div>
 
-                <div class="field">
-                    <label for="password">Senha</label>
-                    <div class="pw-field">
-                        <input type="password" id="password" name="password" autocomplete="current-password" required>
-                        <button type="button" class="pw-toggle" id="toggle_password" aria-controls="password" aria-pressed="false">Mostrar</button>
+                    <div class="field">
+                        <label for="password">Senha</label>
+                        <div class="pw-field">
+                            <input type="password" id="password" name="password" autocomplete="current-password" required>
+                            <button type="button" class="pw-toggle" id="toggle_password" aria-controls="password" aria-pressed="false">Mostrar</button>
+                        </div>
                     </div>
                 </div>
 
-                <button type="submit" class="btn btn--primary" id="btn_login">Entrar</button>
+                <div class="auth-form__actions">
+                    <button type="submit" class="btn btn--primary" id="btn_login">Entrar</button>
+                    <p class="auth-form__help">Esqueceu a senha ou ainda não tem acesso? Fale com a administração: ela cria uma senha temporária para você.</p>
+                </div>
             </form>
-
-            <p class="login-card__help">
-                Esqueceu a senha ou ainda não tem acesso? Fale com a administração.
-                Ela cria uma senha temporária para você.
-            </p>
         </div>
     </section>
 
-    <section class="login-board" aria-hidden="true">
-        <div class="login-board__inner">
-            <div class="flow">
-                <div class="flow__rail">
-                    <div class="flow__track"><div class="flow__fill"></div></div>
-                    <div class="flow__packet"></div>
-                    <ol class="flow__steps">
-                        <li class="flow__step"><span class="flow__dot"><i class="fa-solid fa-paper-plane"></i></span><span class="flow__label">Enviado</span></li>
-                        <li class="flow__step"><span class="flow__dot"><i class="fa-solid fa-thumbs-up"></i></span><span class="flow__label">Aprovado</span></li>
-                        <li class="flow__step"><span class="flow__dot"><i class="fa-solid fa-screwdriver-wrench"></i></span><span class="flow__label">No setor</span></li>
-                        <li class="flow__step"><span class="flow__dot"><i class="fa-solid fa-check"></i></span><span class="flow__label">Concluído</span></li>
-                    </ol>
+    <section class="auth__showcase" aria-hidden="true">
+        <div class="auth-demo">
+            <article class="auth-demo__card">
+                <div class="auth-demo__head">
+                    <span class="auth-demo__ref">Pedido nº <span data-demo="num">427</span> · <span data-demo="sector">TI</span></span>
+                    <span class="status-pill status-pill--W" data-demo="pill">Em atendimento</span>
                 </div>
-
-                <article class="flow-card is-sent">
-                    <header class="flow-card__head">
-                        <span class="flow-card__num">#0427</span>
-                        <span class="flow-card__status"><i class="fa-solid fa-circle"></i> <span class="flow-card__status-text">Aguardando aprovação</span></span>
-                    </header>
-                    <p class="flow-card__title">Projetor da sala 12 sem imagem</p>
-                    <div class="flow-card__meta">
-                        <span class="flow-card__sector"><i class="fa-solid fa-desktop"></i> <span class="flow-card__sector-name">TI</span></span>
-                        <span class="flow-card__when"><i class="fa-regular fa-clock"></i> agora</span>
-                    </div>
-                    <p class="flow-card__log">Pedido enviado pela professora Ana.</p>
-                    <span class="flow-card__done"><i class="fa-solid fa-check"></i></span>
-                </article>
-            </div>
-
-            <p class="login-board__caption">Cada pedido recebe um número. Você acompanha cada etapa até a entrega.</p>
+                <p class="auth-demo__title" data-demo="title">Projetor da sala 12 sem imagem</p>
+                <ol class="steps4" data-demo="steps">
+                    <li class="is-done"><span>Enviado</span></li>
+                    <li class="is-done"><span>Aprovado</span></li>
+                    <li class="is-now"><span>No setor</span></li>
+                    <li><span>Concluído</span></li>
+                </ol>
+                <div class="auth-demo__msg">
+                    <span class="auth-demo__avatar" data-demo="avatar">TI</span>
+                    <span data-demo="msg">Trocamos o cabo HDMI. Passo aí às 14h para testar com você.</span>
+                </div>
+            </article>
+            <p class="auth-demo__caption">Cada pedido tem um número. Você vê em que etapa ele está e conversa direto com quem está resolvendo.</p>
         </div>
     </section>
 </main>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.5/gsap.min.js" defer></script>
 <script src="assets/js/login.js?v=<?= (int)$assetVersion ?>" defer></script>
