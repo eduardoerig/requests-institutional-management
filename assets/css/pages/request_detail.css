@@ -1,0 +1,295 @@
+/* =====================================================================
+   Página do pedido — UI 2.0 (carregado só na rota request_detail)
+   Celular primeiro: cabeçalho, abas Conversa / Detalhes / Envolvidos e uma
+   barra fixa embaixo (ações + mensagem) acima da .bottom-nav.
+   A partir de 900px: conversa à esquerda, envolvidos e detalhes à direita.
+   Sobrescreve as regras antigas da view que estão em app.css (seções 21 e 23).
+   ===================================================================== */
+
+/* ---------- Casca: a view deixa de ser uma folha só e vira cartões ---------- */
+.detail-page .request-view.rv2 { background: none; border: 0; border-radius: 0; gap: 12px; }
+.request-view.rv2 > * { padding: 0; }
+.request-view.rv2 > * + * { border-top: 0; }
+
+/* ---------- Cabeçalho ---------- */
+.rv2 .rv-head {
+    position: static;
+    display: grid;
+    gap: 12px;
+    padding: 16px;
+    border-radius: var(--r-3);
+    box-shadow: none;
+    background: var(--superficie);
+}
+.rv2 .rv-head__main { display: grid; gap: 8px; min-width: 0; }
+.rv2 .rv-head__top { display: flex; align-items: center; gap: 8px; flex-wrap: nowrap; min-height: 0; }
+.rv-meta { margin: 0; min-width: 0; font-size: var(--t-xs); color: var(--texto-2); }
+.rv-meta .rv-num, .rv-meta .sector-tag { font-size: inherit; font-weight: 600; color: inherit; }
+.rv2 .rv-head__tools { margin: -10px -10px -10px auto; display: flex; gap: 0; flex-shrink: 0; }
+.rv2 .icon-link { width: var(--h-md); height: var(--h-md); }
+.rv2 .rv-title { font-size: 1.0625rem; font-weight: 700; line-height: 1.25; overflow-wrap: anywhere; }
+.rv-tags { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
+.rv-tags .status-pill, .rv-tags .badge-urgent { min-height: 24px; }
+.rv-tags .flag { font-size: var(--t-xs); }
+
+/* Etapas: no celular só as barras (o texto continua para leitores de tela) */
+.steps4.steps4--refused { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.steps4--refused li.is-now::before { background: var(--perigo); }
+.steps4--refused li.is-now { color: var(--perigo); }
+
+/* Abas do celular */
+.rv-tabs {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 4px;
+    padding: 4px;
+    border-radius: var(--r-2);
+    background: var(--fundo-2);
+}
+.rv-tabs [role="tab"] {
+    min-height: var(--h-md);
+    border: 0;
+    border-radius: 9px;
+    background: transparent;
+    color: var(--texto-2);
+    font-size: var(--t-sm);
+    font-weight: 600;
+    cursor: pointer;
+}
+.rv-tabs [role="tab"][aria-selected="true"] { background: var(--superficie); color: var(--texto); box-shadow: 0 1px 2px rgb(0 0 0 / .08); }
+
+/* Ações: no cabeçalho (computador) e na barra de baixo (celular) — o mesmo conjunto */
+.rv-actions { display: flex; gap: 8px; }
+.rv-actions--head { display: none; }
+
+/* ---------- Corpo ---------- */
+.rv2 .rv-body { display: grid; gap: 12px; }
+.rv2 .rv-side { display: grid; align-content: start; gap: 12px; min-width: 0; }
+.rv2 .rv-section__title { font-size: 0.9375rem; font-weight: 600; }
+
+/* Conversa: no celular os balões ficam direto sobre o fundo cinza */
+.rv2 .rv-talk { display: grid; gap: 12px; padding: 0; border: 0; border-radius: 0; background: none; }
+.rv2 .rv-talk__head { display: flex; align-items: center; justify-content: space-between; gap: 8px; min-height: 0; }
+.rv2 .rv-talk__head [data-history-toggle] { min-height: var(--h-md); margin-left: auto; color: var(--texto-2); }
+
+/* Aviso do momento (o que está acontecendo / encaminhamento em aberto) */
+.rv2 .rv-notice { display: grid; gap: 8px; padding: 12px 16px; border: 1px solid var(--linha); border-radius: var(--r-2); background: var(--superficie); }
+.rv2 .rv-notice.forward-box--bad { border-color: #FECACA; background: var(--perigo-claro); }
+.rv2 .rv-notice .forward-box__msg, .rv2 .rv-notice .rv-now__note { background: var(--fundo); padding: 10px 14px; }
+.rv2 .rv-now__text { font-size: var(--t-sm); gap: 10px; }
+
+/* Linha do tempo em formato de chat */
+.rv2 .rv-feed { display: grid; gap: 12px; }
+.rv2 .feed-day {
+    justify-self: center;
+    margin: 4px 0 0;
+    padding: 0 10px;
+    border-radius: var(--r-pill);
+    background: transparent;
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: .04em;
+    text-transform: uppercase;
+    color: var(--texto-2);
+}
+
+/* Balões: os meus à direita e escuros; dos outros à esquerda, na cor do setor/papel */
+.rv2 .rv-feed .chat-item {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 4px;
+    max-width: 86%;
+    min-width: 0;
+    justify-self: start;
+}
+.rv2 .rv-feed .chat-item.mine { justify-self: end; align-items: flex-end; flex-direction: column; }
+.rv2 .chat-meta { margin: 0; padding: 0 4px; font-size: 12px; line-height: 1.35; color: var(--texto-2); }
+.rv2 .chat-meta .chat-user-name { display: inline; margin: 0; font-size: inherit; font-weight: 600; color: var(--texto); }
+.rv2 .chat-meta .chat-time { display: inline; margin: 0; font-size: inherit; text-align: left; opacity: 1; }
+.rv2 .chat-bubble {
+    --b-bg: var(--superficie);
+    --b-fg: var(--texto);
+    --b-line: var(--linha);
+    padding: 10px 14px;
+    border: 1px solid var(--b-line);
+    border-radius: var(--r-3);
+    border-bottom-left-radius: 4px;
+    background: var(--b-bg);
+    color: var(--b-fg);
+    font-size: 0.9375rem;
+    line-height: 1.45;
+    overflow-wrap: anywhere;
+}
+.rv2 .chat-item[data-tone="coord"] .chat-bubble { --b-bg: var(--aviso-claro); --b-fg: #78350F; --b-line: var(--aviso-claro); }
+.rv2 .chat-item[data-tone="owner"] .chat-bubble { --b-bg: var(--info-claro); --b-fg: #1E3A8A; --b-line: #DBEAFE; }
+.rv2 .chat-item[data-tone="help"] .chat-bubble { --b-bg: var(--roxo-claro); --b-fg: #581C87; --b-line: var(--roxo-claro); }
+.rv2 .chat-item.mine .chat-bubble { --b-bg: var(--grafite); --b-fg: var(--texto-inv); --b-line: var(--grafite); border-bottom-left-radius: var(--r-3); border-bottom-right-radius: 4px; }
+.rv2 .chat-bubble a { color: inherit; text-decoration: underline; }
+.rv2 .chat-open { display: block; margin-bottom: 2px; font-size: 12px; font-weight: 600; opacity: .75; }
+
+/* Eventos automáticos: pílula discreta no centro */
+.rv2 .feed-event { display: grid; justify-items: center; gap: 6px; padding-left: 0; justify-self: center; max-width: 100%; text-align: center; }
+.rv2 .feed-event::before { display: none; }
+.rv2 .feed-event .feed-pill {
+    display: inline-block;
+    margin: 0;
+    padding: 6px 12px;
+    border-radius: var(--r-pill);
+    background: var(--linha);
+    color: var(--texto-2);
+    font-size: var(--t-xs);
+    line-height: 1.4;
+}
+.rv2 .feed-event .feed-pill strong { font-weight: 600; color: var(--texto); }
+.rv2 .feed-event .feed-pill time { margin-left: 4px; font-size: inherit; color: var(--texto-2); }
+.rv2 .feed-event--bad .feed-pill { background: var(--perigo-claro); color: #991B1B; }
+.rv2 .feed-event--bad .feed-pill strong { color: #991B1B; }
+.rv2 .feed-event blockquote {
+    max-width: min(100%, 520px);
+    margin: 0;
+    padding: 10px 14px;
+    border: 1px solid var(--linha);
+    border-radius: var(--r-2);
+    background: var(--superficie);
+    color: var(--texto);
+    font-size: var(--t-sm);
+    text-align: left;
+    overflow-wrap: anywhere;
+}
+.rv2 .feed-empty { justify-self: center; text-align: center; font-size: var(--t-sm); color: var(--texto-2); }
+
+/* Barra de baixo (celular): ações principais + caixa de mensagem, acima da .bottom-nav */
+.rv2 .rv-dock {
+    position: fixed;
+    left: 0;
+    right: 0;
+    bottom: calc(var(--bottomnav-h) + env(safe-area-inset-bottom));
+    z-index: 44;
+    display: grid;
+    gap: 8px;
+    padding: 10px 12px;
+    border-top: 1px solid var(--linha);
+    background: var(--superficie);
+    box-shadow: 0 -6px 16px rgb(24 24 27 / .06);
+}
+.rv2 .rv-actions--dock .btn {
+    flex: 1 1 0;
+    min-width: 0;
+    min-height: 46px;
+    padding: 0 10px;
+    font-size: 0.9375rem;
+    white-space: normal;
+    text-align: center;
+    line-height: 1.15;
+}
+.rv2 .rv-actions--dock .btn--primary { flex-grow: 1.4; }
+.rv2 .rv-composer { padding: 0; border-top: 0; }
+.rv2 .rv-composer .chat-input-area { display: flex; gap: 8px; align-items: flex-end; }
+.rv2 .rv-composer .chat-input {
+    flex: 1;
+    min-width: 0;
+    min-height: 48px;
+    max-height: 140px;
+    padding: 12px 16px;
+    border-radius: 24px;
+    font-size: 16px; /* 16px: o iPhone não dá zoom ao focar */
+    line-height: 1.4;
+    resize: none;
+}
+.rv2 .rv-composer .btn-send {
+    flex: 0 0 48px;
+    width: 48px;
+    height: 48px;
+    display: grid;
+    place-items: center;
+    border-radius: 50%;
+    background: var(--grafite);
+}
+.rv2 .rv-composer .btn-send:hover { background: #3F3F46; }
+.rv2 .rv-composer .chat-hint { display: none; }
+
+/* Envolvidos */
+.rv2 .rv-people, .rv2 .rv-info { display: grid; gap: 14px; padding: 16px; }
+.rv-people__list { display: grid; gap: 14px; margin: 0; padding: 0; list-style: none; }
+.rv-person { display: flex; align-items: center; gap: 12px; min-width: 0; }
+.rv-person__dot { flex: 0 0 12px; width: 12px; height: 12px; border-radius: 50%; background: #71717A; }
+.rv-person[data-tone="owner"] .rv-person__dot { background: var(--info); }
+.rv-person[data-tone="help"] .rv-person__dot { background: var(--roxo); }
+.rv-person[data-tone="coord"] .rv-person__dot { background: var(--aviso); }
+.rv-person__text { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.rv-person__text strong { font-size: 0.9375rem; font-weight: 600; overflow-wrap: anywhere; }
+.rv-person__text span { font-size: var(--t-xs); color: var(--texto-2); }
+
+/* Detalhes */
+.rv-info__ask { display: grid; gap: 4px; }
+.rv-info__label { font-size: var(--t-xs); color: var(--texto-2); }
+.rv2 .rv-ask__text { font-size: 0.9375rem; line-height: 1.5; overflow-wrap: anywhere; }
+.rv2 .rv-props { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px 12px; }
+.rv2 .rv-props > div { min-width: 0; padding: 0; border-top: 0; }
+.rv2 .rv-props dt { font-size: var(--t-xs); font-weight: 400; color: var(--texto-2); }
+.rv2 .rv-props dd { margin: 2px 0 0; font-size: 0.9375rem; font-weight: 600; }
+.rv2 .rv-props dd .flag { margin-left: 0; display: flex; }
+.rv2 .rv-props__select { width: 100%; min-height: var(--h-md); padding: 0 8px; font-size: 16px; }
+.rv2 .rv-ask__obs { font-size: var(--t-sm); }
+
+/* ---------- Só celular ---------- */
+@media (max-width: 899.98px) {
+    .rv2 .steps4 li { gap: 0; }
+    .rv2 .steps4 li > span {
+        position: absolute; width: 1px; height: 1px; overflow: hidden;
+        clip: rect(0 0 0 0); white-space: nowrap;
+    }
+    .rv2 .steps4 li::before { height: 5px; }
+    .rv2 .rv-talk__head .rv-section__title {
+        position: absolute; width: 1px; height: 1px; overflow: hidden;
+        clip: rect(0 0 0 0); white-space: nowrap;
+    }
+
+    /* Abas: sem JS, ou na aba Conversa, só a conversa aparece */
+    .rv2[data-tab="info"] .rv-talk > :not(.rv-dock),
+    .rv2[data-tab="people"] .rv-talk > :not(.rv-dock) { display: none; }
+    .rv2:not([data-tab="info"]) .rv-info { display: none; }
+    .rv2:not([data-tab="people"]) .rv-people { display: none; }
+
+    /* Espaço para a barra fixa (o JS mede a altura real em --rv-dock-h) */
+    .detail-page { padding-bottom: calc(var(--rv-dock-h, 76px) + 8px); }
+    .detail-page:has(.rv-actions--dock) { padding-bottom: calc(var(--rv-dock-h, 132px) + 8px); }
+    .rv2 .rv-feed > * { scroll-margin-bottom: calc(var(--rv-dock-h, 132px) + var(--bottomnav-h) + 16px); }
+}
+
+/* ---------- Computador: duas colunas ---------- */
+@media (min-width: 900px) {
+    .rv2 .rv-head {
+        grid-template-columns: minmax(0, 1fr) auto;
+        column-gap: 16px;
+        row-gap: 18px;
+        padding: 22px;
+    }
+    .rv2 .rv-head__main { grid-column: 1; }
+    .rv2 .rv-title { font-size: 1.5rem; letter-spacing: -0.02em; }
+    .rv-meta { font-size: var(--t-sm); }
+    .rv2 .rv-actions--head { display: flex; flex-wrap: wrap; justify-content: flex-end; align-self: start; grid-column: 2; max-width: 420px; }
+    .rv2 .rv-steps4 { grid-column: 1 / -1; gap: 8px; }
+    .rv-tabs { display: none; }
+
+    .rv2 .rv-body { grid-template-columns: minmax(0, 1fr) 320px; grid-template-areas: "talk side"; align-items: start; gap: 20px; }
+    .rv2 .rv-talk { grid-area: talk; }
+    .rv2 .rv-side { grid-area: side; position: sticky; top: calc(var(--topbar-h) + 16px); gap: 16px; }
+    .rv2 .rv-talk { gap: 16px; padding: 22px; border: 1px solid var(--linha); border-radius: var(--r-3); background: var(--superficie); }
+    .rv2 .rv-talk__head { min-height: var(--h-sm); }
+    .rv2 .rv-talk__head [data-history-toggle] { min-height: var(--h-sm); }
+    .rv2 .rv-notice { background: var(--fundo); border-color: var(--fundo); }
+    .rv2 .rv-notice .forward-box__msg, .rv2 .rv-notice .rv-now__note { background: var(--superficie); }
+    .rv2 .feed-event .feed-pill { background: var(--fundo-2); }
+    .rv2 .rv-feed .chat-item { max-width: 78%; }
+
+    .rv2 .rv-dock { position: static; padding: 16px 0 0; border-top: 1px solid var(--linha); background: none; box-shadow: none; }
+    .rv2 .rv-actions--dock { display: none; }
+    .rv2 .rv-composer .chat-input { border-radius: var(--r-2); font-size: 0.9375rem; }
+    .rv2 .rv-composer .btn-send { border-radius: var(--r-2); }
+    .rv2 .rv-composer .chat-hint { display: block; }
+
+    .rv2 .rv-people, .rv2 .rv-info { padding: 20px; }
+    .rv-info__ask { display: none; } /* no computador o pedido já abre a conversa */
+}
