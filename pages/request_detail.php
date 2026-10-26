@@ -67,7 +67,7 @@ if ($queue !== null) {
 }
 $queueLink = fn(array $r) => 'request_detail?' . http_build_query(['id' => (int)$r['id'], 'table' => $r['table'], 'from' => $from] + $listParams);
 ?>
-<div class="detail-page"<?php if ($queue !== null): ?> data-back="<?= e($backHref) ?>"<?= $next ? ' data-next="' . e($queueLink($next)) . '"' : '' ?><?php endif; ?>>
+<div class="detail-page" data-home="<?= e($backHref) ?>"<?php if ($queue !== null): ?> data-back="<?= e($backHref) ?>"<?= $next ? ' data-next="' . e($queueLink($next)) . '"' : '' ?><?php endif; ?>>
     <nav class="queue-nav" aria-label="<?= $queue !== null ? 'Fila de pedidos' : 'Navegação' ?>">
         <a href="<?= e($backHref) ?>" class="back-link"><i class="fa-solid fa-arrow-left" aria-hidden="true"></i> <?= e($backLabel) ?></a>
         <?php if ($queue !== null && $queue): ?>

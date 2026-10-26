@@ -713,10 +713,13 @@ async function globalRequestAction(action, id, table, value = '') {
         }
 
         if (data.success) {
-            showToast(data.message, 'success');
+            const finishedHere = action === 'finish' && document.querySelector('.detail-page');
+            if (!finishedHere) showToast(data.message, 'success');
             // Após cancelar, a requisição não existe mais: volta para a lista
             if (action === 'delete') {
                 setTimeout(() => { window.location.href = 'myRequests'; }, 900);
+            } else if (finishedHere) {
+                showFinishedOverlay(id); // a pessoa decide: voltar para a lista ou abrir o próximo
             } else {
                 refreshAfterChange({ advance: action === 'finish', message: data.message });
             }
@@ -910,6 +913,42 @@ async function refreshAfterChange(opts = {}) {
     }
 }
 
+/**
+ * Pedido concluído na página do pedido: confirmação em tela cheia (check verde) em vez de pular
+ * sozinho para o próximo. Botões: voltar para a lista de origem e, se houver, o próximo da fila.
+ * Fechar (Esc ou fora do cartão) fica no pedido, recarregado já como concluído.
+ */
+function showFinishedOverlay(id) {
+    const page = document.querySelector('.detail-page');
+    const back = page.dataset.back || page.dataset.home || 'inbox';
+    const next = page.dataset.next || '';
+    const title = document.querySelector('.request-view')?.dataset.title || '';
+    const backLabel = back.startsWith('approve') ? 'Voltar para Aprovar' : back.startsWith('home') ? 'Voltar ao Painel' : back.startsWith('myRequests') ? 'Voltar aos meus pedidos' : 'Voltar para a Caixa';
+
+    const wrap = document.createElement('div');
+    wrap.className = 'done-overlay';
+    wrap.setAttribute('role', 'dialog');
+    wrap.setAttribute('aria-modal', 'true');
+    wrap.setAttribute('aria-labelledby', 'doneTitle');
+    wrap.innerHTML = '<div class="done-card">'
+        + '<span class="done-check" aria-hidden="true"><i class="fa-solid fa-check"></i></span>'
+        + '<h3 id="doneTitle">Pedido concluído</h3>'
+        + '<p class="done-text">Nº ' + escapeHtml(String(id)) + (title ? ' · ' + escapeHtml(title) : '') + '</p>'
+        + '<p class="done-sub">Quem pediu já foi avisado.' + (page.dataset.back && !next ? ' Esse era o último da fila.' : '') + '</p>'
+        + '<div class="done-actions">'
+        +   '<a class="btn" href="' + escapeHtml(back) + '"><i class="fa-solid fa-arrow-left" aria-hidden="true"></i> ' + backLabel + '</a>'
+        +   (next ? '<a class="btn btn--primary" href="' + escapeHtml(next) + '">Próximo pedido <i class="fa-solid fa-arrow-right" aria-hidden="true"></i></a>' : '')
+        + '</div></div>';
+    document.body.appendChild(wrap);
+    requestAnimationFrame(() => wrap.classList.add('show'));
+    (wrap.querySelector('.btn--primary') || wrap.querySelector('.btn')).focus();
+
+    const stay = () => { wrap.remove(); document.removeEventListener('keydown', onKey); location.reload(); };
+    const onKey = (e) => { if (e.key === 'Escape') stay(); };
+    document.addEventListener('keydown', onKey);
+    wrap.addEventListener('click', (e) => { if (e.target === wrap) stay(); });
+}
+
 function requestAct(action, id, table, value = '') {
     return globalRequestAction(action, id, table, value);
 }
@@ -1021,6 +1060,18 @@ document.addEventListener('input', (e) => {
     if (area) { area.style.height = ''; area.style.height = area.scrollHeight + 'px'; }
 });
 
+// Trocar o canal (Todos / Só setores) muda o aviso e o texto de exemplo do campo
+document.addEventListener('change', (e) => {
+    if (!e.target.matches('[data-chat-form] [name="channel"]')) return;
+    const form = e.target.closest('[data-chat-form]');
+    const internal = e.target.value === 'internal';
+    const hint = form.querySelector('[data-chat-hint]');
+    if (hint) hint.textContent = internal ? hint.dataset.hintInternal : hint.dataset.hintPublic;
+    form.classList.toggle('rv-composer--internal', internal);
+    const area = form.querySelector('textarea');
+    if (area) area.placeholder = internal ? 'Mensagem para os setores' : 'Mensagem para todos';
+});
+
 // Atualiza a linha do tempo sem recarregar a página (só redesenha se algo mudou)
 async function reloadChat(view) {
     const feed = view && view.querySelector('[data-chat-feed]');
@@ -1060,18 +1111,6 @@ function updateBulkBar() {
     bar.hidden = n === 0;
     bar.querySelector('[data-bulk-count]').textContent = n === 1 ? '1 selecionado' : `${n} selecionados`;
     // Botões por grupo: "Começar atendimento (2)" só aparece quando há novos marcados
-// Trocar o canal (Todos / Só setores) muda o aviso e o texto de exemplo do campo
-document.addEventListener('change', (e) => {
-    if (!e.target.matches('[data-chat-form] [name="channel"]')) return;
-    const form = e.target.closest('[data-chat-form]');
-    const internal = e.target.value === 'internal';
-    const hint = form.querySelector('[data-chat-hint]');
-    if (hint) hint.textContent = internal ? hint.dataset.hintInternal : hint.dataset.hintPublic;
-    form.classList.toggle('rv-composer--internal', internal);
-    const area = form.querySelector('textarea');
-    if (area) area.placeholder = internal ? 'Mensagem para os setores' : 'Mensagem para todos';
-});
-
     bar.querySelectorAll('[data-bulk-group]').forEach(btn => {
         const k = bulkPicked(btn.dataset.bulkGroup).length;
         btn.hidden = k === 0;
