@@ -61,7 +61,7 @@
 .acc-person:focus-visible { outline: none; box-shadow: var(--anel); }
 .acc-row.is-inactive .acc-person { opacity: .75; }
 .acc-row.is-selected .acc-person { background: var(--laranja-claro); border-color: var(--laranja-borda); }
-.acc-person__id { display: flex; flex-direction: column; gap: 2px; min-width: 0; flex: 1; }
+.acc-person__id { display: flex; flex-direction: column; gap: 4px; min-width: 0; flex: 1; }
 .acc-person__name { font-size: var(--t-md); font-weight: 600; overflow-wrap: anywhere; }
 .acc-person__login { font-size: var(--t-xs); color: var(--texto-2); overflow-wrap: anywhere; }
 .acc-person__role { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 4px; }

@@ -335,7 +335,7 @@ $assetPage = $logged ? $pageClass : 'login';
     <script src="assets/js/pages/<?= e($assetPage) ?>.js?v=<?php echo $assetVersion; ?>"></script>
     <?php endif; ?>
 
-    <!-- Encaminhar: como, para quem, mensagem, resumo -->
+    <!-- Encaminhar: um passo por vez (como → para quem → mensagem); o botão diz o que vai acontecer -->
     <div class="modal-overlay fw" id="forwardWizard" role="dialog" aria-modal="true" aria-labelledby="fwTitle" hidden>
         <form class="modal-card fw__card" id="fwForm" novalidate>
             <header class="fw__head">
@@ -347,7 +347,7 @@ $assetPage = $logged ? $pageClass : 'login';
             </header>
 
             <fieldset class="fw__step">
-                <legend class="fw__legend"><span>1</span> Como encaminhar?</legend>
+                <legend class="fw__legend">O que você quer fazer?</legend>
                 <div class="fw__choices">
                     <label class="fw__choice">
                         <input type="radio" name="mode" value="transfer" required>
@@ -360,18 +360,17 @@ $assetPage = $logged ? $pageClass : 'login';
                 </div>
             </fieldset>
 
-            <fieldset class="fw__step">
-                <legend class="fw__legend"><span>2</span> Para qual setor?</legend>
+            <fieldset class="fw__step" data-fw-step="area" hidden>
+                <legend class="fw__legend">Para qual setor?</legend>
                 <div class="fw__choices fw__choices--areas" id="fwAreas"><p class="fw__hint">Carregando setores...</p></div>
             </fieldset>
 
-            <div class="fw__step">
-                <label for="fwMessage" class="fw__legend"><span>3</span> O que o outro setor precisa saber ou fazer?</label>
+            <div class="fw__step" data-fw-step="message" hidden>
+                <label for="fwMessage" class="fw__legend">O que eles precisam saber?</label>
                 <textarea id="fwMessage" name="message" rows="3" maxlength="1000" required placeholder="Ex.: o projetor da sala 12 não liga, já trocamos o cabo."></textarea>
-                <p class="fw__hint" id="fwCount">Mínimo de 10 letras.</p>
+                <p class="fw__hint" id="fwCount" aria-live="polite" hidden></p>
             </div>
 
-            <p class="fw__summary" id="fwSummary" aria-live="polite">Escolha como e para qual setor.</p>
             <div class="fw__actions">
                 <button type="button" class="btn btn--ghost" data-fw-close>Cancelar</button>
                 <button type="submit" class="btn btn--primary" id="fwSubmit" disabled><i class="fa-solid fa-paper-plane" aria-hidden="true"></i> Encaminhar</button>
@@ -388,23 +387,34 @@ $assetPage = $logged ? $pageClass : 'login';
         const areasBox = document.getElementById('fwAreas');
         const msg = document.getElementById('fwMessage');
         const submit = document.getElementById('fwSubmit');
-        const summary = document.getElementById('fwSummary');
+        const count = document.getElementById('fwCount');
+        const stepArea = wiz.querySelector('[data-fw-step="area"]');
+        const stepMessage = wiz.querySelector('[data-fw-step="message"]');
         const placeholders = {
             transfer: 'Ex.: isso é com vocês: troca de lâmpadas da sala 12, não é da TI.',
             help: 'Ex.: precisamos de 2 cabos HDMI para terminar a instalação na sala 12.'
         };
+        const sendIcon = '<i class="fa-solid fa-paper-plane" aria-hidden="true"></i> ';
         let current = null;
 
-        function update() {
+        // Mostra o próximo passo só depois do anterior; o botão diz exatamente o que vai acontecer
+        function update(e) {
             const mode = form.mode.value;
             const area = form.querySelector('input[name="area"]:checked');
             const len = msg.value.trim().length;
             if (mode) msg.placeholder = placeholders[mode];
-            document.getElementById('fwCount').textContent = len >= 10 ? 'Pronto.' : 'Mínimo de 10 letras (faltam ' + (10 - len) + ').';
-            const verb = mode === 'help' ? 'Pedir ajuda a' : 'Transferir o pedido para';
-            summary.textContent = mode && area
-                ? verb + ' ' + area.dataset.label + '.' + (mode === 'help' ? ' Seu setor continua responsável.' : ' Eles precisam aceitar.')
-                : 'Escolha como e para qual setor.';
+            stepArea.hidden = !mode;
+            const showMessage = !!(mode && area);
+            if (showMessage && stepMessage.hidden && e && e.target && e.target.name === 'area') {
+                stepMessage.hidden = false;
+                msg.focus();
+            }
+            stepMessage.hidden = !showMessage;
+            count.hidden = !(len > 0 && len < 10);
+            count.textContent = 'Escreva mais ' + (10 - len) + (10 - len === 1 ? ' letra.' : ' letras.');
+            submit.innerHTML = sendIcon + (mode && area
+                ? (mode === 'help' ? 'Pedir ajuda a ' : 'Transferir para ') + escapeHtml(area.dataset.label)
+                : 'Encaminhar');
             submit.disabled = !(mode && area && len >= 10);
         }
 

@@ -233,7 +233,7 @@
 .rv-person[data-tone="owner"] .rv-person__dot { background: var(--info); }
 .rv-person[data-tone="help"] .rv-person__dot { background: var(--roxo); }
 .rv-person[data-tone="coord"] .rv-person__dot { background: var(--aviso); }
-.rv-person__text { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.rv-person__text { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
 .rv-person__text strong { font-size: 0.9375rem; font-weight: 600; overflow-wrap: anywhere; }
 .rv-person__text span { font-size: var(--t-xs); color: var(--texto-2); }
 
@@ -244,7 +244,7 @@
 .rv2 .rv-props { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px 12px; }
 .rv2 .rv-props > div { min-width: 0; padding: 0; border-top: 0; }
 .rv2 .rv-props dt { font-size: var(--t-xs); font-weight: 400; color: var(--texto-2); }
-.rv2 .rv-props dd { margin: 2px 0 0; font-size: 0.9375rem; font-weight: 600; }
+.rv2 .rv-props dd { margin: 4px 0 0; font-size: 0.9375rem; font-weight: 600; }
 .rv2 .rv-props dd .flag { margin-left: 0; display: flex; }
 .rv2 .rv-props__select { width: 100%; min-height: var(--h-md); padding: 0 8px; font-size: 16px; }
 .rv2 .rv-ask__obs { font-size: var(--t-sm); }

@@ -7,7 +7,10 @@
    ===================================================================== */
 
 /* ---------- Cabeçalho e números do topo ---------- */
-.inbox-head__area { margin: 0 0 2px; font-size: var(--t-sm); color: var(--texto-2); }
+.inbox-head__area { margin: 0 0 4px; font-size: var(--t-sm); color: var(--texto-2); }
+
+.page-inbox .welcome { margin-bottom: 16px; }
+@media (min-width: 900px) { .page-inbox .welcome { margin-bottom: 20px; } }
 
 .inbox-stats { display: none; }
 @media (min-width: 900px) {
