@@ -28,9 +28,31 @@
 .rv2 .rv-head__tools { margin: -10px -10px -10px auto; display: flex; gap: 0; flex-shrink: 0; }
 .rv2 .icon-link { width: var(--h-md); height: var(--h-md); }
 .rv2 .rv-title { font-size: 1.0625rem; font-weight: 700; line-height: 1.25; overflow-wrap: anywhere; }
-.rv-tags { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
-.rv-tags .status-pill, .rv-tags .badge-urgent { min-height: 24px; }
-.rv-tags .flag { font-size: var(--t-xs); }
+.rv-meta .flag { font-size: var(--t-xs); }
+
+/* O que foi pedido, logo abaixo do título (até 3 linhas; "Ver tudo" abre o resto) */
+.rv-ask { display: grid; gap: 4px; justify-items: start; }
+.rv-ask__who { margin: 0; font-size: var(--t-xs); color: var(--texto-2); }
+.rv-ask__body {
+    margin: 0;
+    font-size: 0.9375rem;
+    line-height: 1.5;
+    color: var(--texto);
+    overflow-wrap: anywhere;
+    display: -webkit-box;
+    -webkit-box-orient: vertical;
+    -webkit-line-clamp: 3;
+    overflow: hidden;
+}
+.rv-ask.is-open .rv-ask__body { -webkit-line-clamp: unset; display: block; }
+.rv-ask__more { padding: 0; border: 0; background: none; font: inherit; font-size: var(--t-sm); font-weight: 600; color: var(--laranja-escuro); cursor: pointer; }
+.rv-ask__more[hidden] { display: none; }
+.rv-ask__more:hover { text-decoration: underline; }
+.rv-ask__more:focus-visible { outline: none; box-shadow: var(--anel); border-radius: var(--r-1); }
+
+/* Urgência com o motivo, numa linha */
+.rv-urgent { margin: 0; font-size: var(--t-sm); line-height: 1.45; color: var(--perigo); overflow-wrap: anywhere; }
+.rv-urgent i { font-size: 12px; margin-right: 4px; }
 
 /* Próximo passo (setor, coordenação, admin): uma frase dizendo o que fazer agora */
 .rv-guide {
@@ -225,28 +247,6 @@
 .rv2 .rv-composer .btn-send:hover { background: #3F3F46; }
 .rv2 .rv-composer .chat-hint { display: none; }
 
-/* Envolvidos */
-.rv2 .rv-people, .rv2 .rv-info { display: grid; gap: 14px; padding: 16px; }
-.rv-people__list { display: grid; gap: 14px; margin: 0; padding: 0; list-style: none; }
-.rv-person { display: flex; align-items: center; gap: 12px; min-width: 0; }
-.rv-person__dot { flex: 0 0 12px; width: 12px; height: 12px; border-radius: 50%; background: #71717A; }
-.rv-person[data-tone="owner"] .rv-person__dot { background: var(--info); }
-.rv-person[data-tone="help"] .rv-person__dot { background: var(--roxo); }
-.rv-person[data-tone="coord"] .rv-person__dot { background: var(--aviso); }
-.rv-person__text { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
-.rv-person__text strong { font-size: 0.9375rem; font-weight: 600; overflow-wrap: anywhere; }
-.rv-person__text span { font-size: var(--t-xs); color: var(--texto-2); }
-
-/* Detalhes */
-.rv-info__ask { display: grid; gap: 4px; }
-.rv-info__label { font-size: var(--t-xs); color: var(--texto-2); }
-.rv2 .rv-ask__text { font-size: 0.9375rem; line-height: 1.5; overflow-wrap: anywhere; }
-.rv2 .rv-props { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px 12px; }
-.rv2 .rv-props > div { min-width: 0; padding: 0; border-top: 0; }
-.rv2 .rv-props dt { font-size: var(--t-xs); font-weight: 400; color: var(--texto-2); }
-.rv2 .rv-props dd { margin: 4px 0 0; font-size: 0.9375rem; font-weight: 600; }
-.rv2 .rv-props dd .flag { margin-left: 0; display: flex; }
-.rv2 .rv-props__select { width: 100%; min-height: var(--h-md); padding: 0 8px; font-size: 16px; }
 /* Conversa interna entre setores: roxo (a cor de "outro setor") e cadeado; quem pediu nunca vê */
 .rv2 .chat-item--internal .chat-bubble { border-style: dashed; border-color: var(--roxo); }
 .rv2 .chat-internal-tag { display: inline-flex; align-items: center; gap: 4px; margin-left: 4px; padding: 1px 8px; border-radius: var(--r-pill); background: var(--roxo-claro); color: var(--roxo); font-weight: 600; }
@@ -261,10 +261,34 @@
 .rv2 .rv-composer--internal .chat-input { border-color: var(--roxo); }
 .rv2 .rv-composer--internal .chat-hint { display: block; color: var(--roxo); }
 
+/* Envolvidos */
+.rv2 .rv-people, .rv2 .rv-info { display: grid; gap: 14px; padding: 16px; }
+.rv-people__list { display: grid; gap: 14px; margin: 0; padding: 0; list-style: none; }
+.rv-person { display: flex; align-items: center; gap: 12px; min-width: 0; }
+.rv-person__dot { flex: 0 0 12px; width: 12px; height: 12px; border-radius: 50%; background: #71717A; }
+.rv-person[data-tone="owner"] .rv-person__dot { background: var(--info); }
+.rv-person[data-tone="help"] .rv-person__dot { background: var(--roxo); }
+.rv-person[data-tone="coord"] .rv-person__dot { background: var(--aviso); }
+.rv-person__text { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
+.rv-person__text strong { font-size: 0.9375rem; font-weight: 600; overflow-wrap: anywhere; }
+.rv-person__text span { font-size: var(--t-xs); color: var(--texto-2); }
+
+/* Detalhes */
+.rv2 .rv-props { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px 12px; }
+.rv2 .rv-props > div { min-width: 0; padding: 0; border-top: 0; }
+.rv2 .rv-props dt { font-size: var(--t-xs); font-weight: 400; color: var(--texto-2); }
+.rv2 .rv-props dd { margin: 4px 0 0; font-size: 0.9375rem; font-weight: 600; }
+.rv2 .rv-props dd .flag { margin-left: 0; display: flex; }
+.rv2 .rv-props__select { width: 100%; min-height: var(--h-md); padding: 0 8px; font-size: 16px; }
 .rv2 .rv-ask__obs { font-size: var(--t-sm); }
+
+/* Etapa atual em texto: só no celular, onde as etapas viram barras sem nome */
+.rv-step-now { display: none; }
 
 /* ---------- Só celular ---------- */
 @media (max-width: 899.98px) {
+    .rv2 .rv-step-now { display: block; margin: -4px 0 0; font-size: var(--t-xs); font-weight: 600; color: var(--texto); }
+    .rv2 .steps4--refused ~ .rv-step-now { color: var(--perigo); }
     .rv2 .steps4 li { gap: 0; }
     .rv2 .steps4 li > span {
         position: absolute; width: 1px; height: 1px; overflow: hidden;
@@ -321,5 +345,4 @@
     .rv2 .rv-composer .chat-hint { display: block; }
 
     .rv2 .rv-people, .rv2 .rv-info { padding: 20px; }
-    .rv-info__ask { display: none; } /* no computador o pedido já abre a conversa */
 }

@@ -235,8 +235,8 @@ if (!function_exists('renderRequestView')) {
             }
             $time = date('H:i', strtotime($it['at']));
             if ($it['type'] === 'open') {
-                $body = '<span class="chat-open">Abriu o pedido</span>'
-                    . ($desc !== '' ? nl2br(e($desc)) : e($req['title'] ?? 'Sem descrição.'));
+                // O que foi pedido está no topo; aqui fica só o título, para a conversa começar no contexto
+                $body = '<span class="chat-open">Abriu o pedido</span>' . e($req['title'] ?? 'Sem título');
                 $html .= $bubble($creatorId, (string)($req['creator_name'] ?? ''), $time, $body, ' chat-item--open');
             } elseif ($it['type'] === 'event') {
                 $html .= '<div class="feed-event' . ($it['bad'] ? ' feed-event--bad' : '') . ($isSys($it) ? ' feed-event--sys' : '') . '">'
@@ -597,6 +597,22 @@ if (!function_exists('renderRequestView')) {
         }
         $props['Aberto em'] = e(date('d/m/Y \à\s H:i', strtotime((string)$req['created_at'])));
         $desc = trim((string)($req['descp'] ?? ''));
+
+        // O que foi pedido, no topo: a descrição; sem ela (reprografia), o essencial dos campos do tipo
+        $ask = $desc;
+        if ($ask === '' && $sector === 'xerox') {
+            $ask = implode(' · ', array_filter([
+                trim((string)($req['qtd'] ?? '')) !== '' ? (int)$req['qtd'] . ' cópias' : '',
+                trim((string)($req['type'] ?? '')) !== '' ? 'papel ' . trim((string)$req['type']) : '',
+            ]));
+        }
+        // Motivo da urgência: primeira linha das observações ("Urgente: ...", gravada por api/add_request.php)
+        $obs = trim((string)($req['obs'] ?? ''));
+        $urgentReason = '';
+        if (preg_match('/^urgente:\s*(.+)$/iu', trim(explode("\n", $obs, 2)[0]), $m)) {
+            $urgentReason = trim($m[1]);
+            $obs = trim((string)(explode("\n", $obs, 2)[1] ?? ''));
+        }
         $people = requestPeople($req, $status, $subdivision, $history, $forwards, $ownerArea, $ownerLabel, $worker);
         $metaLine = 'Nº ' . $reqId;
         $deadlineShort = $hasDeadline ? date('d/m', strtotime((string)$req['date'])) : '';
@@ -607,7 +623,7 @@ if (!function_exists('renderRequestView')) {
     <header class="rv-head card">
         <div class="rv-head__main">
             <div class="rv-head__top">
-                <p class="rv-meta"><span class="rv-num"><?= e($metaLine) ?></span> · <span class="sector-tag" data-sector="<?= e($sector) ?>"><?= e($sectorName) ?></span><?php if ($deadlineShort !== ''): ?> · prazo <?= e($deadlineShort) ?><?php endif; ?></p>
+                <p class="rv-meta"><span class="rv-num"><?= e($metaLine) ?></span> · <span class="sector-tag" data-sector="<?= e($sector) ?>"><?= e($sectorName) ?></span><?php if ($deadlineShort !== ''): ?> · prazo <?= e($deadlineShort) ?><?php endif; ?><?= $deadlineFlag !== '' ? ' ' . $deadlineFlag : '' ?></p>
                 <span class="rv-head__tools">
                     <?php if ($isStaff): ?>
                         <a class="icon-link" href="print_request.php?id=<?= $reqId ?>&table=<?= e($sector) ?>" onclick="return printRequest(event, this.href)" title="Imprimir" aria-label="Imprimir"><i class="fa-solid fa-print" aria-hidden="true"></i></a>
@@ -631,11 +647,16 @@ if (!function_exists('renderRequestView')) {
                 </span>
             </div>
             <h2 class="rv-title"><?= e($req['title'] ?? 'Sem título') ?></h2>
-            <div class="rv-tags">
-                <span class="status-pill status-pill--<?= e($status) ?>"><?= e(statusLabel($status)) ?></span>
-                <?php if ($isUrgent): ?><span class="badge-urgent">Urgente</span><?php endif; ?>
-                <?= $deadlineFlag ?>
-            </div>
+            <?php if ($ask !== ''): ?>
+                <div class="rv-ask" data-rv-ask>
+                    <p class="rv-ask__who"><?= e(explode(' ', trim((string)($req['creator_name'] ?? '')))[0] ?: 'Quem pediu') ?> pediu:</p>
+                    <p class="rv-ask__body"><?= nl2br(e($ask)) ?></p>
+                    <button type="button" class="rv-ask__more" data-rv-ask-more hidden>Ver tudo</button>
+                </div>
+            <?php endif; ?>
+            <?php if ($isUrgent): ?>
+                <p class="rv-urgent"><i class="fa-solid fa-bolt" aria-hidden="true"></i> <strong>Urgente</strong><?= $urgentReason !== '' ? ': ' . e($urgentReason) : '' ?></p>
+            <?php endif; ?>
             <?php if ($guide !== ''): ?>
                 <p class="rv-guide"><i class="fa-solid fa-circle-arrow-right" aria-hidden="true"></i> <span><?= $guide ?></span></p>
             <?php endif; ?>
@@ -646,10 +667,12 @@ if (!function_exists('renderRequestView')) {
         <ol class="steps4 rv-steps4<?= $status === 'N' ? ' steps4--refused' : '' ?>" aria-label="Etapas do pedido">
             <?php foreach ($steps as $i => $label):
                 $state = $i < $stepNow ? 'is-done' : ($i === $stepNow ? 'is-now' : '');
+                $label = $i === $stepNow ? $label : preg_replace('/ · .*$/u', '', $label); // data só na etapa atual
             ?>
                 <li<?= $state !== '' ? ' class="' . $state . '"' : '' ?><?= $i === $stepNow ? ' aria-current="step"' : '' ?>><span><?= e($label) ?></span></li>
             <?php endforeach; ?>
         </ol>
+        <p class="rv-step-now" aria-hidden="true"><?= e($steps[$stepNow] ?? '') ?></p>
         <div class="rv-tabs" role="tablist" aria-label="Partes do pedido">
             <button type="button" role="tab" id="<?= $tabId ?>tab-chat" aria-controls="<?= $tabId ?>chat" aria-selected="true" data-rv-tab="chat">Conversa</button>
             <button type="button" role="tab" id="<?= $tabId ?>tab-info" aria-controls="<?= $tabId ?>info" aria-selected="false" tabindex="-1" data-rv-tab="info">Detalhes</button>
@@ -756,17 +779,13 @@ if (!function_exists('renderRequestView')) {
 
             <section class="rv-info card" id="<?= $tabId ?>info" role="tabpanel" aria-labelledby="<?= $tabId ?>tab-info">
                 <h3 class="rv-section__title">Detalhes</h3>
-                <div class="rv-info__ask">
-                    <p class="rv-info__label">O que foi pedido</p>
-                    <div class="rv-ask__text"><?= $desc !== '' ? nl2br(e($desc)) : '<span class="muted">Sem descrição.</span>' ?></div>
-                </div>
                 <dl class="rv-props">
                     <?php foreach ($props as $label => $value): ?>
                         <div><dt><?= e($label) ?></dt><dd><?= $value ?></dd></div>
                     <?php endforeach; ?>
                 </dl>
-                <?php if (trim((string)($req['obs'] ?? '')) !== ''): ?>
-                    <p class="rv-ask__obs"><strong>Observações:</strong> <?= nl2br(e($req['obs'])) ?></p>
+                <?php if ($obs !== ''): // o motivo da urgência já está no topo ?>
+                    <p class="rv-ask__obs"><strong>Observações:</strong> <?= nl2br(e($obs)) ?></p>
                 <?php endif; ?>
             </section>
         </aside>

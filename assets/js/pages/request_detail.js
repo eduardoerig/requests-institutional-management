@@ -64,7 +64,23 @@
         if (dock) resizer.observe(dock);
     }
 
+    // "O que foi pedido" no topo: mostra "Ver tudo" só quando o texto passou das 3 linhas
+    function markLongAsk() {
+        page.querySelectorAll('[data-rv-ask]').forEach(function (box) {
+            var body = box.querySelector('.rv-ask__body');
+            var more = box.querySelector('[data-rv-ask-more]');
+            if (body && more && !box.classList.contains('is-open')) more.hidden = body.scrollHeight <= body.clientHeight + 2;
+        });
+    }
+
     document.addEventListener('click', function (e) {
+        var more = e.target.closest('[data-rv-ask-more]');
+        if (more && page.contains(more)) {
+            var box = more.closest('[data-rv-ask]');
+            var open = box.classList.toggle('is-open');
+            more.textContent = open ? 'Ver menos' : 'Ver tudo';
+            return;
+        }
         var btn = e.target.closest('[data-rv-tab]');
         if (!btn || !page.contains(btn)) return;
         select(btn.getAttribute('data-rv-tab'), false);
@@ -105,6 +121,7 @@
         if (viewChanged) {
             applyAll();
             watchDock();
+            markLongAsk();
         }
         if (feedChanged && justSent) {
             justSent = false;
@@ -116,4 +133,6 @@
 
     applyAll();
     watchDock();
+    markLongAsk();
+    window.addEventListener('resize', markLongAsk);
 })();
