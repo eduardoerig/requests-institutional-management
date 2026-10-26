@@ -24,7 +24,13 @@ $formHtml = file_get_contents($formFile);
 // Quem pede só diz se é urgente (e por quê); o nível de urgência fica com o setor
 $priorityHtml = '
     <div class="form-group urgent-field">
-        <label class="check-line"><input type="checkbox" name="urgent" value="1" id="urgent" data-urgent> É urgente: está parando uma aula ou o trabalho</label>
+        <label class="check-line urgent-switch" for="urgent">
+            <span class="urgent-switch__text">
+                <span class="urgent-switch__title">É urgente</span>
+                <span class="urgent-switch__hint">Está parando uma aula ou o trabalho. Quem aprova e quem atende veem o pedido em destaque.</span>
+            </span>
+            <input type="checkbox" role="switch" name="urgent" value="1" id="urgent" data-urgent>
+        </label>
         <div class="urgent-field__reason" data-urgent-reason hidden>
             <label for="urgent_reason">Por que é urgente? <span class="req">*</span></label>
             <input type="text" name="urgent_reason" id="urgent_reason" maxlength="255" placeholder="Ex.: a turma do 5º ano está sem projetor">

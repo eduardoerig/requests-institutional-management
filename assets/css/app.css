@@ -226,7 +226,7 @@ small { font-size: 0.875em; }
 .sidebar .menu-link--new { justify-content: center; min-height: var(--h-md); border-radius: var(--r-2); background: var(--laranja); color: var(--texto-inv); margin-bottom: 16px; }
 .sidebar .menu-link--new > span:not(.sidebar-badge) { flex: 0 0 auto; }
 .sidebar .menu-link--new i { color: var(--texto-inv); }
-.sidebar .menu-link--new:hover { background: var(--laranja-escuro); color: var(--texto-inv); }
+.sidebar .menu-link--new:hover, .sidebar .menu-link--new.is-active { background: var(--laranja-escuro); color: var(--texto-inv); }
 .sidebar .menu-section { margin: 20px 12px 4px; font-size: var(--t-xs); font-weight: 600; color: var(--texto-3); }
 .sidebar-badge {
     min-width: 20px;

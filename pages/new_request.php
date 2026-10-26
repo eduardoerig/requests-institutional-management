@@ -1,101 +1,69 @@
 <?php
 /**
- * Nova requisição: escolher o tipo e preencher, na mesma tela.
- * Os tipos ficam em cima (viram uma faixa compacta depois da escolha) e o formulário abre logo abaixo.
+ * Nova requisição (UI 2.0).
+ * Celular: 3 passos curtos (setor → o que precisa → urgência e revisão), com Voltar/Continuar fixos embaixo.
+ * Computador (≥900px): tudo numa página, com a coluna "O que acontece depois".
+ * O passo a passo é só apresentação (assets/js/pages/new_request.js); o formulário do setor
+ * vem de api/get_form.php e é enviado pelo bindFormRequests() de assets/js/script.js.
  */
 $qr = $pdo->query('SELECT * FROM ctd_requests_models WHERE `status` = "Y" ORDER BY id');
 // O usuário escolhe pelo exemplo, não pelo nome do setor
 $modelInfo = [
-    'form_chamado_ti.php'  => ['icon' => 'fa-computer',           'sector' => 'ti',      'label' => 'TI',                 'examples' => 'Computador, internet, impressora, senha'],
-    'form_servico.php'     => ['icon' => 'fa-screwdriver-wrench', 'sector' => 'service', 'label' => 'Manutenção',         'examples' => 'Conserto, elétrica, móveis, limpeza'],
-    'form_compra.php'      => ['icon' => 'fa-cart-shopping',      'sector' => 'shop',    'label' => 'Compras',            'examples' => 'Materiais, produtos, orçamentos'],
-    'form_color_print.php' => ['icon' => 'fa-print',              'sector' => 'xerox',   'label' => 'Impressão colorida', 'examples' => 'Certificados, cartazes coloridos'],
-    'form_mkt.php'         => ['icon' => 'fa-bullhorn',           'sector' => 'mkt',     'label' => 'Marketing',          'examples' => 'Posts, banners, panfletos, convites'],
+    'form_chamado_ti.php'  => ['icon' => 'fa-computer',           'sector' => 'ti',      'label' => 'TI',                 'box' => 'TI',          'examples' => 'Computador, internet, projetor, senha'],
+    'form_servico.php'     => ['icon' => 'fa-screwdriver-wrench', 'sector' => 'service', 'label' => 'Manutenção',         'box' => 'Manutenção',  'examples' => 'Elétrica, móveis, ar, limpeza'],
+    'form_compra.php'      => ['icon' => 'fa-cart-shopping',      'sector' => 'shop',    'label' => 'Compras',            'box' => 'Compras',     'examples' => 'Materiais e orçamentos'],
+    'form_color_print.php' => ['icon' => 'fa-print',              'sector' => 'xerox',   'label' => 'Impressão colorida', 'box' => 'Reprografia', 'examples' => 'Certificados, cartazes coloridos'],
+    'form_mkt.php'         => ['icon' => 'fa-bullhorn',           'sector' => 'mkt',     'label' => 'Marketing',          'box' => 'Marketing',   'examples' => 'Posts, banners, convites'],
 ];
+$backHref = 'myRequests';
 ?>
-<div class="page-head page-head--hide-mobile">
-    <div>
-        <h1>Nova requisição</h1>
+<div class="nr" data-new-request data-step="1">
+    <header class="nr-head">
+        <a class="nr-head__back" href="<?= e($backHref) ?>"><i class="fa-solid fa-arrow-left" aria-hidden="true"></i> Meus pedidos</a>
+        <p class="nr-head__count" data-step-count>Passo 1 de 3</p>
+        <h1 class="nr-head__title" data-step-title>Para qual setor?</h1>
+        <h1 class="nr-head__title nr-head__title--desk">Novo pedido</h1>
+        <ol class="nr-progress" aria-hidden="true">
+            <li class="is-on"></li><li></li><li></li>
+        </ol>
+    </header>
+
+    <div class="nr-layout">
+        <div class="nr-main">
+            <section class="nr-sectors type-picker" aria-labelledby="tipo-titulo">
+                <h2 id="tipo-titulo" class="nr-sectors__title">1. Para qual setor?</h2>
+                <div class="nr-sector-grid">
+                    <?php foreach ($qr->fetchAll(PDO::FETCH_ASSOC) as $row):
+                        $info = $modelInfo[$row['form_name']] ?? ['icon' => 'fa-file-lines', 'sector' => 'mkt', 'label' => $row['name'], 'box' => $row['name'], 'examples' => $row['descp']];
+                    ?>
+                        <button type="button" class="type-card nr-sector" data-id="<?= (int)$row['id'] ?>" data-sector="<?= e($info['sector']) ?>" data-sector-name="<?= e($info['box']) ?>" data-label="<?= e($info['label']) ?>" aria-pressed="false">
+                            <span class="nr-sector__name"><i class="fa-solid <?= e($info['icon']) ?>" aria-hidden="true"></i> <?= e($info['label']) ?></span>
+                            <span class="nr-sector__hint"><?= e($info['examples']) ?></span>
+                        </button>
+                    <?php endforeach; ?>
+                </div>
+                <p class="field-error nr-sectors__error" data-sector-error role="alert" hidden>Escolha um setor para continuar.</p>
+            </section>
+
+            <section class="nr-form" id="formContainer" aria-label="Formulário do pedido" hidden>
+                <div id="dynamicForm"></div>
+            </section>
+        </div>
+
+        <aside class="nr-after" aria-labelledby="depoisTitulo">
+            <h2 id="depoisTitulo">O que acontece depois</h2>
+            <ol>
+                <li>A coordenação da sua área aprova.</li>
+                <li>O pedido entra na Caixa de <strong data-sector-name-out>do setor escolhido</strong>.</li>
+                <li>Se precisarem de outro setor, eles chamam. Você acompanha tudo aqui.</li>
+                <li>Você recebe um aviso a cada etapa.</li>
+            </ol>
+        </aside>
+    </div>
+
+    <div class="nr-nav" data-step-nav>
+        <button type="button" class="btn nr-nav__back" data-step-back hidden>Voltar</button>
+        <button type="button" class="btn btn--primary nr-nav__next" data-step-next>Continuar</button>
+        <button type="button" class="btn btn--primary nr-nav__send" data-step-send hidden><i class="fa-solid fa-paper-plane" aria-hidden="true"></i> Enviar pedido</button>
     </div>
 </div>
-
-<div class="new-request" data-new-request>
-    <section class="type-picker" aria-labelledby="tipo-titulo">
-        <h2 id="tipo-titulo" class="type-picker__title">Que tipo de pedido?</h2>
-        <div class="type-list">
-            <?php foreach ($qr->fetchAll(PDO::FETCH_ASSOC) as $row):
-                $info = $modelInfo[$row['form_name']] ?? ['icon' => 'fa-file-lines', 'sector' => 'mkt', 'label' => $row['name'], 'examples' => $row['descp']];
-            ?>
-                <button type="button" class="type-card" data-id="<?= (int)$row['id'] ?>" data-sector="<?= e($info['sector']) ?>" aria-pressed="false">
-                    <i class="fa-solid <?= e($info['icon']) ?> type-card__icon" aria-hidden="true"></i>
-                    <span class="type-card__text">
-                        <strong><?= e($info['label']) ?></strong>
-                        <span class="type-card__desc"><?= e($info['examples']) ?></span>
-                    </span>
-                </button>
-            <?php endforeach; ?>
-        </div>
-    </section>
-
-    <section class="form-panel" id="formContainer" aria-label="Formulário do pedido" hidden>
-        <div id="dynamicForm"></div>
-    </section>
-</div>
-
-<script>
-    (function () {
-        const layout = document.querySelector('[data-new-request]');
-        const cards = layout.querySelectorAll('.type-card');
-        const panel = document.getElementById('formContainer');
-        const holder = document.getElementById('dynamicForm');
-        const cache = {};
-        const kept = ['title', 'details', 'end', 'obs'];
-
-        cards.forEach(card => {
-            card.addEventListener('click', async () => {
-                if (card.getAttribute('aria-pressed') === 'true') return;
-
-                // O que já foi escrito continua lá ao trocar de tipo
-                const typed = {};
-                kept.forEach(name => {
-                    const field = holder.querySelector(`[name="${name}"]`);
-                    if (field && field.value.trim() !== '') typed[name] = field.value;
-                });
-
-                cards.forEach(c => c.setAttribute('aria-pressed', c === card ? 'true' : 'false'));
-                layout.classList.add('has-choice');
-                panel.hidden = false;
-                panel.dataset.sector = card.dataset.sector;
-
-                let html = cache[card.dataset.id];
-                if (!html) {
-                    holder.innerHTML = '<div class="empty-state"><div class="spinner"></div><p>Abrindo formulário...</p></div>';
-                    const formData = new FormData();
-                    formData.append('action', 'get');
-                    formData.append('id', card.dataset.id);
-                    const data = await fetchAjax('api/get_form.php', formData);
-                    if (!data || !data.success) {
-                        holder.innerHTML = '<div class="empty-state"><i class="fa-solid fa-triangle-exclamation" aria-hidden="true"></i><p>Não foi possível abrir o formulário. Tente de novo.</p></div>';
-                        return;
-                    }
-                    html = cache[card.dataset.id] = data.form;
-                }
-                if (card.getAttribute('aria-pressed') !== 'true') return; // outro tipo foi escolhido enquanto carregava
-
-                holder.innerHTML = html;
-                Object.entries(typed).forEach(([name, value]) => {
-                    const field = holder.querySelector(`[name="${name}"]`);
-                    if (field) field.value = value;
-                });
-                if (typed.obs) holder.querySelector('.form-more')?.setAttribute('open', '');
-                bindFormRequests();
-
-                if (window.matchMedia('(min-width: 900px)').matches) {
-                    holder.querySelector('#title')?.focus({ preventScroll: true });
-                } else {
-                    panel.scrollIntoView({ behavior: 'smooth', block: 'start' });
-                }
-            });
-        });
-    })();
-</script>
