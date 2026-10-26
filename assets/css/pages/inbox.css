@@ -1,0 +1,289 @@
+/* =====================================================================
+   Caixa do setor — UI 2.0
+   Celular primeiro: cartões empilhados com faixa lateral (vermelha = urgente,
+   roxa = outro setor) e botão de ação de 46px.
+   ≥900px: linhas tipo tabela dentro de um painel + quatro números no topo.
+   Usa os tokens de app.css; marcação em components/request_card.php (renderWorkRow).
+   ===================================================================== */
+
+/* ---------- Cabeçalho e números do topo ---------- */
+.inbox-head__area { margin: 0 0 2px; font-size: var(--t-sm); color: var(--texto-2); }
+
+.inbox-stats { display: none; }
+@media (min-width: 900px) {
+    .inbox-stats {
+        display: grid;
+        grid-template-columns: repeat(4, minmax(0, 1fr));
+        gap: 12px;
+        margin-bottom: 20px;
+    }
+}
+.inbox-stat {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    padding: 16px;
+    border: 1px solid var(--linha);
+    border-radius: var(--r-3);
+    background: var(--superficie);
+    color: var(--texto);
+    text-decoration: none;
+}
+.inbox-stat:hover { border-color: var(--linha-forte); }
+.inbox-stat:focus-visible { outline: none; box-shadow: var(--anel); }
+.inbox-stat__label { font-size: var(--t-xs); color: var(--texto-2); }
+.inbox-stat__value { font-size: 1.625rem; font-weight: 700; line-height: 1.1; font-variant-numeric: tabular-nums; }
+.inbox-stat--bad { border-color: #FECACA; }
+.inbox-stat--bad .inbox-stat__label, .inbox-stat--bad .inbox-stat__value { color: #991B1B; }
+
+/* ---------- Abas: alvos maiores no celular ---------- */
+@media (max-width: 899.98px) {
+    .inbox-toolbar .tab { min-height: 40px; }
+}
+
+/* ---------- Contêiner: sem painel no celular (cartões soltos) ---------- */
+.queue--cards {
+    background: transparent;
+    border: 0;
+    border-radius: 0;
+}
+.queue--cards > .empty-state {
+    padding: 48px 20px;
+    border: 1px solid var(--linha);
+    border-radius: var(--r-3);
+    background: var(--superficie);
+}
+.queue--cards > .queue__note {
+    margin-bottom: 12px;
+    padding: 12px 14px;
+    border: 1px solid var(--linha);
+    border-radius: var(--r-2);
+    background: var(--superficie);
+}
+
+/* Selecionar todos (lote) */
+.work-pickall {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 4px 10px;
+    margin-bottom: 8px;
+    font-size: var(--t-sm);
+}
+.work-pickall label {
+    display: inline-flex;
+    align-items: center;
+    gap: 10px;
+    min-height: var(--h-md);
+    font-weight: 600;
+    cursor: pointer;
+}
+.work-pickall input { width: 20px; height: 20px; margin: 0; accent-color: var(--grafite); }
+.work-pickall__hint { color: var(--texto-2); }
+
+/* ---------- Faixas (Urgentes, Outros setores, Chegaram, Em andamento) ---------- */
+.lane + .lane { margin-top: 20px; }
+.lane__title {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: baseline;
+    gap: 4px 8px;
+    margin: 0 0 10px;
+    font-size: var(--t-sm);
+    font-weight: 700;
+    color: var(--texto);
+}
+.lane__count { font-weight: 600; color: var(--texto-2); font-variant-numeric: tabular-nums; }
+.lane__hint { font-weight: 400; font-size: var(--t-xs); color: var(--texto-2); }
+.lane--urgentes .lane__title { color: #991B1B; }
+
+.work-list {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+}
+
+/* ---------- Cartão (celular) ---------- */
+.work-row {
+    position: relative;
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+    gap: 12px;
+    padding: 14px 14px 14px 18px;
+    border: 1px solid var(--linha);
+    border-radius: var(--r-3);
+    background: var(--superficie);
+    box-shadow: inset 4px 0 0 var(--faixa, transparent);
+}
+.work-row.is-urgent { --faixa: #DC2626; border-color: #FECACA; }
+.work-row.is-other { --faixa: #9333EA; }
+.work-row:has(input[data-pick]:checked) { background: var(--laranja-claro); border-color: var(--laranja-borda); }
+
+.work-row__bar { display: none; }
+
+.work-row.has-check { grid-template-columns: 32px minmax(0, 1fr); column-gap: 8px; }
+.work-row__check {
+    display: flex;
+    align-items: flex-start;
+    justify-content: center;
+    min-height: var(--h-md);
+    margin: -10px 0 0 -10px;
+    padding-top: 10px;
+    cursor: pointer;
+}
+.work-row__check input { width: 20px; height: 20px; margin: 0; accent-color: var(--grafite); cursor: pointer; }
+
+.work-row__link {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    min-width: 0;
+    color: var(--texto);
+    text-decoration: none;
+    border-radius: var(--r-1);
+}
+.work-row__link:focus-visible { outline: none; box-shadow: var(--anel); }
+/* O cartão inteiro abre o pedido; o botão de ação fica por cima */
+.work-row__link::after { content: ""; position: absolute; inset: 0; border-radius: var(--r-3); }
+.work-row__check, .work-row__act { position: relative; z-index: 1; }
+
+/* Linha 1: Nº · selos · prazo (à direita); linha 2: título */
+.work-row__head {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 6px;
+    min-width: 0;
+}
+.work-row__num { order: 1; font-size: var(--t-xs); color: var(--texto-2); font-variant-numeric: tabular-nums; }
+.work-row__head .badge-urgent { order: 2; }
+.work-row__head .badge-sector { order: 3; max-width: 100%; overflow: hidden; text-overflow: ellipsis; }
+.work-row__sector { order: 4; font-size: var(--t-xs); font-weight: 600; color: var(--texto-2); }
+.work-row__tab {
+    order: 5;
+    padding: 0 8px;
+    border: 1px solid var(--linha);
+    border-radius: var(--r-pill);
+    font-size: 11px;
+    font-weight: 600;
+    color: var(--texto-2);
+}
+.work-row__due--top { order: 6; margin-left: auto; }
+.work-row__title {
+    order: 7;
+    flex: 1 0 100%;
+    font-size: var(--t-md);
+    font-weight: 600;
+    line-height: 1.3;
+    overflow-wrap: anywhere;
+}
+.work-row__meta { font-size: var(--t-xs); line-height: 1.4; color: var(--texto-2); overflow-wrap: anywhere; }
+.work-row__note { font-size: var(--t-xs); color: var(--texto-2); overflow-wrap: anywhere; }
+.work-row__note--in { color: var(--texto); font-weight: 600; }
+.work-row__note--bad { color: var(--perigo); font-weight: 600; }
+.work-row__note--ok { color: var(--ok); }
+
+/* Prazo colorido */
+.work-row__due { font-size: var(--t-xs); font-weight: 600; color: var(--texto-2); white-space: nowrap; font-variant-numeric: tabular-nums; }
+.work-row__due--bad { color: var(--perigo); font-weight: 700; }
+.work-row__due--warn { color: var(--laranja-escuro); font-weight: 700; }
+.work-row__due--muted { font-weight: 400; }
+.work-row__due--col { display: none; }
+
+/* Ação rápida: 46px no celular, largura toda */
+.work-row__act {
+    grid-column: 1 / -1;
+    width: 100%;
+    min-height: 46px;
+    font-size: 0.9375rem;
+}
+.work-row__act--go { background: var(--grafite); border-color: var(--grafite); color: var(--texto-inv); }
+.work-row__act--go:hover { background: #27272A; border-color: #27272A; }
+.work-row__act:focus-visible { outline: none; box-shadow: var(--anel); }
+
+/* Barra de lote fixa (celular) não cobre o último cartão */
+@media (max-width: 899.98px) {
+    body.has-bulk .queue--cards { margin-bottom: 150px; }
+    .work-row.has-check .work-row__check:empty { visibility: hidden; }
+}
+
+/* ---------- Computador: linhas tipo tabela dentro de um painel ---------- */
+@media (min-width: 900px) {
+    .queue--cards {
+        background: var(--superficie);
+        border: 1px solid var(--linha);
+        border-radius: var(--r-3);
+        overflow: clip;
+    }
+    .queue--cards > .empty-state { border: 0; border-radius: 0; }
+    .queue--cards > .queue__note { margin: 0; border: 0; border-bottom: 1px solid var(--linha); border-radius: 0; }
+
+    .work-pickall { margin: 0; padding: 4px 20px; border-bottom: 1px solid var(--linha); }
+
+    .lane + .lane { margin-top: 0; }
+    .lane__title {
+        margin: 0;
+        padding: 12px 20px;
+        background: #FAFAFA;
+        border-bottom: 1px solid var(--linha);
+        font-size: var(--t-xs);
+    }
+    .lane + .lane .lane__title { border-top: 1px solid var(--linha); }
+
+    .work-list { gap: 0; }
+    .work-row {
+        display: flex;
+        align-items: center;
+        gap: 16px;
+        padding: 12px 20px;
+        border: 0;
+        border-radius: 0;
+        box-shadow: none;
+    }
+    .work-row + .work-row { border-top: 1px solid var(--fundo-2); }
+    .work-row:hover { background: var(--fundo); }
+    .work-row.is-urgent { border-color: transparent; }
+    .work-row:has(input[data-pick]:checked) { background: var(--laranja-claro); }
+    .work-row.has-check { padding-left: 8px; }
+
+    .work-row__bar {
+        display: block;
+        flex: 0 0 4px;
+        align-self: stretch;
+        min-height: 36px;
+        border-radius: 4px;
+        background: var(--faixa, var(--linha));
+    }
+    .work-row__check { flex: 0 0 32px; margin: 0; padding: 0; align-items: center; min-height: var(--h-md); }
+
+    .work-row__link { flex: 1 1 auto; gap: 4px; }
+    .work-row__link::after { border-radius: 0; }
+
+    /* Nº, título e selos na mesma linha */
+    .work-row__head { gap: 6px 8px; }
+    .work-row__num, .work-row__title, .work-row__head .badge-urgent, .work-row__head .badge-sector,
+    .work-row__sector, .work-row__tab { order: 0; }
+    .work-row__num { font-size: var(--t-xs); }
+    .work-row__title { flex: 0 1 auto; font-size: 0.9375rem; }
+    .work-row__due--top { display: none; }
+
+    .work-row__due--col {
+        display: block;
+        flex: 0 0 132px;
+        text-align: right;
+        font-size: var(--t-xs);
+    }
+    .work-row__act {
+        flex: 0 0 auto;
+        width: auto;
+        min-width: 132px;
+        min-height: 38px;
+        padding: 0 14px;
+        font-size: var(--t-xs);
+    }
+    /* Cabe o botão + a coluna de seleção na barra de lote fixa ao fim da lista */
+    .queue--cards .bulk-bar { border-radius: 0; }
+}

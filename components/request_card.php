@@ -124,3 +124,148 @@ if (!function_exists('renderQueueRow')) {
             . '</div>';
     }
 }
+
+if (!function_exists('renderWorkRow')) {
+    /**
+     * UI 2.0 — pedido da Caixa do setor: cartão no celular, linha tipo tabela no computador.
+     * Função nova (não muda renderQueueRow). Estilos em assets/css/pages/inbox.css.
+     * $opt:
+     *   href    link do pedido
+     *   check   '' sem seleção | 'none' espaço vazio | grupo do lote ('novos', 'andamento')
+     *   sector  nome do setor dono (Caixa com vários setores) ou ''
+     *   badge   selo de outro setor (ex.: "Ajuda para Manutenção") ou ''
+     *   meta    linha de apoio: quem pediu · área · motivo
+     *   note    [texto, tipo] situação curta ('in', 'bad', 'ok' ou '')
+     *   due     false para não mostrar o prazo (histórico)
+     *   tab     nome da aba (resultados de busca)
+     *   action  null | [label, quick ('start'|'finish'|'accept'|'return'|''), forward id, primário?]
+     *           quick '' vira link para o pedido
+     */
+    function renderWorkRow(array $row, array $opt = []): string
+    {
+        $id = (int)($row['id'] ?? 0);
+        $sector = str_replace(['ctd_', '_frm'], '', strtolower(trim((string)($row['table'] ?? ''))));
+        $href = (string)($opt['href'] ?? ('request_detail?id=' . $id . '&table=' . urlencode($sector)));
+        $check = (string)($opt['check'] ?? '');
+        $urgent = !empty($row['is_urgent']);
+        $badge = trim((string)($opt['badge'] ?? ''));
+        [$note, $noteKind] = ($opt['note'] ?? []) + ['', ''];
+
+        $due = '';
+        $dueKind = '';
+        if (($opt['due'] ?? true) !== false) {
+            [$due, $dueKind] = deadlineLabel((string)($row['date'] ?? ''));
+        }
+        $dueClass = 'work-row__due' . ($dueKind !== '' ? ' work-row__due--' . e($dueKind) : '');
+
+        $classes = 'work-row' . ($urgent ? ' is-urgent' : ($badge !== '' ? ' is-other' : '')) . ($check !== '' ? ' has-check' : '');
+        $html = '<li class="' . $classes . '" data-key="' . e($sector) . ':' . $id . '">';
+        $html .= '<span class="work-row__bar" aria-hidden="true"></span>';
+        if ($check === 'none') {
+            $html .= '<span class="work-row__check"></span>';
+        } elseif ($check !== '') {
+            $html .= '<label class="work-row__check"><input type="checkbox" data-pick data-group="' . e($check) . '" value="' . e($sector) . ':' . $id . '" aria-label="Selecionar pedido nº ' . $id . '"></label>';
+        }
+
+        $html .= '<a class="work-row__link" href="' . e($href) . '">'
+            . '<span class="work-row__head">'
+            .   '<span class="work-row__num">Nº ' . $id . '</span>'
+            .   '<span class="work-row__title">' . e($row['title'] ?? 'Sem título') . '</span>'
+            .   ($urgent ? '<span class="badge-urgent">Urgente</span>' : '')
+            .   ($badge !== '' ? '<span class="badge-sector">' . e($badge) . '</span>' : '')
+            .   (!empty($opt['sector']) ? '<span class="work-row__sector">' . e($opt['sector']) . '</span>' : '')
+            .   (!empty($opt['tab']) ? '<span class="work-row__tab">' . e($opt['tab']) . '</span>' : '')
+            .   ($due !== '' ? '<span class="' . $dueClass . ' work-row__due--top">' . e($due) . '</span>' : '')
+            . '</span>';
+        if (trim((string)($opt['meta'] ?? '')) !== '') {
+            $html .= '<span class="work-row__meta">' . e($opt['meta']) . '</span>';
+        }
+        if ($note !== '') {
+            $html .= '<span class="work-row__note' . ($noteKind !== '' ? ' work-row__note--' . e($noteKind) : '') . '">' . e($note) . '</span>';
+        }
+        $html .= '</a>';
+
+        // Prazo em coluna própria (computador); no celular ele vai na primeira linha do cartão
+        $html .= '<span class="' . $dueClass . ' work-row__due--col" aria-hidden="true">' . e($due) . '</span>';
+
+        $action = $opt['action'] ?? null;
+        if (is_array($action)) {
+            [$label, $quick, $forwardId, $primary] = $action + ['', '', 0, false];
+            $btnClass = 'btn work-row__act' . ($primary ? ' work-row__act--go' : '');
+            if ($quick === '') {
+                $html .= '<a class="' . $btnClass . '" href="' . e($href) . '">' . e($label) . '</a>';
+            } else {
+                $html .= '<button type="button" class="' . $btnClass . '" data-quick="' . e($quick) . '"'
+                    . ' data-id="' . $id . '" data-table="' . e($sector) . '"'
+                    . ((int)$forwardId > 0 ? ' data-forward="' . (int)$forwardId . '"' : '')
+                    . ' aria-label="' . e($label . ': pedido nº ' . $id) . '">' . e($label) . '</button>';
+            }
+        }
+        return $html . '</li>';
+    }
+}
+
+if (!function_exists('renderApproveCard')) {
+    /** Resumo curto do pedido para decidir sem abrir: descrição, ou cópias e tipo (Reprografia) */
+    function requestSummary(array $row, int $max = 220): string
+    {
+        $text = trim(preg_replace('/\s+/u', ' ', (string)($row['descp'] ?? '')));
+        if ($text === '' && !empty($row['qtd'])) {
+            $text = (int)$row['qtd'] . ' cópias' . (trim((string)($row['type'] ?? '')) !== '' ? ' · ' . trim((string)$row['type']) : '');
+        }
+        return mb_strlen($text) > $max ? rtrim(mb_substr($text, 0, $max - 1)) . '…' : $text;
+    }
+
+    /**
+     * UI 2.0 — cartão da tela Aprovar pedidos (um por vez no celular, grade no computador).
+     * $opt: href (link do pedido), check (true mostra a caixa de seleção do lote)
+     */
+    function renderApproveCard(array $row, array $opt = []): string
+    {
+        $id = (int)($row['id'] ?? 0);
+        $sector = str_replace(['ctd_', '_frm'], '', strtolower(trim((string)($row['table'] ?? ''))));
+        $href = (string)($opt['href'] ?? ('request_detail?id=' . $id . '&table=' . urlencode($sector)));
+        $urgent = !empty($row['is_urgent']);
+        $reason = trim((string)($row['urgent_reason'] ?? ''));
+        $who = trim((string)($row['solicitor_name_formatted'] ?? $row['solicitor_name'] ?? ''));
+        $who = $who === '—' ? '' : $who;
+        $sub = trim((string)($row['subdivision_name'] ?? ''));
+        [$age] = ($row['context'] ?? []) + [''];
+        [$due, $dueKind] = deadlineLabel((string)($row['date'] ?? ''));
+        $summary = requestSummary($row);
+        $uid = $sector . '-' . $id;
+        $title = (string)($row['title'] ?? 'Sem título');
+
+        $html = '<li class="approve-card' . ($urgent ? ' is-urgent' : '') . '" data-approve-card data-key="' . e($sector) . ':' . $id . '"'
+            . ' data-id="' . $id . '" data-table="' . e($sector) . '" aria-labelledby="ac-' . e($uid) . '">'
+            . '<div class="approve-card__head">';
+        if (!empty($opt['check'])) {
+            $html .= '<label class="approve-card__check"><input type="checkbox" data-pick data-group="approve" value="' . e($sector) . ':' . $id . '" aria-label="Selecionar pedido nº ' . $id . '"></label>';
+        }
+        $html .= '<span class="approve-card__meta">Nº ' . $id . ' · ' . e(requestSectorName($sector)) . ($age !== '' ? ' · ' . e(mb_strtolower($age)) : '') . '</span>'
+            . ($urgent ? '<span class="badge-urgent">Urgente</span>' : '')
+            . '</div>'
+            . '<a class="approve-card__title" id="ac-' . e($uid) . '" href="' . e($href) . '">' . e($title) . '</a>';
+        if ($summary !== '') {
+            $html .= '<p class="approve-card__desc">' . e($summary) . '</p>';
+        }
+        if ($urgent) {
+            $html .= '<p class="approve-card__reason"><strong>Motivo da urgência:</strong> ' . e($reason !== '' ? $reason : 'não informado') . '</p>';
+        }
+        $html .= '<dl class="approve-card__facts">'
+            . '<div><dt>Pediu</dt><dd>' . e(implode(' · ', array_filter([$who, $sub])) ?: '—') . '</dd></div>'
+            . '<div><dt>Prazo</dt><dd class="approve-card__due' . ($dueKind !== '' ? ' approve-card__due--' . e($dueKind) : '') . '">' . e($due) . '</dd></div>'
+            . '</dl>'
+            . '<div class="approve-card__refuse" data-refuse-box hidden>'
+            .   '<label for="rr-' . e($uid) . '">Motivo da recusa <span class="req">*</span> <small>(quem pediu vai ler)</small></label>'
+            .   '<input type="text" id="rr-' . e($uid) . '" maxlength="1000" data-refuse-reason autocomplete="off" placeholder="Ex.: já temos esse material no almoxarifado">'
+            .   '<p class="field-error" data-refuse-error hidden>Escreva o motivo da recusa.</p>'
+            . '</div>'
+            . '<div class="approve-card__actions">'
+            .   '<button type="button" class="btn btn--primary" data-decide="approve" aria-label="Aprovar pedido nº ' . $id . '">Aprovar</button>'
+            .   '<button type="button" class="btn" data-decide="refuse" aria-label="Recusar pedido nº ' . $id . '">Recusar</button>'
+            . '</div>'
+            . '</li>';
+        return $html;
+    }
+}

@@ -1,0 +1,218 @@
+/* =====================================================================
+   Aprovar pedidos — UI 2.0
+   Celular primeiro: um pedido por vez (cartão grande), progresso e
+   Recusar/Aprovar fixos acima da barra inferior (.bottom-nav).
+   ≥900px: grade de cartões com Aprovar/Recusar em cada um.
+   Marcação: components/request_card.php (renderApproveCard); comportamento: assets/js/pages/approve.js
+   ===================================================================== */
+
+/* ---------- Contêiner: cartões soltos, sem painel ---------- */
+.approve-deck {
+    background: transparent;
+    border: 0;
+    border-radius: 0;
+}
+.approve-deck > .empty-state {
+    padding: 48px 20px;
+    border: 1px solid var(--linha);
+    border-radius: var(--r-3);
+    background: var(--superficie);
+}
+.approve-deck > .queue__note {
+    margin-bottom: 12px;
+    padding: 12px 14px;
+    border: 1px solid var(--linha);
+    border-radius: var(--r-2);
+    background: var(--superficie);
+}
+
+/* ---------- Progresso (celular) ---------- */
+.approve-progress { display: grid; gap: 8px; margin-bottom: 14px; }
+.approve-progress__row { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.approve-progress__text { font-size: var(--t-sm); font-weight: 600; color: var(--texto-2); font-variant-numeric: tabular-nums; }
+.approve-progress__toggle { min-height: var(--h-md); }
+.approve-progress__track { height: 4px; border-radius: 2px; background: var(--linha); overflow: hidden; }
+.approve-progress__track > span { display: block; width: 0; height: 100%; background: var(--laranja); transition: width .25s ease; }
+@media (prefers-reduced-motion: reduce) { .approve-progress__track > span { transition: none; } }
+
+/* Selecionar todos (lote) */
+.approve-pickall {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 4px 10px;
+    margin-bottom: 8px;
+    font-size: var(--t-sm);
+}
+.approve-pickall label { display: inline-flex; align-items: center; gap: 10px; min-height: var(--h-md); font-weight: 600; cursor: pointer; }
+.approve-pickall input { width: 20px; height: 20px; margin: 0; accent-color: var(--grafite); }
+.approve-pickall__hint { color: var(--texto-2); }
+
+/* ---------- Cartão ---------- */
+.approve-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 12px; }
+.approve-card {
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+    padding: 18px;
+    border: 1px solid var(--linha);
+    border-radius: 18px;
+    background: var(--superficie);
+}
+.approve-card[hidden] { display: none; }
+.approve-card.is-urgent { border-color: #FECACA; }
+.approve-card:has(input[data-pick]:checked) { border-color: var(--laranja-borda); background: var(--laranja-claro); }
+
+.approve-card__head { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 8px; }
+.approve-card__check {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: var(--h-md);
+    height: var(--h-md);
+    margin: -12px 0 -12px -12px;
+    cursor: pointer;
+}
+.approve-card__check input { width: 20px; height: 20px; margin: 0; accent-color: var(--grafite); cursor: pointer; }
+.approve-card__meta { font-size: var(--t-xs); color: var(--texto-2); }
+
+.approve-card__title {
+    font-size: 1.25rem;
+    font-weight: 700;
+    line-height: 1.25;
+    color: var(--texto);
+    text-decoration: none;
+    overflow-wrap: anywhere;
+}
+.approve-card__title:hover { color: var(--laranja-escuro); text-decoration: underline; }
+.approve-card__title:focus-visible { outline: none; box-shadow: var(--anel); border-radius: 4px; }
+.approve-card__desc { margin: 0; font-size: 0.9375rem; line-height: 1.55; color: #3F3F46; overflow-wrap: anywhere; }
+.approve-card__reason {
+    margin: 0;
+    padding: 12px;
+    border-radius: var(--r-2);
+    background: #FEF2F2;
+    color: #7F1D1D;
+    font-size: var(--t-sm);
+    line-height: 1.5;
+    overflow-wrap: anywhere;
+}
+
+.approve-card__facts { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; margin: 0; padding-top: 2px; }
+.approve-card__facts div { display: grid; gap: 2px; min-width: 0; }
+.approve-card__facts dt { font-size: var(--t-xs); color: var(--texto-2); }
+.approve-card__facts dd { margin: 0; font-size: 0.9375rem; font-weight: 600; overflow-wrap: anywhere; }
+.approve-card__due--bad { color: var(--perigo); }
+.approve-card__due--warn { color: var(--laranja-escuro); }
+.approve-card__due--muted { color: var(--texto-2); font-weight: 400; }
+
+.approve-card__refuse { display: grid; gap: 6px; }
+.approve-card__refuse[hidden] { display: none; }
+.approve-card__refuse label { font-size: var(--t-sm); font-weight: 600; }
+.approve-card__refuse label small { font-weight: 400; color: var(--texto-2); }
+.approve-card__refuse input { min-height: 50px; font-size: 16px; }
+
+.approve-card__actions { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; margin-top: auto; }
+.approve-card__actions .btn { min-height: 46px; }
+.approve-card.is-refusing [data-decide="refuse"] { border-color: var(--perigo); color: var(--perigo); }
+
+.approve-next { margin: 10px 0 0; font-size: var(--t-xs); color: var(--texto-2); text-align: center; }
+.approve-next:empty { display: none; }
+.approve-done[hidden] { display: none; }
+.approve-done { padding: 48px 20px; border: 1px solid var(--linha); border-radius: var(--r-3); background: var(--superficie); }
+
+/* ---------- Celular, um por vez ---------- */
+.approve-dock { display: none; }
+@media (max-width: 899.98px) {
+    .approve-deck.is-deck .approve-card:not(.is-current) { display: none; }
+    .approve-deck.is-deck .approve-card__actions,
+    .approve-deck.is-deck .approve-card__check,
+    .approve-deck.is-deck .approve-pickall { display: none; }
+    .approve-deck.is-deck .approve-card { padding: 18px; }
+    /* Espaço para a barra de decisão fixa */
+    .approve-deck.is-deck { margin-bottom: 96px; }
+
+    .approve-dock:not([hidden]) {
+        position: fixed;
+        left: 0;
+        right: 0;
+        bottom: calc(var(--bottomnav-h) + env(safe-area-inset-bottom));
+        z-index: 44;
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 10px;
+        padding: 12px 16px;
+        background: var(--superficie);
+        border-top: 1px solid var(--linha);
+    }
+    .approve-dock .btn { min-height: 56px; border-radius: 14px; font-size: var(--t-md); }
+    .approve-dock.is-refusing .approve-dock__refuse { background: var(--perigo); border-color: var(--perigo); color: var(--texto-inv); }
+    /* Barra de lote no lugar da barra de decisão */
+    body.has-bulk .approve-dock { display: none; }
+    body.has-bulk .approve-deck { margin-bottom: 150px; }
+}
+
+/* ---------- Aviso com Desfazer ---------- */
+.undo-toast {
+    position: fixed;
+    left: 16px;
+    right: 16px;
+    bottom: calc(var(--bottomnav-h) + env(safe-area-inset-bottom) + 92px);
+    z-index: 121;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    padding: 10px 10px 10px 16px;
+    border-radius: 14px;
+    background: var(--grafite);
+    color: var(--texto-inv);
+    box-shadow: var(--sombra-2);
+}
+.undo-toast[hidden] { display: none; }
+.undo-toast__text { font-size: var(--t-sm); font-weight: 600; }
+.undo-toast__btn {
+    flex: none;
+    min-height: var(--h-md);
+    padding: 0 14px;
+    border: 1px solid var(--linha-inv);
+    border-radius: 10px;
+    background: transparent;
+    color: var(--texto-inv);
+    font: inherit;
+    font-size: var(--t-sm);
+    font-weight: 700;
+    cursor: pointer;
+}
+.undo-toast__btn:hover { background: rgb(255 255 255 / .08); }
+.undo-toast__btn:focus-visible { outline: none; box-shadow: var(--anel); }
+/* Sem a barra de decisão (lista ou lote), o aviso desce */
+.undo-toast.is-low { bottom: calc(var(--bottomnav-h) + env(safe-area-inset-bottom) + 12px); }
+
+/* ---------- Computador: grade de cartões ---------- */
+@media (min-width: 900px) {
+    .approve-progress { display: none; }
+    .approve-list { grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); gap: 14px; }
+    .approve-card { gap: 12px; padding: 20px; border-radius: var(--r-3); }
+    .approve-card__title { font-size: 1.0625rem; font-weight: 600; }
+    .approve-card__desc { font-size: var(--t-sm); }
+    .approve-card__reason { padding: 10px 12px; font-size: var(--t-xs); }
+    .approve-card__facts { display: flex; flex-wrap: wrap; gap: 6px 16px; }
+    .approve-card__facts div { display: flex; gap: 4px; align-items: baseline; }
+    .approve-card__facts dt::after { content: ":"; }
+    .approve-card__facts dd { font-size: var(--t-xs); }
+    .approve-card__refuse input { min-height: 42px; }
+    .approve-card__actions .btn { min-height: 42px; font-size: var(--t-sm); }
+    .approve-next { display: none; }
+
+    .undo-toast {
+        left: calc(50% + var(--sidebar-w) / 2);
+        right: auto;
+        bottom: 24px;
+        transform: translateX(-50%);
+        min-width: 360px;
+        max-width: min(560px, calc(100vw - var(--sidebar-w) - 48px));
+    }
+    .undo-toast.is-low { bottom: 24px; }
+    .approve-deck .bulk-bar { margin-top: 14px; border-radius: var(--r-2); }
+}

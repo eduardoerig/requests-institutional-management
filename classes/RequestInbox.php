@@ -29,6 +29,21 @@ class RequestInbox
         'ajudando' => 'Ajudando outro setor',
     ];
 
+    /**
+     * Faixas de "Para fazer" na tela (UI 2.0), na ordem do trabalho. São só de exibição:
+     * 'group' continua sendo o grupo do fluxo (chegaram, novos, andamento, ajudando).
+     *   urgentes  prioridade alta/crítica ou marcado como urgente, de qualquer grupo
+     *   outros    outros setores pedindo ajuda ou transferindo (chegaram + ajudando)
+     *   novos     aprovados pela coordenação, ainda sem atendimento
+     *   andamento já começaram
+     */
+    public const LANES = [
+        'urgentes' => ['Urgentes', 'resolva primeiro'],
+        'outros' => ['Outros setores pedindo ajuda', 'vocês fazem uma parte e devolvem'],
+        'novos' => ['Chegaram', 'aprovados pela coordenação'],
+        'andamento' => ['Em andamento', 'já começaram'],
+    ];
+
     /** Abas antigas (links salvos e avisos antigos) */
     public const LEGACY_TABS = [
         'novos' => 'fazer',
@@ -123,7 +138,7 @@ class RequestInbox
                 $params = array_merge($params, $ids);
             }
             if ($where) {
-                $parts[] = "SELECT '$sector' AS req_table, r.id, r.title, r.date, r.created_at, r.status, r.priority, r.created_by, r.subdivision_id,
+                $parts[] = "SELECT '$sector' AS req_table, r.id, r.title, r.date, r.created_at, r.status, r.priority, r.urgent, r.obs, r.created_by, r.subdivision_id,
                         u.name AS solicitor_name, sub.name AS subdivision_name
                     FROM `ctd_{$sector}_frm` r
                     LEFT JOIN ctd_users u ON u.id = r.created_by
@@ -223,9 +238,23 @@ class RequestInbox
             }
         }
 
-        // Ordem: grupos na ordem do trabalho e prazo mais próximo primeiro; histórico do mais recente
-        $groupOrder = array_flip(array_keys(self::GROUPS));
-        usort($tabs['fazer'], fn($a, $b) => ($groupOrder[$a['group']] <=> $groupOrder[$b['group']]) ?: self::byDeadline($a, $b));
+        // Urgência e faixa da tela (só exibição; 'group' fica como está)
+        foreach ($tabs as $tab => $rows) {
+            foreach ($rows as $i => $row) {
+                [$tabs[$tab][$i]['is_urgent'], $tabs[$tab][$i]['urgent_reason']] = self::urgencyOf($row);
+            }
+        }
+        foreach ($tabs['fazer'] as $i => $row) {
+            $tabs['fazer'][$i]['lane'] = $row['is_urgent'] ? 'urgentes' : match ($row['group']) {
+                'chegaram', 'ajudando' => 'outros',
+                'novos' => 'novos',
+                default => 'andamento',
+            };
+        }
+
+        // Ordem: faixas na ordem do trabalho e prazo mais próximo primeiro; histórico do mais recente
+        $laneOrder = array_flip(array_keys(self::LANES));
+        usort($tabs['fazer'], fn($a, $b) => ($laneOrder[$a['lane']] <=> $laneOrder[$b['lane']]) ?: self::byDeadline($a, $b));
         usort($tabs['esperando'], [self::class, 'byDeadline']);
         usort($tabs['historico'], fn($a, $b) => strcmp((string)$b['closed_at'], (string)$a['closed_at']));
         $tabs['historico'] = array_slice($tabs['historico'], 0, self::HISTORY_LIMIT);
@@ -404,9 +433,11 @@ class RequestInbox
             // Há quanto tempo o pedido espera a decisão
             $days = (int)round(($today - strtotime(date('Y-m-d', strtotime((string)$r['created_at'])))) / 86400);
             $r['context'] = [$days <= 0 ? 'Hoje' : ($days === 1 ? 'Ontem' : 'Há ' . $days . ' dias'), $days >= 3 ? 'in' : ''];
+            [$r['is_urgent'], $r['urgent_reason']] = self::urgencyOf($r);
         }
         unset($r);
-        usort($all, [self::class, 'byDeadline']);
+        // Urgentes primeiro; depois prazo mais próximo (mesma ordem no Anterior/Próximo do pedido)
+        usort($all, fn($a, $b) => ($b['is_urgent'] <=> $a['is_urgent']) ?: self::byDeadline($a, $b));
 
         $term = mb_strtolower(trim($q));
         $rows = array_values(array_filter($all, function ($r) use ($sector, $term) {
@@ -420,6 +451,41 @@ class RequestInbox
             return mb_strpos($hay, $term) !== false;
         }));
         return ['all' => $all, 'rows' => $rows];
+    }
+
+    /**
+     * Urgente = prioridade alta/crítica (3-4) ou marcado como urgente.
+     * O motivo vem da primeira linha das observações ("Urgente: ..."), como api/add_request.php grava.
+     * @return array{0: bool, 1: string}
+     */
+    public static function urgencyOf(array $row): array
+    {
+        $flag = mb_strtolower(trim((string)($row['urgent'] ?? '')));
+        $urgent = (int)($row['priority'] ?? 2) >= 3 || !in_array($flag, ['', '0', 'nao', 'não'], true);
+        $reason = '';
+        $first = trim(explode("\n", (string)($row['obs'] ?? ''), 2)[0]);
+        if (preg_match('/^urgente:\s*(.+)$/iu', $first, $m)) {
+            $reason = trim($m[1]);
+        }
+        return [$urgent, $reason];
+    }
+
+    /** Números do topo da Caixa: para fazer, urgentes, atrasados e esperando outro setor */
+    public static function summary(array $inbox): array
+    {
+        $today = date('Y-m-d');
+        $urgent = $late = 0;
+        foreach ($inbox['tabs']['fazer'] ?? [] as $row) {
+            $urgent += !empty($row['is_urgent']) ? 1 : 0;
+            $date = substr((string)($row['date'] ?? ''), 0, 10);
+            $late += ($date !== '' && strpos($date, '0000') !== 0 && $date < $today) ? 1 : 0;
+        }
+        return [
+            'fazer' => (int)($inbox['counts']['fazer'] ?? 0),
+            'urgentes' => $urgent,
+            'atrasados' => $late,
+            'esperando' => (int)($inbox['counts']['esperando'] ?? 0),
+        ];
     }
 
     /** Prazo mais próximo primeiro; sem prazo por último; empate: mais recente primeiro */
