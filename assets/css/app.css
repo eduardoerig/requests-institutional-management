@@ -6,15 +6,16 @@
 
 /* ---------- 1. Tokens ---------- */
 :root {
-    /* Neutros */
-    --grafite: #26252B;
-    --fundo: #F3F4F6;
+    /* Neutros (UI 2.0: SaaS limpo, celular primeiro) */
+    --grafite: #18181B;
+    --fundo: #F6F6F7;
+    --fundo-2: #F4F4F5;
     --superficie: #FFFFFF;
-    --linha: #DDE0E6;
-    --linha-forte: #C5CAD3;
-    --texto: #26252B;
-    --texto-2: #565A63;
-    --texto-3: #5F636C;
+    --linha: #E4E4E7;
+    --linha-forte: #D4D4D8;
+    --texto: #18181B;
+    --texto-2: #52525B;
+    --texto-3: #52525B;
     --texto-inv: #FFFFFF;
     --texto-inv-2: #D6D6DC;
     --linha-inv: rgb(255 255 255 / .35);
@@ -22,9 +23,10 @@
     --veu-claro: rgb(255 255 255 / .6);
 
     /* Marca: só ação principal, seleção e foco */
-    --laranja: #C2570C;
-    --laranja-escuro: #A34708;
-    --laranja-claro: #FFF1E5;
+    --laranja: #C2410C;
+    --laranja-escuro: #9A3412;
+    --laranja-claro: #FFF7ED;
+    --laranja-borda: #FED7AA;
     --anel: 0 0 0 3px rgb(240 138 44 / .4);
     --anel-dentro: inset 0 0 0 3px rgb(240 138 44 / .4);
 
@@ -35,12 +37,15 @@
     --perigo-claro: #FEE2E2;
     --aviso: #B45309;
     --aviso-claro: #FEF3C7;
-    --info: #2563EB;
-    --info-claro: #DBEAFE;
+    --info: #1D4ED8;
+    --info-claro: #EFF6FF;
+    /* Encaminhado / outro setor envolvido */
+    --roxo: #6B21A8;
+    --roxo-claro: #F3E8FF;
 
     /* Tipografia */
-    --fonte: "Atkinson Hyperlegible Next", "Atkinson Hyperlegible", system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
-    --fonte-num: "Atkinson Hyperlegible Mono", ui-monospace, "Cascadia Mono", Consolas, monospace;
+    --fonte: "Inter", system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+    --fonte-num: "Inter", system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
     --t-xs: 0.8125rem;
     --t-sm: 0.875rem;
     --t-md: 1rem;
@@ -59,15 +64,15 @@
     --s-8: 48px;
 
     /* Forma */
-    --r-1: 6px;
-    --r-2: 10px;
+    --r-1: 8px;
+    --r-2: 12px;
     --r-3: 16px;
     --r-pill: 999px;
     --h-sm: 36px;
     --h-md: 44px;
     --h-lg: 52px;
-    --sombra-1: 0 4px 12px rgb(38 37 43 / .10);
-    --sombra-2: 0 16px 40px rgb(38 37 43 / .18);
+    --sombra-1: 0 1px 2px rgb(24 24 27 / .04), 0 8px 24px rgb(24 24 27 / .06);
+    --sombra-2: 0 16px 40px rgb(24 24 27 / .18);
 
     /* Casca */
     --topbar-h: 60px;
@@ -216,15 +221,7 @@ small { font-size: 0.875em; }
 .sidebar .menu-link i { width: 22px; text-align: center; color: var(--texto-3); }
 .sidebar .menu-link > span:not(.sidebar-badge) { flex: 1; }
 .sidebar .menu-link:hover { background: var(--fundo); color: var(--texto); }
-.sidebar .menu-link.is-active { background: var(--fundo); color: var(--texto); }
-.sidebar .menu-link.is-active::before {
-    content: "";
-    position: absolute;
-    left: -12px; top: 8px; bottom: 8px;
-    width: 3px;
-    border-radius: 0 var(--r-1) var(--r-1) 0;
-    background: var(--grafite);
-}
+.sidebar .menu-link.is-active { background: var(--fundo-2); color: var(--texto); }
 .sidebar .menu-link.is-active i { color: var(--grafite); }
 .sidebar .menu-link--new { justify-content: center; min-height: var(--h-md); border-radius: var(--r-2); background: var(--laranja); color: var(--texto-inv); margin-bottom: 16px; }
 .sidebar .menu-link--new > span:not(.sidebar-badge) { flex: 0 0 auto; }
@@ -312,15 +309,7 @@ small { font-size: 0.875em; }
     cursor: pointer;
 }
 .bottom-nav__item i { font-size: var(--t-xl); }
-.bottom-nav__item.is-active { color: var(--texto); font-weight: 700; }
-.bottom-nav__item.is-active::after {
-    content: "";
-    position: absolute;
-    top: 0; left: 30%; right: 30%;
-    height: 3px;
-    border-radius: 0 0 var(--r-1) var(--r-1);
-    background: var(--grafite);
-}
+.bottom-nav__item.is-active { color: var(--laranja); font-weight: 700; }
 .bottom-nav__item .sidebar-badge {
     position: absolute;
     top: 6px;
@@ -333,11 +322,11 @@ small { font-size: 0.875em; }
     width: 52px;
     height: 52px;
     margin-top: -22px;
-    border-radius: var(--r-3);
+    border-radius: 18px;
     background: var(--laranja);
     color: var(--texto-inv);
     font-size: var(--t-xl);
-    box-shadow: none;
+    box-shadow: 0 6px 16px rgb(194 65 12 / .35);
 }
 .bottom-nav__new.is-active::after { display: none; }
 
@@ -668,29 +657,55 @@ label.chip-radio input:focus-visible + span { outline: none; box-shadow: var(--a
     gap: 6px;
     min-height: 24px;
     padding: 0 10px;
-    border: 1px solid var(--linha);
+    border: 0;
     border-radius: var(--r-pill);
-    background: var(--superficie);
-    color: var(--texto);
-    font-size: var(--t-sm);
+    background: var(--pill-bg, var(--fundo-2));
+    color: var(--pill-fg, #3F3F46);
+    font-size: var(--t-xs);
     font-weight: 600;
     white-space: nowrap;
     line-height: 1.35;
 }
-/* A situação se lê pelo texto; a cor fica só no ponto */
-.status-pill::before {
-    content: "";
-    width: 8px; height: 8px;
-    border-radius: 50%;
-    background: var(--dot, var(--texto-3));
-    flex: none;
+/* Situação em pílula com fundo suave; o texto sempre diz a situação (a cor só reforça) */
+.status-pill--P { --pill-bg: var(--aviso-claro); --pill-fg: #92400E; }
+.status-pill--Y { --pill-bg: var(--fundo-2); --pill-fg: #3F3F46; }
+.status-pill--W { --pill-bg: var(--info-claro); --pill-fg: var(--info); }
+.status-pill--C { --pill-bg: #ECFDF5; --pill-fg: #047857; }
+.status-pill--N { --pill-bg: var(--perigo-claro); --pill-fg: #991B1B; }
+.status-pill--F { --pill-bg: var(--roxo-claro); --pill-fg: var(--roxo); }
+
+/* Urgente: aparece em toda lista, cartão e pedido marcado como urgente */
+.badge-urgent {
+    display: inline-flex;
+    align-items: center;
+    min-height: 20px;
+    padding: 0 8px;
+    border-radius: var(--r-pill);
+    background: var(--perigo-claro);
+    color: #991B1B;
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: .02em;
+    text-transform: uppercase;
+    white-space: nowrap;
 }
-.status-pill--P { --dot: var(--aviso); }
-.status-pill--Y { --dot: var(--texto-3); }
-.status-pill--W { --dot: var(--info); }
-.status-pill--C { --dot: var(--ok); }
-.status-pill--N { --dot: var(--perigo); }
-.status-pill--F { --dot: var(--texto-3); }
+.badge-sector { display: inline-flex; align-items: center; min-height: 20px; padding: 0 8px; border-radius: var(--r-pill); background: var(--roxo-claro); color: var(--roxo); font-size: 11px; font-weight: 600; white-space: nowrap; }
+
+/* Etapas em 4 barras: Enviado · Aprovado · No setor · Concluído (mesma leitura em toda tela) */
+.steps4 { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 6px; margin: 0; padding: 0; list-style: none; }
+.steps4 li { display: flex; flex-direction: column; gap: 6px; min-width: 0; font-size: var(--t-xs); color: var(--texto-2); }
+.steps4 li::before { content: ""; height: 6px; border-radius: 3px; background: var(--linha); }
+.steps4 li.is-done::before { background: var(--laranja); }
+.steps4 li.is-now { color: var(--texto); font-weight: 600; }
+.steps4 li.is-now::before { background: var(--laranja); }
+.steps4--bars li { font-size: 0; gap: 0; }
+.steps4 span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+/* Cartão base da UI 2.0 */
+.card { background: var(--superficie); border: 1px solid var(--linha); border-radius: var(--r-3); }
+.card--urgent { border-color: #FECACA; }
+a.card { color: inherit; text-decoration: none; display: block; }
+a.card:hover { border-color: var(--linha-forte); }
 
 .prio-tag { display: inline-flex; align-items: center; gap: 4px; font-size: var(--t-sm); font-weight: 600; }
 .prio-tag--4 { color: var(--perigo); }

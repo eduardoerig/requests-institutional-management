@@ -7,7 +7,7 @@ $url = isset($_GET['url']) ? explode('/', trim($_GET['url'], '/')) : [];
 $logged = $_SESSION['id'] ?? false;
 $role = $_SESSION['role'] ?? 'view';
 $force_reset = (int)($_SESSION['force_reset'] ?? 0);
-$assetVersion = max(array_map(fn($f) => (int)@filemtime($f), glob(__DIR__ . '/assets/{js,css}/*.{js,css}', GLOB_BRACE) ?: [])) ?: time();
+$assetVersion = max(array_map(fn($f) => (int)@filemtime($f), glob(__DIR__ . '/assets/{js,css}/{,pages/}*.{js,css}', GLOB_BRACE) ?: [])) ?: time();
 $csrfToken = getCsrfToken();
 // Caminho base da aplicação (funciona em subpasta local ou na raiz do domínio)
 $basePath = rtrim(str_replace(chr(92), '/', dirname($_SERVER['SCRIPT_NAME'])), '/') . '/';
@@ -72,6 +72,8 @@ $pageTitles = [
 $pageTitle = $pageTitles[$page] ?? 'SisReq';
 $roleClass = preg_replace('/[^a-z_]/', '', (string)$role);
 $pageClass = preg_replace('/[^a-zA-Z_]/', '', (string)$page);
+// CSS/JS próprios da tela (assets/css/pages/<tela>.css, assets/js/pages/<tela>.js), se existirem
+$assetPage = $logged ? $pageClass : 'login';
 ?>
 <!DOCTYPE html>
 <html lang="pt-br">
@@ -80,13 +82,16 @@ $pageClass = preg_replace('/[^a-zA-Z_]/', '', (string)$page);
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
     <base href="<?= e($basePath) ?>">
-    <meta name="theme-color" content="#26252B">
+    <meta name="theme-color" content="#FFFFFF">
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Atkinson+Hyperlegible+Mono:wght@500;700&family=Atkinson+Hyperlegible+Next:wght@400;600;700;800&display=swap">
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.2/css/all.min.css" crossorigin="anonymous" referrerpolicy="no-referrer">
     <link rel="icon" href="assets/img/LogoFavConSisreq.png">
     <link rel="stylesheet" href="assets/css/app.css?v=<?php echo $assetVersion; ?>">
+    <?php if (is_file(__DIR__ . '/assets/css/pages/' . $assetPage . '.css')): ?>
+    <link rel="stylesheet" href="assets/css/pages/<?= e($assetPage) ?>.css?v=<?php echo $assetVersion; ?>">
+    <?php endif; ?>
     <title><?= e($logged ? $pageTitle . ' | SisReq' : 'Entrar | SisReq') ?></title>
 </head>
 
@@ -326,6 +331,9 @@ $pageClass = preg_replace('/[^a-zA-Z_]/', '', (string)$page);
         <div class="spinner" aria-label="Carregando"></div>
     </div>
     <script src="assets/js/script.js?v=<?php echo $assetVersion; ?>"></script>
+    <?php if (is_file(__DIR__ . '/assets/js/pages/' . $assetPage . '.js')): ?>
+    <script src="assets/js/pages/<?= e($assetPage) ?>.js?v=<?php echo $assetVersion; ?>"></script>
+    <?php endif; ?>
 
     <!-- Encaminhar: como, para quem, mensagem, resumo -->
     <div class="modal-overlay fw" id="forwardWizard" role="dialog" aria-modal="true" aria-labelledby="fwTitle" hidden>
