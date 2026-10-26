@@ -376,6 +376,23 @@ $res = $ti->post('api/request_actions.php', ['id' => $helpReqId, 'table' => 'ctd
 check('não conclui com ajuda em aberto', ($res['json']['success'] ?? true) === false);
 $res = $shop->post('api/request_forwards.php', ['action' => 'accept', 'forward_id' => $helpFwd]);
 check('Compras aceita ajudar', ($res['json']['success'] ?? false) === true, snippet($res));
+
+// Conversa interna: quem ajuda não vê a conversa com quem pediu; quem pediu não vê a interna
+$sol->post('api/add_comment.php', ['id' => $helpReqId, 'table' => 'ti', 'comment' => 'Recado publico do solicitante 7731']);
+$res = $ti->post('api/add_comment.php', ['id' => $helpReqId, 'table' => 'ti', 'comment' => 'Combinado interno entre setores 7732', 'channel' => 'internal']);
+check('TI escreve na conversa interna', ($res['json']['success'] ?? false) === true, snippet($res));
+$res = $shop->get("api/get_comments.php?id=$helpReqId&table=ti");
+check('quem ajuda vê a conversa interna', str_contains($res['body'], '7732'));
+check('quem ajuda não vê a conversa com quem pediu', !str_contains($res['body'], '7731'));
+$res = $shop->post('api/add_comment.php', ['id' => $helpReqId, 'table' => 'ti', 'comment' => 'Compras tentando falar com todos 7733', 'channel' => 'public']);
+$ch = $pdo->query("SELECT channel FROM request_comments WHERE request_id = $helpReqId AND request_table = 'ti' AND comment LIKE '%7733%'")->fetchColumn();
+check('mensagem de quem ajuda fica sempre interna', $ch === 'internal', (string)$ch);
+$res = $sol->get("request_detail?id=$helpReqId&table=ti");
+check('quem pediu não vê a conversa interna', $res['status'] === 200 && !str_contains($res['body'], '7732') && !str_contains($res['body'], '7733'));
+$res = $ti->get("api/get_comments.php?id=$helpReqId&table=ti");
+check('setor responsável vê as duas conversas', str_contains($res['body'], '7731') && str_contains($res['body'], '7732'));
+$n = (int)$pdo->query("SELECT COUNT(*) FROM notifications WHERE user_id = $solId AND title LIKE 'Mensagem entre setores%' AND link = 'request_detail?id=$helpReqId&table=ti'")->fetchColumn();
+check('quem pediu não é avisado da conversa interna', $n === 0, (string)$n);
 $res = $shop->post('api/request_actions.php', ['id' => $helpReqId, 'table' => 'ctd_ti_frm', 'action' => 'finish']);
 check('quem ajuda não conclui o pedido', ($res['json']['success'] ?? true) === false);
 $res = $shop->post('api/request_forwards.php', ['action' => 'return', 'forward_id' => $helpFwd, 'note' => '']);

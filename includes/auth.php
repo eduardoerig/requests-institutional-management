@@ -198,6 +198,33 @@ function userHasForwardAccess(PDO $pdo, int $userId, int $requestId, string $sec
 }
 
 /**
+ * Está no pedido só porque o setor foi chamado para AJUDAR? Então vê e usa apenas a conversa
+ * interna entre setores, nunca a conversa com quem pediu.
+ * Não vale para o setor do formulário, o responsável atual (inclui quem assumiu por transferência)
+ * nem para coordenação e administração.
+ */
+function userSeesOnlyInternalChat(PDO $pdo, array $request, string $sector, int $userId, string $role): bool
+{
+    $normalizedSector = normalizeRequestTable($sector);
+    $requestId = (int)($request['id'] ?? 0);
+    if (!isGestorRole($role) || $normalizedSector === null || $requestId <= 0) {
+        return false;
+    }
+    if (isUserManagerOfSector($pdo, $userId, $normalizedSector) || userIsRequestOwner($pdo, $request, $normalizedSector, $userId, $role)) {
+        return false;
+    }
+    $stmt = $pdo->prepare("
+        SELECT COUNT(*)
+        FROM request_forwards rf
+        JOIN cfg_user_area cua ON cua.id_area = rf.to_area_id
+        WHERE rf.request_id = ? AND rf.request_table = ? AND rf.mode = 'help'
+          AND rf.status NOT IN ('refused', 'cancelled') AND cua.id_user = ?
+    ");
+    $stmt->execute([$requestId, $normalizedSector, $userId]);
+    return (int)$stmt->fetchColumn() > 0;
+}
+
+/**
  * Setor responsável atual do pedido (ctd_area.id).
  * É o destino da última transferência aceita; sem transferência, o setor do formulário.
  */

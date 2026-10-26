@@ -247,6 +247,20 @@
 .rv2 .rv-props dd { margin: 4px 0 0; font-size: 0.9375rem; font-weight: 600; }
 .rv2 .rv-props dd .flag { margin-left: 0; display: flex; }
 .rv2 .rv-props__select { width: 100%; min-height: var(--h-md); padding: 0 8px; font-size: 16px; }
+/* Conversa interna entre setores: roxo (a cor de "outro setor") e cadeado; quem pediu nunca vê */
+.rv2 .chat-item--internal .chat-bubble { border-style: dashed; border-color: var(--roxo); }
+.rv2 .chat-internal-tag { display: inline-flex; align-items: center; gap: 4px; margin-left: 4px; padding: 1px 8px; border-radius: var(--r-pill); background: var(--roxo-claro); color: var(--roxo); font-weight: 600; }
+.rv2 .chat-internal-tag i { font-size: 10px; }
+.rv2 .chat-channel { display: inline-flex; gap: 4px; margin-bottom: 8px; padding: 3px; border-radius: var(--r-pill); background: var(--fundo); }
+.rv2 .chat-channel label { position: relative; cursor: pointer; }
+.rv2 .chat-channel input { position: absolute; opacity: 0; width: 1px; height: 1px; }
+.rv2 .chat-channel span { display: inline-flex; align-items: center; gap: 6px; min-height: 32px; padding: 0 14px; border-radius: var(--r-pill); font-size: var(--t-sm); font-weight: 600; color: var(--texto-2); }
+.rv2 .chat-channel input:checked + span { background: var(--superficie); color: var(--texto); box-shadow: var(--sombra-1); }
+.rv2 .chat-channel input[value="internal"]:checked + span { color: var(--roxo); }
+.rv2 .chat-channel input:focus-visible + span { box-shadow: var(--anel); }
+.rv2 .rv-composer--internal .chat-input { border-color: var(--roxo); }
+.rv2 .rv-composer--internal .chat-hint { display: block; color: var(--roxo); }
+
 .rv2 .rv-ask__obs { font-size: var(--t-sm); }
 
 /* ---------- Só celular ---------- */

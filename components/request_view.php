@@ -131,8 +131,10 @@ if (!function_exists('renderRequestView')) {
      * são balões (as minhas à direita) e os eventos são pílulas no centro. As mudanças
      * automáticas de situação (sem texto) vêm marcadas com --sys e ficam escondidas até alguém
      * pedir o histórico completo.
+     * Canais: quem pediu vê só a conversa pública; setor chamado para ajudar ($helperOnly) vê só a
+     * interna; os demais setores veem as duas, com as internas marcadas.
      */
-    function renderRequestFeed(PDO $pdo, array $req, string $sector, int $viewerId, bool $isStaff, ?array $forwards = null, ?array $history = null): string
+    function renderRequestFeed(PDO $pdo, array $req, string $sector, int $viewerId, bool $isStaff, ?array $forwards = null, ?array $history = null, bool $helperOnly = false): string
     {
         $reqId = (int)$req['id'];
         $creatorId = (int)($req['created_by'] ?? 0);
@@ -176,8 +178,16 @@ if (!function_exists('renderRequestView')) {
             }
         }
 
-        $st = $pdo->prepare('SELECT * FROM request_comments WHERE request_id = ? AND request_table = ? ORDER BY created_at ASC, id ASC');
-        $st->execute([$reqId, $sector]);
+        $channelFilter = !$isStaff ? " AND channel = 'public'" : '';
+        $params = [$reqId, $sector];
+        if ($helperOnly) {
+            // Interna + o que o próprio setor escreveu (mensagens de antes da conversa interna eram públicas)
+            $myAreas = RequestForwardService::userAreaIds($pdo, $viewerId) ?: [0];
+            $channelFilter = " AND (channel = 'internal' OR user_id IN (SELECT id_user FROM cfg_user_area WHERE id_area IN (" . implode(',', array_fill(0, count($myAreas), '?')) . ')))';
+            $params = array_merge($params, $myAreas);
+        }
+        $st = $pdo->prepare("SELECT * FROM request_comments WHERE request_id = ? AND request_table = ?$channelFilter ORDER BY created_at ASC, id ASC");
+        $st->execute($params);
         $authorIds = [$creatorId];
         foreach ($st->fetchAll(PDO::FETCH_ASSOC) as $c) {
             $items[] = ['at' => (string)$c['created_at'], 'type' => 'message', 'c' => $c];
@@ -205,13 +215,15 @@ if (!function_exists('renderRequestView')) {
         $yesterday = date('d/m/Y', strtotime('-1 day'));
         $html = '';
         $lastDay = '';
-        $bubble = function (int $userId, string $name, string $time, string $body, string $extraClass = '') use ($viewerId, $speakers): string {
+        $bubble = function (int $userId, string $name, string $time, string $body, string $extraClass = '', bool $internal = false) use ($viewerId, $speakers): string {
             $side = $userId === $viewerId ? 'mine' : 'theirs';
             $sp = $speakers[$userId] ?? ['label' => '', 'tone' => 'other'];
-            return '<div class="chat-item ' . $side . $extraClass . '" data-tone="' . e($sp['tone']) . '">'
+            return '<div class="chat-item ' . $side . $extraClass . ($internal ? ' chat-item--internal' : '') . '" data-tone="' . e($sp['tone']) . '">'
                 . '<p class="chat-meta"><strong class="chat-user-name">' . e($name !== '' ? $name : 'Alguém') . '</strong>'
                 . ($sp['label'] !== '' ? ' <span class="chat-role">· ' . e($sp['label']) . '</span>' : '')
-                . ' <time class="chat-time">· ' . $time . '</time></p>'
+                . ' <time class="chat-time">· ' . $time . '</time>'
+                . ($internal ? ' <span class="chat-internal-tag"><i class="fa-solid fa-lock" aria-hidden="true"></i> Só setores</span>' : '')
+                . '</p>'
                 . '<div class="chat-bubble ' . $side . '">' . $body . '</div>'
                 . '</div>';
         };
@@ -233,11 +245,15 @@ if (!function_exists('renderRequestView')) {
                     . '</div>';
             } else {
                 $c = $it['c'];
-                $html .= $bubble((int)$c['user_id'], (string)$c['user_name'], $time, nl2br(e($c['comment'])));
+                // Para quem só ajuda, tudo aqui é interno: não precisa marcar cada balão
+                $internal = ($c['channel'] ?? 'public') === 'internal' && !$helperOnly;
+                $html .= $bubble((int)$c['user_id'], (string)$c['user_name'], $time, nl2br(e($c['comment'])), '', $internal);
             }
         }
         if (count(array_filter($items, fn($it) => $it['type'] !== 'open' && !$isSys($it))) === 0) {
-            $html .= '<p class="feed-empty">Ninguém escreveu ainda. Use o campo abaixo para falar sobre o pedido.</p>';
+            $html .= '<p class="feed-empty">' . ($helperOnly
+                ? 'Nenhuma mensagem entre os setores ainda. Use o campo abaixo para falar com o setor que pediu ajuda.'
+                : 'Ninguém escreveu ainda. Use o campo abaixo para falar sobre o pedido.') . '</p>';
         }
         return $html;
     }
@@ -393,6 +409,16 @@ if (!function_exists('renderRequestView')) {
         $canCancelRequest = $isRequester && $status === 'P';
         $openIsForMe = $open && ($isGlobalAdmin || in_array((int)$open['to_area_id'], $viewerAreas, true));
         $openIsFromMe = $open && ($isGlobalAdmin || (int)$open['forwarded_by'] === $viewerId || in_array((int)$open['from_area_id'], $viewerAreas, true));
+
+        // Conversa: quem só ajuda fala apenas com os setores; os demais setores escolhem o canal
+        // quando o pedido tem (ou teve) ajuda de outro setor
+        $helperOnly = $isStaff && userSeesOnlyInternalChat($pdo, $req, $sector, $viewerId, $role);
+        $hasHelp = false;
+        foreach ($forwards as $f) {
+            $hasHelp = $hasHelp || ($f['mode'] === 'help' && !in_array($f['status'], ['refused', 'cancelled'], true));
+        }
+        $chooseChannel = $isStaff && !$helperOnly && $hasHelp;
+        $defaultInternal = $open && $open['mode'] === 'help';
 
         // Sem encaminhamento aberto: mostra o último respondido (por que veio, o que voltou, por que recusaram)
         $lastDone = null;
@@ -682,18 +708,35 @@ if (!function_exists('renderRequestView')) {
                 </div>
             <?php endif; ?>
 
-            <div class="rv-feed" data-chat-feed <?= $data ?> role="log" aria-labelledby="rv-feed-<?= $reqId ?>"><?= renderRequestFeed($pdo, $req, $sector, $viewerId, $isStaff, $forwards, $history) ?></div>
+            <div class="rv-feed" data-chat-feed <?= $data ?> role="log" aria-labelledby="rv-feed-<?= $reqId ?>"><?= renderRequestFeed($pdo, $req, $sector, $viewerId, $isStaff, $forwards, $history, $helperOnly) ?></div>
 
             <div class="rv-dock">
                 <?php if ($actionsHtml !== ''): ?>
                     <div class="rv-actions rv-actions--dock"><?= $actionsHtml ?></div>
                 <?php endif; ?>
-                <form class="chat-footer rv-composer" data-chat-form <?= $data ?>>
+                <?php $startsInternal = $helperOnly || ($chooseChannel && $defaultInternal); ?>
+                <form class="chat-footer rv-composer<?= $startsInternal ? ' rv-composer--internal' : '' ?>" data-chat-form <?= $data ?>>
+                    <?php if ($chooseChannel): ?>
+                        <div class="chat-channel" role="radiogroup" aria-label="Quem vê a mensagem">
+                            <label><input type="radio" name="channel" value="public"<?= $defaultInternal ? '' : ' checked' ?>><span>Todos</span></label>
+                            <label><input type="radio" name="channel" value="internal"<?= $defaultInternal ? ' checked' : '' ?>><span><i class="fa-solid fa-lock" aria-hidden="true"></i> Só setores</span></label>
+                        </div>
+                    <?php elseif ($helperOnly): ?>
+                        <input type="hidden" name="channel" value="internal">
+                    <?php endif; ?>
                     <div class="chat-input-area">
-                        <textarea name="comment" class="chat-input" placeholder="Mensagem para todos" rows="1" required maxlength="3000" aria-label="Mensagem"></textarea>
+                        <textarea name="comment" class="chat-input" placeholder="<?= $startsInternal ? 'Mensagem para os setores' : 'Mensagem para todos' ?>" rows="1" required maxlength="3000" aria-label="Mensagem"></textarea>
                         <button type="submit" class="btn-send" aria-label="Enviar mensagem"><i class="fa-solid fa-paper-plane" aria-hidden="true"></i></button>
                     </div>
-                    <p class="chat-hint"><?= $isStaff ? 'Quem pediu também vê esta conversa.' : 'Quem cuida do pedido recebe sua mensagem.' ?></p>
+                    <p class="chat-hint" data-chat-hint data-hint-public="Quem pediu também vê esta conversa." data-hint-internal="Só os setores veem. Quem pediu não vê esta mensagem."><?php
+                        if ($helperOnly) {
+                            echo 'Conversa entre os setores. Quem pediu não vê.';
+                        } elseif ($chooseChannel) {
+                            echo $defaultInternal ? 'Só os setores veem. Quem pediu não vê esta mensagem.' : 'Quem pediu também vê esta conversa.';
+                        } else {
+                            echo $isStaff ? 'Quem pediu também vê esta conversa.' : 'Quem cuida do pedido recebe sua mensagem.';
+                        }
+                    ?></p>
                 </form>
             </div>
         </section>

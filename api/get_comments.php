@@ -34,4 +34,5 @@ $stmt = $pdo->prepare('SELECT name FROM ctd_users WHERE id = ?');
 $stmt->execute([(int)($req['created_by'] ?? 0)]);
 $req['creator_name'] = $stmt->fetchColumn() ?: null;
 header('Content-Type: text/html; charset=UTF-8');
-echo renderRequestFeed($pdo, $req, $req_table, (int)$_SESSION['id'], $role !== 'solicitante');
+$helperOnly = $role !== 'solicitante' && userSeesOnlyInternalChat($pdo, $req, $req_table, (int)$_SESSION['id'], $role);
+echo renderRequestFeed($pdo, $req, $req_table, (int)$_SESSION['id'], $role !== 'solicitante', null, null, $helperOnly);

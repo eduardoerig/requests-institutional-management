@@ -993,11 +993,13 @@ document.addEventListener('submit', async (e) => {
     const btn = form.querySelector('button');
     form.dataset.busy = '1';
     btn.disabled = true;
-    const data = await postForm('api/add_comment.php', { id: form.dataset.id, table: form.dataset.table, comment: text });
+    // Canal: escolhido (Todos / Só setores), fixo para quem só ajuda, ou público quando não há escolha
+    const channel = form.querySelector('[name="channel"]:checked, input[type="hidden"][name="channel"]')?.value || 'public';
+    const data = await postForm('api/add_comment.php', { id: form.dataset.id, table: form.dataset.table, comment: text, channel });
     btn.disabled = false;
     delete form.dataset.busy;
     if (data && data.success) {
-        form.reset();
+        textarea.value = ''; // mantém o canal escolhido para a próxima mensagem
         textarea.style.height = '';
         await reloadChat(form.closest('.request-view'));
         form.scrollIntoView({ block: 'nearest' });
@@ -1058,6 +1060,18 @@ function updateBulkBar() {
     bar.hidden = n === 0;
     bar.querySelector('[data-bulk-count]').textContent = n === 1 ? '1 selecionado' : `${n} selecionados`;
     // Botões por grupo: "Começar atendimento (2)" só aparece quando há novos marcados
+// Trocar o canal (Todos / Só setores) muda o aviso e o texto de exemplo do campo
+document.addEventListener('change', (e) => {
+    if (!e.target.matches('[data-chat-form] [name="channel"]')) return;
+    const form = e.target.closest('[data-chat-form]');
+    const internal = e.target.value === 'internal';
+    const hint = form.querySelector('[data-chat-hint]');
+    if (hint) hint.textContent = internal ? hint.dataset.hintInternal : hint.dataset.hintPublic;
+    form.classList.toggle('rv-composer--internal', internal);
+    const area = form.querySelector('textarea');
+    if (area) area.placeholder = internal ? 'Mensagem para os setores' : 'Mensagem para todos';
+});
+
     bar.querySelectorAll('[data-bulk-group]').forEach(btn => {
         const k = bulkPicked(btn.dataset.bulkGroup).length;
         btn.hidden = k === 0;

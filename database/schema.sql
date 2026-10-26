@@ -1,4 +1,4 @@
--- Estrutura completa do SisReq (instalação nova). Inclui migrações 001 e 002.
+-- Estrutura completa do SisReq (instalação nova). Inclui migrações 001 a 004.
 -- Uso: php database/migrate.php --fresh
 SET NAMES utf8mb4;
 SET FOREIGN_KEY_CHECKS = 0;
@@ -181,9 +181,11 @@ CREATE TABLE `request_comments` (
   `user_id` int unsigned NOT NULL,
   `user_name` varchar(150) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci NOT NULL,
   `comment` text CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci NOT NULL,
+  `channel` enum('public','internal') COLLATE utf8mb4_unicode_ci NOT NULL DEFAULT 'public' COMMENT 'public = com quem pediu; internal = só setores',
   `created_at` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP,
   PRIMARY KEY (`id`),
-  KEY `idx_request` (`request_id`,`request_table`)
+  KEY `idx_request` (`request_id`,`request_table`),
+  KEY `idx_request_channel` (`request_id`,`request_table`,`channel`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 CREATE TABLE `request_forwards` (
   `id` int unsigned NOT NULL AUTO_INCREMENT,
