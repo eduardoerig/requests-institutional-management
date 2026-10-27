@@ -1105,17 +1105,6 @@ function selectChatThread(view, key, focus = false) {
     if (focus) tab.focus();
 }
 
-// "Para:" (quem pediu, com ajuda em andamento): aponta o campo para o destino escolhido
-document.addEventListener('change', (e) => {
-    if (!e.target.matches('[data-chat-form] [name="to"]')) return;
-    const form = e.target.form;
-    form.elements.channel.value = e.target.value;
-    form.elements.area.value = e.target.dataset.area;
-    form.elements.comment.placeholder = e.target.dataset.placeholder;
-    const hint = form.querySelector('[data-chat-hint]');
-    if (hint) hint.textContent = e.target.dataset.hint;
-});
-
 document.addEventListener('click', (e) => {
     const tab = e.target.closest('[data-chat-thread]');
     if (!tab) return;

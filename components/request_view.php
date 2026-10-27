@@ -129,14 +129,14 @@ if (!function_exists('renderRequestView')) {
     /**
      * Conversas do pedido que esta pessoa vê, na ordem das abas (no máximo duas). Cada uma tem:
      * - key e label (nome da aba); events: mostra os eventos do pedido; empty: texto sem mensagens;
-     * - sources: de onde vêm as mensagens, [canal, setor que ajuda, etiqueta, etiqueta só nas minhas];
-     * - targets: para onde dá para escrever, [channel, area, label, hint, placeholder] (vazio = só leitura,
-     *   com readHint explicando); com mais de um, o campo mostra "Para:";
-     * - unread: a última mensagem que me cabe responder é de outra pessoa; default: aba que abre.
-     * Quem pediu tem uma conversa só (com o responsável e, junto, com quem ajuda). Quem só ajuda tem
-     * "Com <responsável>" e "Com <quem pediu>" e nunca vê a conversa de quem pediu com o responsável.
-     * Responsável, coordenação e admin: "Com <quem pediu>" (lendo também a troca com quem ajuda) e
-     * "Com <setor que ajuda>". A conversa com quem ajuda só recebe mensagem enquanto a ajuda está aceita.
+     * - sources: de onde vêm as mensagens, [canal, setor que ajuda, etiqueta, etiqueta só nas de quem pediu];
+     * - target: para onde vai o que se escreve, [channel, area, hint, placeholder, two (vai a dois setores)];
+     *   null = só leitura, com readHint explicando;
+     * - unread: a última mensagem para mim é de outra pessoa; default: aba que abre.
+     * Quem pediu tem uma conversa só e não escolhe destino: com ajuda aceita, escreve no helper, que o
+     * responsável e quem ajuda recebem. Quem só ajuda tem "Com <responsável>" e "Com <quem pediu>" e nunca
+     * vê a conversa de quem pediu com o responsável. Responsável, coordenação e admin: "Com <quem pediu>"
+     * (lendo também o helper) e "Com <setor que ajuda>". O helper só recebe mensagem com a ajuda aceita.
      */
     function requestChatThreads(PDO $pdo, array $req, string $sector, int $viewerId, string $role, array $forwards, ?int $ownerArea): array
     {
@@ -146,75 +146,71 @@ if (!function_exists('renderRequestView')) {
         $areaName = fn(int $a) => RequestForwardService::areaLabel($pdo, $a);
         // Abas com nomes de verdade: primeiro nome de quem pediu e nome do setor
         $who = explode(' ', trim((string)($req['creator_name'] ?? '')))[0] ?: 'quem pediu';
-        $target = fn(string $channel, int $area, string $label, string $hint, string $placeholder) => compact('channel', 'area', 'label', 'hint', 'placeholder');
+        $target = fn(string $channel, int $area, string $hint, string $placeholder, bool $two = false) => compact('channel', 'area', 'hint', 'placeholder', 'two');
+        // O que quem pediu escreveu durante a ajuda: o setor que ajuda também recebeu
+        $helperSources = array_map(fn($a) => ['helper', $a, $areaName($a) . ' também vê', true], $helperAreas);
         $threads = [];
 
         if ($role === 'solicitante') {
-            $sources = [['public', 0, '', false]];
-            $targets = [$target('public', 0, $ownerLabel, "$ownerLabel recebe sua mensagem.", 'Mensagem para ' . $ownerLabel)];
-            foreach ($helperAreas as $a) {
-                $name = $areaName($a);
-                $sources[] = ['helper', $a, 'para ' . $name, true];
-                if (in_array($a, $openAreas, true)) {
-                    $targets[] = $target('helper', $a, $name, "$name recebe sua mensagem; $ownerLabel também acompanha.", 'Mensagem para ' . $name);
-                }
-            }
-            $threads[] = ['key' => 'main', 'label' => 'Com ' . $ownerLabel, 'events' => true, 'sources' => $sources, 'targets' => $targets,
+            $open = $openAreas[0] ?? null; // só um encaminhamento aberto por vez
+            $both = $open ? $ownerLabel . ' e ' . $areaName($open) : '';
+            $threads[] = ['key' => 'main', 'label' => 'Com ' . $ownerLabel, 'events' => true,
+                'sources' => array_merge([['public', 0, '', false]], $helperSources),
+                'target' => $open
+                    ? $target('helper', $open, "$both recebem sua mensagem.", 'Mensagem para ' . $both, true)
+                    : $target('public', 0, "$ownerLabel recebe sua mensagem.", 'Mensagem para ' . $ownerLabel),
                 'empty' => 'Ninguém escreveu ainda. Use o campo abaixo para falar sobre o pedido.', 'readHint' => ''];
         } elseif (userSeesOnlyInternalChat($pdo, $req, $sector, $viewerId, $role)) {
             $threads[] = ['key' => 'internal', 'label' => 'Com ' . $ownerLabel, 'events' => true, 'sources' => [['internal', 0, '', false]],
-                'targets' => [$target('internal', 0, $ownerLabel, "Conversa entre os setores. $who não vê.", 'Mensagem para ' . $ownerLabel)],
+                'target' => $target('internal', 0, "Conversa entre os setores. $who não vê.", 'Mensagem para ' . $ownerLabel),
                 'empty' => "Nenhuma mensagem com $ownerLabel ainda. Use o campo abaixo para falar com o setor que pediu ajuda.", 'readHint' => ''];
             foreach (array_intersect($helperAreas, RequestForwardService::userAreaIds($pdo, $viewerId)) as $a) {
                 $open = in_array($a, $openAreas, true);
                 $threads[] = ['key' => 'helper-' . $a, 'label' => 'Com ' . $who, 'events' => false, 'sources' => [['helper', $a, '', false]],
-                    'targets' => $open ? [$target('helper', $a, $who, "$who recebe sua mensagem; $ownerLabel também acompanha.", 'Mensagem para ' . $who)] : [],
+                    'target' => $open ? $target('helper', $a, "$who recebe sua mensagem; $ownerLabel também acompanha.", 'Mensagem para ' . $who) : null,
                     'empty' => "Nenhuma mensagem com $who ainda." . ($open ? ' Use o campo abaixo para falar com essa pessoa.' : ''),
                     'readHint' => 'A ajuda já foi devolvida. Esta conversa fica só para consulta.'];
             }
         } else {
-            $sources = [['public', 0, '', false]];
             $helpers = []; // setores chamados para ajudar (nome)
             foreach ($forwards as $f) {
                 if ($f['mode'] === 'help' && !in_array($f['status'], ['refused', 'cancelled'], true)) {
                     $helpers[(int)$f['to_area_id']] = (string)$f['to_label'];
                 }
             }
-            foreach ($helperAreas as $a) {
-                $sources[] = ['helper', $a, 'com ' . $areaName($a), false]; // só leitura: troca de quem pediu com quem ajuda
-            }
-            $threads[] = ['key' => 'main', 'label' => 'Com ' . $who, 'events' => true, 'sources' => $sources,
-                'targets' => [$target('public', 0, $who, "$who vê esta conversa.", 'Mensagem para ' . $who)],
+            $threads[] = ['key' => 'main', 'label' => 'Com ' . $who, 'events' => true,
+                'sources' => array_merge([['public', 0, '', false]], $helperSources),
+                'target' => $target('public', 0, "$who vê esta conversa.", 'Mensagem para ' . $who),
                 'empty' => 'Ninguém escreveu ainda. Use o campo abaixo para falar sobre o pedido.', 'readHint' => ''];
             if ($helpers) {
                 $with = count($helpers) === 1 ? reset($helpers) : 'os setores';
                 $threads[] = ['key' => 'internal', 'label' => 'Com ' . $with, 'events' => false, 'sources' => [['internal', 0, '', false]],
-                    'targets' => [$target('internal', 0, $with, "Só os setores veem. $who não vê esta mensagem.", 'Mensagem para ' . $with)],
+                    'target' => $target('internal', 0, "Só os setores veem. $who não vê esta mensagem.", 'Mensagem para ' . $with),
                     'empty' => "Nenhuma mensagem com $with ainda.", 'readHint' => ''];
             }
         }
 
-        // Esperando resposta: a última mensagem das conversas em que posso escrever é de outra pessoa
-        // (pedido encerrado não pede resposta). Para quem pediu, ela também escolhe o "Para:" inicial.
+        // Esperando resposta: a última mensagem para mim é de outra pessoa (pedido encerrado não pede
+        // resposta). Para mim = no canal em que escrevo, ou de quem pediu em qualquer fonte da aba
         $st = $pdo->prepare('SELECT user_id, channel, helper_area_id FROM request_comments WHERE request_id = ? AND request_table = ? ORDER BY created_at ASC, id ASC');
         $st->execute([(int)$req['id'], $sector]);
         $comments = $st->fetchAll(PDO::FETCH_ASSOC);
+        $creatorId = (int)($req['created_by'] ?? 0);
         $closed = in_array(strtoupper((string)($req['status'] ?? '')), ['C', 'N'], true);
+        $matches = fn(array $c, string $channel, int $area) => $c['channel'] === $channel && ($channel !== 'helper' || (int)$c['helper_area_id'] === $area);
         foreach ($threads as &$t) {
             $last = null;
             foreach ($comments as $c) {
-                foreach ($t['targets'] as $to) {
-                    if ($c['channel'] === $to['channel'] && ($to['channel'] !== 'helper' || (int)$c['helper_area_id'] === $to['area'])) {
-                        $last = $c;
-                    }
+                $forMe = $t['target'] && $matches($c, $t['target']['channel'], $t['target']['area']);
+                foreach ($t['sources'] as [$channel, $area]) {
+                    $forMe = $forMe || ((int)$c['user_id'] === $creatorId && $matches($c, $channel, $area));
+                }
+                if ($forMe) {
+                    $last = $c;
                 }
             }
             $t['unread'] = !$closed && $last && (int)$last['user_id'] !== $viewerId;
             $t['default'] = false;
-            if ($t['unread'] && count($t['targets']) > 1) { // responde por onde a pessoa escreveu
-                usort($t['targets'], fn($x, $y) => (int)($y['channel'] === $last['channel'] && (int)$last['helper_area_id'] === $y['area'])
-                    <=> (int)($x['channel'] === $last['channel'] && (int)$last['helper_area_id'] === $x['area']));
-            }
         }
         unset($t);
         // Abre a primeira aba esperando resposta; sem nenhuma, a primeira
@@ -311,10 +307,10 @@ if (!function_exists('renderRequestView')) {
         $html = '';
         $lastDay = '';
         // Etiqueta de quem mais recebeu a mensagem, quando a conversa junta mais de uma fonte
-        $tagOf = function (array $c) use ($thread, $viewerId): string {
-            foreach ($thread['sources'] as [$channel, $area, $tag, $mineOnly]) {
+        $tagOf = function (array $c) use ($thread, $creatorId): string {
+            foreach ($thread['sources'] as [$channel, $area, $tag, $requesterOnly]) {
                 if ($c['channel'] === $channel && ($channel !== 'helper' || (int)$c['helper_area_id'] === $area)) {
-                    return $tag !== '' && (!$mineOnly || (int)$c['user_id'] === $viewerId) ? $tag : '';
+                    return $tag !== '' && (!$requesterOnly || (int)$c['user_id'] === $creatorId) ? $tag : '';
                 }
             }
             return '';
@@ -840,20 +836,12 @@ if (!function_exists('renderRequestView')) {
                 <?php endif; ?>
                 <?php foreach ($threads as $t):
                     $hide = $t['default'] ? '' : ' hidden';
-                    if (!$t['targets']): ?>
+                    if (!$t['target']): ?>
                     <p class="chat-readonly" data-thread="<?= e($t['key']) ?>"<?= $hide ?>><i class="fa-regular fa-eye" aria-hidden="true"></i> <span><?= e($t['readHint']) ?></span></p>
                     <?php continue; endif;
-                    $to = $t['targets'][0]; // o primeiro destino já vem escolhido
+                    $to = $t['target'];
                 ?>
-                    <form class="chat-footer rv-composer<?= $to['channel'] === 'internal' ? ' rv-composer--internal' : '' ?>" data-chat-form data-thread="<?= e($t['key']) ?>" <?= $data ?><?= $hide ?>>
-                        <?php if (count($t['targets']) > 1): ?>
-                            <div class="chat-to" role="radiogroup" aria-label="Para quem vai a mensagem">
-                                <span class="chat-to__label" aria-hidden="true">Para:</span>
-                                <?php foreach ($t['targets'] as $i => $x): ?>
-                                    <label><input type="radio" name="to" value="<?= e($x['channel']) ?>" data-area="<?= (int)$x['area'] ?>" data-hint="<?= e($x['hint']) ?>" data-placeholder="<?= e($x['placeholder']) ?>"<?= $i === 0 ? ' checked' : '' ?>><span><?= e($x['label']) ?></span></label>
-                                <?php endforeach; ?>
-                            </div>
-                        <?php endif; ?>
+                    <form class="chat-footer rv-composer<?= $to['channel'] === 'internal' ? ' rv-composer--internal' : '' ?><?= $to['two'] ? ' rv-composer--two' : '' ?>" data-chat-form data-thread="<?= e($t['key']) ?>" <?= $data ?><?= $hide ?>>
                         <input type="hidden" name="channel" value="<?= e($to['channel']) ?>">
                         <input type="hidden" name="area" value="<?= (int)$to['area'] ?>">
                         <div class="chat-input-area">
