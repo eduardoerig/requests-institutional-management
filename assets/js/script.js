@@ -478,20 +478,17 @@ if (btn_login) {
         }
     });
 }
-let btn_logout = document.querySelector('#btn_logout');
+// Sair (menu lateral e Minha conta): POST com o token CSRF, nunca por link GET
+document.addEventListener('click', async (e) => {
+    const btn = e.target.closest('[data-logout]');
+    if (!btn) return;
+    e.preventDefault();
 
-if (btn_logout) {
-    btn_logout.addEventListener('click', async (e) => {
-        e.preventDefault();
-
-        let formData = new FormData();
-
-        const success = await fetchAjax("api/logout.php", formData);
-        if (success) {
-            window.location.reload()
-        }
-    });
-}
+    const success = await fetchAjax("api/logout.php", new FormData());
+    if (success) {
+        window.location.href = './';
+    }
+});
 
 function todayIso() {
     const d = new Date();

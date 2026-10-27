@@ -64,7 +64,7 @@ $menuItem = function (string $href, string $icon, string $label, int $badge = 0,
         <?php endif; ?>
         <?= $menuItem('myAccount', 'fa-user', 'Minha conta', 0, '', $currentPage === 'myAccount') ?>
         <?= $menuItem('ajuda', 'fa-circle-question', 'Como usar', 0, '', $currentPage === 'ajuda') ?>
-        <a href="#" class="menu-link logout" id="btn_logout"><i class="fa-solid fa-arrow-right-from-bracket" aria-hidden="true"></i><span>Sair</span></a>
+        <a href="#" class="menu-link logout" id="btn_logout" data-logout><i class="fa-solid fa-arrow-right-from-bracket" aria-hidden="true"></i><span>Sair</span></a>
     </nav>
     <footer>
         <p>SisReq &copy; 2026</p>

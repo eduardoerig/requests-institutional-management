@@ -1,9 +1,10 @@
 <?php
-require_once __DIR__ . '/../config/session.php';
+require_once __DIR__ . '/../config/security.php';
+
+// Só POST com o token da sessão: um link de outro site não consegue deslogar ninguém
+requirePostJson();
 
 session_unset();
 session_destroy();
 
-header('Content-Type: application/json; charset=UTF-8');
-echo json_encode(['success' => true, 'message' => 'Logout efetuado com sucesso!']);
-exit;
+jsonResponse(['success' => true, 'message' => 'Logout efetuado com sucesso!']);

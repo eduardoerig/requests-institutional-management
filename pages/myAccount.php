@@ -49,7 +49,7 @@ $role_labels = [
         <ul class="list-links">
             <li><button type="button" id="btnOpenChangePass"><i class="fa-solid fa-lock" aria-hidden="true"></i> Trocar minha senha</button></li>
             <li><a href="ajuda"><i class="fa-solid fa-circle-question" aria-hidden="true"></i> Como usar o sistema</a></li>
-            <li><a href="logout" class="is-danger"><i class="fa-solid fa-arrow-right-from-bracket" aria-hidden="true"></i> Sair</a></li>
+            <li><button type="button" class="is-danger" data-logout><i class="fa-solid fa-arrow-right-from-bracket" aria-hidden="true"></i> Sair</button></li>
         </ul>
     </section>
 </div>

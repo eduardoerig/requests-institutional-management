@@ -100,7 +100,7 @@ Desligada por padrão. Para ativar: `BOT_ENABLED=1` e `BOT_KEY=<chave longa>` no
 Em um banco de **homologação** com o servidor rodando:
 ```bash
 php database/seed_test_users.php     # contas de teste (credenciais em database/test_accounts.local.txt)
-php tests/run.php                    # 113 verificações de fluxo, permissão e segurança
+php tests/run.php                    # 117 verificações de fluxo, permissão e segurança
 ```
 `TEST_BASE_URL` muda o endereço testado (padrão `http://localhost/requests2.0/`).
 

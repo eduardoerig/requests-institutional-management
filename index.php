@@ -14,6 +14,11 @@ $basePath = rtrim(str_replace(chr(92), '/', dirname($_SERVER['SCRIPT_NAME'])), '
 
 // Solicitante não tem painel: vai direto para as próprias requisições
 $requestedPage = (isset($url[0]) && $url[0] !== '') ? $url[0] : 'home';
+// Sair só por POST + CSRF (api/logout.php); o endereço antigo por GET não encerra a sessão
+if ($requestedPage === 'logout') {
+    header('Location: ./');
+    exit;
+}
 // Já entrou: a tela de login leva para o início
 if ($logged && $requestedPage === 'login' && $force_reset !== 1) {
     header('Location: ./');
@@ -35,11 +40,11 @@ if ($logged && $role === 'solicitante' && $requestedPage === 'home' && $force_re
     exit;
 }
 
-// Se forçado a resetar, só permite acessar 'myAccount' ou 'logout'
+// Se forçado a resetar, só permite acessar 'myAccount' (de onde também se sai do sistema)
 // Ignora redirecionamento para arquivos estáticos (assets)
 if ($logged && $force_reset === 1) {
     $current_page = (isset($url[0]) && $url[0] !== '') ? $url[0] : 'home';
-    $allowed_pages = ['myAccount', 'logout'];
+    $allowed_pages = ['myAccount'];
     
     // Lista de extensões de arquivos estáticos que não devem ser redirecionados
     $is_asset = preg_match('/\.(js|css|png|jpg|jpeg|gif|ico|svg|woff|woff2|ttf|otf)$/i', $_SERVER['REQUEST_URI']);
@@ -53,9 +58,7 @@ if ($logged && $force_reset === 1) {
 $page = $requestedPage;
 // Daqui em diante a página só lê a sessão: libera o arquivo para os avisos e a conversa
 // (que rodam em segundo plano) não esperarem esta página terminar
-if ($page !== 'logout') {
-    session_write_close();
-}
+session_write_close();
 $currentStatusParam = $_GET['status'] ?? '';
 $isGestorShell = isGestorRole($role);
 $pageTitles = [
@@ -219,10 +222,7 @@ $useCombo = in_array($assetPage, $comboPages, true);
         };
     </script>
 
-<?php if ($page === 'logout'): ?>
-    <?php session_unset(); session_destroy(); ?>
-    <script>location.href = "login";</script>
-<?php elseif (!$logged || $page === 'login'): ?>
+<?php if (!$logged || $page === 'login'): ?>
     <?php include "pages/login.php"; ?>
 <?php else: ?>
     <?php

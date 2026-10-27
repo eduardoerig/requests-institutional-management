@@ -188,6 +188,19 @@ check('parâmetro status não é refletido sem escape', !str_contains($res['body
 $res = $sol->post('api/approve_request.php', ['action' => 'post', 'id' => 1, 'table' => "ti_frm WHERE 1=1; --", 'value' => 'Y']);
 check('solicitante não aprova (e tabela maliciosa não passa)', ($res['json']['success'] ?? true) === false, snippet($res));
 
+// Sair: só POST + CSRF (sessão própria, para não derrubar a de $sol)
+$out = new Client($baseUrl);
+$out->login('teste_solicitante', $password);
+$stillIn = fn() => $out->get('api/get_notifications.php')['status'] === 200;
+$out->get('logout');
+check('endereço logout por GET não desloga', $stillIn());
+$res = $out->get('api/logout.php');
+check('api/logout.php por GET é recusado', $res['status'] === 405 && $stillIn(), snippet($res));
+$res = $out->request('POST', 'api/logout.php');
+check('api/logout.php sem token CSRF é recusado', $res['status'] === 403 && $stillIn(), snippet($res));
+$res = $out->post('api/logout.php');
+check('api/logout.php com POST + CSRF desloga', ($res['json']['success'] ?? false) === true && !$stillIn(), snippet($res));
+
 // ------------------------------------------------------------------
 section('5. Criar requisição');
 $base = ['type' => 'ti', 'title' => 'Teste automático', 'end' => $future, 'details' => 'Detalhes', 'priority' => 2];
