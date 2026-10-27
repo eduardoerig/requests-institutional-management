@@ -23,15 +23,15 @@ Desenvolvido com uma interface moderna, sofisticadamente clean e responsiva (Mob
 
 ## ✨ Funcionalidades Principais
 
-* 🔄 **Ciclo de Vida Completo**: Fluxo de status rigidamente orquestrado (`Pendente` → `Aprovada` → `Em Andamento` → `Concluída`/`Recusada`).
-* 🔀 **Repasse Intersetorial (Cross-Sector)**: Capacidade de encaminhar uma requisição para outro departamento complementar, unificando a esteira e preservando todo o histórico do chat.
+* 🔄 **Ciclo de Vida Completo**: Fluxo de status rigidamente orquestrado (`Aguardando aprovação` → `Aprovada` → `Em atendimento` → `Concluída`, ou `Recusada`).
+* 🔀 **Repasse Intersetorial (Cross-Sector)**: **transferir** o pedido para outro setor (que passa a ser o responsável depois de aceitar) ou **pedir ajuda** (o outro setor faz uma parte e devolve com um retorno), preservando todo o histórico.
 * 🔐 **Controle de Acesso (RBAC)**:
   * **Administrador**: Gestão total da plataforma, usuários, áreas e delegação de perfis.
   * **Admin de Subdivisão**: Autoridade delegada para sub-setores (ex: coordenações específicas).
   * **Gestor Operacional**: Focado inteiramente em resolver as demandas da sua área técnica.
   * **Solicitante**: Abertura guiada de demandas, visualização em tempo real e interação no chat.
-* 📊 **Dashboard Analítico**: Painel administrativo com KPIs da operação, timeline de produtividade, status em tempo real e gráficos dinâmicos.
-* 💬 **Chat Interativo e Logs**: Auditoria de movimentações e chat centralizado dentro de cada chamado para colaboração contínua.
+* 📊 **Painel e Caixa do setor**: cada perfil vê o próximo passo (urgentes, atrasados, parados com outro setor); a Caixa separa o que é para fazer, o que espera outro setor e o histórico. Números da operação ficam recolhidos e há exportação CSV.
+* 💬 **Conversa e histórico**: conversa em cada pedido com dois canais (com quem pediu e só entre setores), histórico de cada mudança e avisos no sino.
 * 📱 **Mobile UI/UX First**: Telas, painéis e cartões totalmente otimizados para smartphones, sem perdas visuais ou botões ocultos.
 
 ---
@@ -40,11 +40,11 @@ Desenvolvido com uma interface moderna, sofisticadamente clean e responsiva (Mob
 
 | Camada | Tecnologia / Padrão |
 | :--- | :--- |
-| **Backend** | PHP 8.x, PDO Seguro |
-| **Banco de Dados** | MySQL Relacional |
-| **Frontend UI** | HTML5, CSS3, Vanilla JS |
-| **UX / Design** | Tipografia Outfit/Inter, Design Clean SaaS, Grids Fluídos |
-| **Ícones / Gráficos**| FontAwesome 6, Chart.js |
+| **Backend** | PHP 8.1+, PDO com prepared statements, sem framework e sem Composer |
+| **Banco de Dados** | MySQL / MariaDB (InnoDB, utf8mb4) |
+| **Frontend UI** | HTML5, CSS3, Vanilla JS (sem build) |
+| **UX / Design** | Tipografia Inter, design system próprio em `assets/css/app.css` |
+| **Bibliotecas** | FontAwesome 6.5.2 (ícones), Tom Select 2.6.2 local em `assets/vendor/` (combos com busca) |
 
 ---
 
@@ -53,14 +53,15 @@ Desenvolvido com uma interface moderna, sofisticadamente clean e responsiva (Mob
 ```bash
 📦 requests-institutional-management
  ┣ 📂 api/          # Endpoints assíncronos (AJAX) e processadores (JSON)
- ┣ 📂 assets/       # Estilos globais (style.css, mobile.css), Scripts e Imagens
- ┣ 📂 classes/      # Camada de Negócio e Repositórios (Ex: RequestManager.php)
- ┣ 📂 components/   # Fragmentos de Layout Reutilizáveis (Sidebar, Navbar)
+ ┣ 📂 assets/       # app.css e script.js globais, css/ e js/ por tela em pages/, vendor/ (bibliotecas locais), imagens
+ ┣ 📂 classes/      # Regras de negócio (RequestManager, RequestInbox, RequestForwardService)
+ ┣ 📂 components/   # Pedaços de tela PHP (menu lateral, cartões, página do pedido, formulários por setor)
+ ┣ 📂 partials/     # Linhas renderizadas no servidor (ex.: _account_row.php)
  ┣ 📂 config/       # Variáveis de ambiente, conexão PDO e sessão
  ┣ 📂 includes/     # Funções de apoio: helpers.php (escape, JSON, CSRF) e auth.php (perfis e permissões)
  ┣ 📂 database/     # schema.sql, migrations/, migrate.php e scripts de linha de comando
  ┣ 📂 tests/        # Testes de integração (php tests/run.php)
- ┗ 📂 pages/        # Controladores e Views Principais da Aplicação
+ ┗ 📂 pages/        # Uma tela por arquivo, montada pelo index.php
 ```
 
 ---
@@ -99,9 +100,11 @@ Desligada por padrão. Para ativar: `BOT_ENABLED=1` e `BOT_KEY=<chave longa>` no
 Em um banco de **homologação** com o servidor rodando:
 ```bash
 php database/seed_test_users.php     # contas de teste (credenciais em database/test_accounts.local.txt)
-php tests/run.php                    # 67 verificações de fluxo, permissão e segurança
+php tests/run.php                    # 113 verificações de fluxo, permissão e segurança
 ```
 `TEST_BASE_URL` muda o endereço testado (padrão `http://localhost/requests2.0/`).
+
+O CI (`.github/workflows/lint.yml`) roda `php -l` com PHP 8.1 em todos os `.php`. Ferramentas para o Claude Code (revisor PHP, checagem antes do commit, hook de lint) ficam em `.claude/`.
 
 ## 🚥 Situações da requisição
 
@@ -116,7 +119,7 @@ Toda tela usa os mesmos nomes (`statusLabel()` em `includes/helpers.php`):
 | `C` | **Concluída** | Pedido atendido. |
 | `N` | **Recusada** | Não aprovada; o motivo fica na conversa do pedido. |
 
-Transições permitidas: `P→Y/N` (coordenação/admin, recusa exige motivo), `Y→W` (setor), `W→F→W` (encaminhar/aceitar), `W→C` e `F→C` (setor), `C→W` (reabrir).
+Transições permitidas: `P→Y/N` (coordenação/admin, recusa exige motivo), `Y→W` (setor), `W→C` (setor), `C→W` (reabrir), `Y/W→F` ao transferir para outro setor, voltando a `Y/W` quando o destino aceita ou recusa, ou quando o envio é cancelado. Pedir ajuda não muda a situação.
 
 ---
 
