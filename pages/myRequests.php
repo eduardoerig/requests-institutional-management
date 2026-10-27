@@ -41,7 +41,7 @@ if (!$searching && $tab === 'andamento') {
             continue;
         }
         try {
-            $stmt = $pdo->prepare('SELECT user_name, comment FROM request_comments WHERE request_table = ? AND request_id = ? AND user_id <> ? AND channel = \'public\' ORDER BY id DESC LIMIT 1');
+            $stmt = $pdo->prepare('SELECT user_name, comment FROM request_comments WHERE request_table = ? AND request_id = ? AND user_id <> ? AND channel IN (\'public\', \'helper\') ORDER BY id DESC LIMIT 1');
             $stmt->execute([(string)$row['table'], (int)$row['id'], $userId]);
             $c = $stmt->fetch(PDO::FETCH_ASSOC);
         } catch (Throwable $e) {

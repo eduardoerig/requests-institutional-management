@@ -405,7 +405,8 @@ class RequestInbox
 
         $last = [];
         // Quem pediu não vê a conversa interna entre setores: ela não conta como resposta
-        $stmt = $pdo->prepare("SELECT request_table, request_id, user_id, user_name, created_at FROM request_comments WHERE ($where) AND channel = 'public' ORDER BY id ASC");
+        // (a com o setor que ajuda, helper, conta)
+        $stmt = $pdo->prepare("SELECT request_table, request_id, user_id, user_name, created_at FROM request_comments WHERE ($where) AND channel IN ('public', 'helper') ORDER BY id ASC");
         $stmt->execute($params);
         foreach ($stmt->fetchAll(PDO::FETCH_ASSOC) as $c) {
             $last[$c['request_table'] . ':' . $c['request_id']] = $c;

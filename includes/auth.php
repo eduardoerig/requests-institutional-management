@@ -225,6 +225,21 @@ function userSeesOnlyInternalChat(PDO $pdo, array $request, string $sector, int 
 }
 
 /**
+ * Setores que ajudam (ou ajudaram) no pedido: ajuda aceita, devolvida ou concluída.
+ * Cada um tem a sua conversa com quem pediu (canal helper). $forwards: RequestForwardService::forRequest().
+ */
+function requestHelperAreaIds(array $forwards): array
+{
+    $areas = [];
+    foreach ($forwards as $f) {
+        if ($f['mode'] === 'help' && in_array($f['status'], ['accepted', 'returned', 'completed'], true)) {
+            $areas[] = (int)$f['to_area_id'];
+        }
+    }
+    return array_values(array_unique($areas));
+}
+
+/**
  * Setor responsável atual do pedido (ctd_area.id).
  * É o destino da última transferência aceita; sem transferência, o setor do formulário.
  */

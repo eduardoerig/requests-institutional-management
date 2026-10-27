@@ -1631,14 +1631,6 @@ a.bar-list__row:hover { background: var(--fundo); }
 .rv-steps--refused .rv-step--now::before { background: var(--perigo); }
 .rv-steps--refused { max-width: 260px; }
 
-/* Agora: uma frase com cor da situação + o que fazer */
-.rv-now { display: grid; gap: 16px; background: var(--fundo); }
-.rv-now__text { display: flex; gap: 12px; align-items: flex-start; font-weight: 600; font-size: var(--t-md); line-height: 1.45; }
-.rv-now__text i { margin-top: 3px; color: var(--texto-3); }
-.rv-now--C .rv-now__text i { color: var(--ok); }
-.rv-now--N .rv-now__text i { color: var(--perigo); }
-.rv-now__note { margin: 0; padding: 12px 16px; border-radius: var(--r-2); background: var(--superficie); line-height: 1.55; overflow-wrap: anywhere; }
-
 .rv-section__title { margin: 0; font-size: var(--t-md); font-weight: 700; color: var(--texto); }
 
 /* ---------- 24. Seleção de vários pedidos ---------- */

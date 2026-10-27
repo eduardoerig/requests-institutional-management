@@ -33,6 +33,11 @@ require_once __DIR__ . '/../components/request_view.php';
 $stmt = $pdo->prepare('SELECT name FROM ctd_users WHERE id = ?');
 $stmt->execute([(int)($req['created_by'] ?? 0)]);
 $req['creator_name'] = $stmt->fetchColumn() ?: null;
+// Só uma das conversas que esta pessoa pode ver (?thread=); sem ela ou fora da lista, a principal
+$forwards = RequestForwardService::forRequest($pdo, $req_id, $req_table);
+$threads = requestChatThreads($pdo, $req, $req_table, (int)$_SESSION['id'], $role, $forwards, requestOwnerFromForwards($pdo, $forwards, $req_table));
+$wanted = (string)($_GET['thread'] ?? '');
+$thread = array_values(array_filter($threads, fn($t) => $t['key'] === $wanted))[0]
+    ?? array_values(array_filter($threads, fn($t) => $t['default']))[0];
 header('Content-Type: text/html; charset=UTF-8');
-$helperOnly = $role !== 'solicitante' && userSeesOnlyInternalChat($pdo, $req, $req_table, (int)$_SESSION['id'], $role);
-echo renderRequestFeed($pdo, $req, $req_table, (int)$_SESSION['id'], $role !== 'solicitante', null, null, $helperOnly);
+echo renderRequestFeed($pdo, $req, $req_table, (int)$_SESSION['id'], $role !== 'solicitante', $thread, $forwards);

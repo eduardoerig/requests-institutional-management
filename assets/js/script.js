@@ -373,6 +373,8 @@ async function reloadRequestView(view) {
         const fresh = box.querySelector('.request-view');
         if (!fresh) return;
         view.replaceWith(fresh);
+        const thread = chatThreadPicked.get(fresh.dataset.id + ':' + fresh.dataset.table);
+        if (thread) selectChatThread(fresh, thread);
         fresh.classList.add('just-updated');
     } catch (err) { /* mantém a versão atual */ }
 }
@@ -865,9 +867,10 @@ async function postForm(url, fields) {
 document.addEventListener('click', (e) => {
     const btn = e.target.closest('[data-history-toggle]');
     if (!btn) return;
-    const feed = btn.closest('.rv-talk')?.querySelector('[data-chat-feed]');
-    if (!feed) return;
-    const on = feed.classList.toggle('show-all');
+    const feeds = btn.closest('.rv-talk')?.querySelectorAll('[data-chat-feed]') || [];
+    if (!feeds.length) return;
+    const on = !feeds[0].classList.contains('show-all');
+    feeds.forEach(feed => feed.classList.toggle('show-all', on));
     btn.setAttribute('aria-pressed', on ? 'true' : 'false');
     btn.textContent = on ? 'Esconder histórico' : 'Mostrar histórico completo';
 });
@@ -1055,13 +1058,14 @@ document.addEventListener('submit', async (e) => {
     const btn = form.querySelector('button');
     form.dataset.busy = '1';
     btn.disabled = true;
-    // Canal: escolhido (Todos / Só setores), fixo para quem só ajuda, ou público quando não há escolha
-    const channel = form.querySelector('[name="channel"]:checked, input[type="hidden"][name="channel"]')?.value || 'public';
-    const data = await postForm('api/add_comment.php', { id: form.dataset.id, table: form.dataset.table, comment: text, channel });
+    // Conversa da aba aberta (o servidor confere se a pessoa pode escrever nela)
+    const channel = form.elements.channel?.value || 'public';
+    const area = form.elements.area?.value || '';
+    const data = await postForm('api/add_comment.php', { id: form.dataset.id, table: form.dataset.table, comment: text, channel, area });
     btn.disabled = false;
     delete form.dataset.busy;
     if (data && data.success) {
-        textarea.value = ''; // mantém o canal escolhido para a próxima mensagem
+        textarea.value = ''; // continua na mesma conversa para a próxima mensagem
         textarea.style.height = '';
         await reloadChat(form.closest('.request-view'));
         form.scrollIntoView({ block: 'nearest' });
@@ -1083,26 +1087,69 @@ document.addEventListener('input', (e) => {
     if (area) { area.style.height = ''; area.style.height = area.scrollHeight + 'px'; }
 });
 
-// Trocar o canal (Todos / Só setores) muda o aviso e o texto de exemplo do campo
-document.addEventListener('change', (e) => {
-    if (!e.target.matches('[data-chat-form] [name="channel"]')) return;
-    const form = e.target.closest('[data-chat-form]');
-    const internal = e.target.value === 'internal';
-    const hint = form.querySelector('[data-chat-hint]');
-    if (hint) hint.textContent = internal ? hint.dataset.hintInternal : hint.dataset.hintPublic;
-    form.classList.toggle('rv-composer--internal', internal);
-    const area = form.querySelector('textarea');
-    if (area) area.placeholder = internal ? 'Mensagem para os setores' : 'Mensagem para todos';
+// Conversas separadas (abas do components/request_view.php): a aba escolhida mostra a sua linha do
+// tempo e aponta o campo de mensagem para ela; conversa só de leitura esconde o campo.
+// Fica lembrada por pedido, para valer também depois que a visão é redesenhada (reloadRequestView)
+const chatThreadPicked = new Map();
+
+function selectChatThread(view, key, focus = false) {
+    const tab = [...view.querySelectorAll('[data-chat-thread]')].find(t => t.dataset.chatThread === key);
+    if (!tab) return;
+    chatThreadPicked.set(view.dataset.id + ':' + view.dataset.table, key);
+    view.querySelectorAll('[data-chat-thread]').forEach(t => {
+        t.setAttribute('aria-selected', t === tab ? 'true' : 'false');
+        t.tabIndex = t === tab ? 0 : -1;
+    });
+    view.querySelectorAll('[data-chat-feed]').forEach(feed => { feed.hidden = feed.dataset.thread !== key; });
+    const write = tab.dataset.write === '1';
+    const form = view.querySelector('[data-chat-form]');
+    if (form) {
+        form.hidden = !write;
+        form.elements.channel.value = tab.dataset.channel;
+        form.elements.area.value = tab.dataset.area;
+        form.classList.toggle('rv-composer--internal', tab.dataset.channel === 'internal');
+        form.elements.comment.placeholder = tab.dataset.placeholder;
+        const hint = form.querySelector('[data-chat-hint]');
+        if (hint) hint.textContent = tab.dataset.hint;
+    }
+    const readonly = view.querySelector('[data-chat-readonly]');
+    if (readonly) {
+        readonly.hidden = write;
+        readonly.querySelector('span').textContent = write ? '' : tab.dataset.hint;
+    }
+    if (focus) tab.focus();
+}
+
+document.addEventListener('click', (e) => {
+    const tab = e.target.closest('[data-chat-thread]');
+    if (!tab) return;
+    const view = tab.closest('.request-view');
+    selectChatThread(view, tab.dataset.chatThread);
+    reloadChat(view);
 });
 
-// Atualiza a linha do tempo sem recarregar a página (só redesenha se algo mudou)
+// Setas, Home e End entre as abas de conversa (padrão de abas WAI-ARIA)
+document.addEventListener('keydown', (e) => {
+    const tab = e.target.closest('[data-chat-thread]');
+    if (!tab) return;
+    const tabs = [...tab.parentElement.querySelectorAll('[data-chat-thread]')];
+    const i = tabs.indexOf(tab);
+    const next = { ArrowRight: tabs[(i + 1) % tabs.length], ArrowLeft: tabs[(i + tabs.length - 1) % tabs.length], Home: tabs[0], End: tabs[tabs.length - 1] }[e.key];
+    if (!next) return;
+    e.preventDefault();
+    const view = tab.closest('.request-view');
+    selectChatThread(view, next.dataset.chatThread, true);
+    reloadChat(view);
+});
+
+// Atualiza a conversa aberta sem recarregar a página (só redesenha se algo mudou)
 async function reloadChat(view) {
-    const feed = view && view.querySelector('[data-chat-feed]');
+    const feed = view && view.querySelector('[data-chat-feed]:not([hidden])');
     // Uma atualização por vez: com o banco lento, os ciclos não se acumulam
     if (!feed || document.hidden || feed.dataset.loading) return;
     feed.dataset.loading = '1';
     try {
-        const response = await fetch(`api/get_comments.php?id=${feed.dataset.id}&table=${feed.dataset.table}`);
+        const response = await fetch(`api/get_comments.php?id=${feed.dataset.id}&table=${feed.dataset.table}&thread=${encodeURIComponent(feed.dataset.thread || '')}`);
         if (!response.ok) return;
         const box = document.createElement('div');
         box.innerHTML = await response.text();

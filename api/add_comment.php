@@ -31,23 +31,49 @@ if (!$req || !userCanViewRequest($pdo, $req, $sector, $userId, $role)) {
     jsonResponse(['success' => false, 'message' => 'Você não tem acesso a esta requisição.'], 403);
 }
 
-// Canal: quem pediu só fala na conversa pública; setor chamado só para ajudar só fala na interna;
-// os demais setores escolhem
-if ($role === 'solicitante') {
+// Canais: public (quem pediu × responsável), internal (responsável × quem ajuda) e
+// helper (quem pediu × um setor que ajuda, em helper_area_id). O servidor decide o que cada um pode usar:
+// quem pediu: public ou helper; quem só ajuda: internal ou helper do próprio setor; responsável: public ou internal
+require_once __DIR__ . '/../classes/RequestForwardService.php';
+$wanted = (string)($_POST['channel'] ?? 'public');
+$helperArea = null;
+if ($wanted === 'helper') {
+    $allowed = requestHelperAreaIds(RequestForwardService::forRequest($pdo, $reqId, $sector));
+    if ($role !== 'solicitante') {
+        $allowed = userSeesOnlyInternalChat($pdo, $req, $sector, $userId, $role)
+            ? array_values(array_intersect($allowed, RequestForwardService::userAreaIds($pdo, $userId)))
+            : []; // o responsável só lê esta conversa
+    }
+    $helperArea = (int)($_POST['area'] ?? 0);
+    if (!in_array($helperArea, $allowed, true)) {
+        jsonResponse(['success' => false, 'message' => 'Você não pode escrever nesta conversa.'], 403);
+    }
+    $channel = 'helper';
+} elseif ($role === 'solicitante') {
     $channel = 'public';
 } elseif (userSeesOnlyInternalChat($pdo, $req, $sector, $userId, $role)) {
     $channel = 'internal';
 } else {
-    $channel = ($_POST['channel'] ?? '') === 'internal' ? 'internal' : 'public';
+    $channel = $wanted === 'internal' ? 'internal' : 'public';
 }
 
 $userName = $_SESSION['name'] ?? 'Usuário';
-$pdo->prepare('INSERT INTO request_comments (request_id, request_table, user_id, user_name, comment, channel) VALUES (?, ?, ?, ?, ?, ?)')
-    ->execute([$reqId, $sector, $userId, $userName, $text, $channel]);
+$pdo->prepare('INSERT INTO request_comments (request_id, request_table, user_id, user_name, comment, channel, helper_area_id) VALUES (?, ?, ?, ?, ?, ?, ?)')
+    ->execute([$reqId, $sector, $userId, $userName, $text, $channel, $helperArea]);
 
 $preview = mb_strlen($text) > 60 ? mb_substr($text, 0, 57) . '...' : $text;
 $link = "request_detail?id=$reqId&table=$sector";
-if ($channel === 'internal') {
+if ($channel === 'helper') {
+    // Só os dois lados: quem pediu e o setor que ajuda
+    try {
+        $stmt = $pdo->prepare('SELECT DISTINCT u.id FROM cfg_user_area cua JOIN ctd_users u ON u.id = cua.id_user WHERE cua.id_area = ? AND u.status = 1');
+        $stmt->execute([$helperArea]);
+        $ids = array_unique(array_filter(array_map('intval', array_merge($stmt->fetchAll(PDO::FETCH_COLUMN), [$req['created_by'] ?? 0]))));
+        RequestManager::notifyMany($pdo, $ids, "Nova mensagem no pedido nº $reqId", "$userName: $preview", $link, $userId);
+    } catch (Throwable $e) {
+        error_log("add_comment ajuda $sector/$reqId: " . $e->getMessage());
+    }
+} elseif ($channel === 'internal') {
     // Só os setores envolvidos: o responsável atual e quem foi chamado para ajudar (quem pediu nunca)
     try {
         require_once __DIR__ . '/../classes/RequestForwardService.php';
