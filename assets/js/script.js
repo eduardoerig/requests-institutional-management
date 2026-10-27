@@ -1,14 +1,12 @@
+// =====================================================================
+// AJAX: todas as chamadas à API passam por aqui
+// =====================================================================
+
+// Põe o token CSRF no corpo (FormData ou URLSearchParams); outros tipos passam como estão
 function attachCsrfToken(payload) {
-    const token = window.CSRF_TOKEN || '';
-    if (!token) return payload;
-    if (payload instanceof FormData) {
-        if (!payload.has('csrf_token')) payload.append('csrf_token', token);
-        return payload;
-    }
-    if (payload instanceof URLSearchParams) {
-        if (!payload.has('csrf_token')) payload.append('csrf_token', token);
-        return payload;
-    }
+    const token = window.CSRF_TOKEN;
+    const canAppend = payload instanceof FormData || payload instanceof URLSearchParams;
+    if (token && canAppend && !payload.has('csrf_token')) payload.append('csrf_token', token);
     return payload;
 }
 
@@ -22,53 +20,78 @@ async function readJson(response) {
     return response.json();
 }
 
+// Texto para quando a chamada nem chegou a dar resposta útil
 function requestErrorMessage(err) {
     return err && err.serverStatus
         ? `Erro no servidor (código ${err.serverStatus}). Tente de novo em instantes.`
         : 'Sem conexão. Verifique a internet e tente de novo.';
 }
 
-// opts.quiet: sem véu de carregamento e sem aviso de erro (quem chama mostra o próprio estado)
-async function fetchAjax(path, formData, opts = {}) {
-    const quiet = !!opts.quiet;
-    const overlay = quiet ? null : document.querySelector('.loading-overlay');
-    if (overlay) overlay.style.display = "flex";
-    let data;
+/**
+ * Envia um POST para a API e devolve o JSON se success = true; senão devolve false.
+ * - Mostra o véu de carregamento enquanto espera.
+ * - Sessão expirada: se a API mandar 'redirect', a página vai para lá.
+ * - Erro (sem conexão, servidor ou data.message): avisa o usuário.
+ * - opts.quiet: sem véu e sem aviso; quem chama mostra o próprio estado.
+ */
+async function fetchAjax(path, formData, { quiet = false } = {}) {
+    const hideLoading = quiet ? null : showLoading();
+
+    let data = null;
+    let failure = null; // erro de rede ou resposta que não é JSON
     try {
-        const resp = await fetch(path, {
-            method: "POST",
-            body: attachCsrfToken(formData)
-        });
+        const resp = await fetch(path, { method: 'POST', body: attachCsrfToken(formData) });
         data = await readJson(resp);
     } catch (e) {
-        // Esconde o carregamento antes do alerta para não prender a tela atrás dele
-        if (overlay) overlay.style.display = "none";
-        if (quiet) return false;
-        if (typeof showAlert === 'function') {
-            await showAlert({ title: 'Não foi possível concluir', message: requestErrorMessage(e), type: 'error' });
-        } else {
-            showToast(requestErrorMessage(e), 'error');
-        }
-        return false;
+        failure = e;
+    } finally {
+        if (hideLoading) hideLoading(); // antes do aviso, para não prender a tela atrás dele
     }
-    if (overlay) overlay.style.display = "none";
 
-    if (!data.success && data.redirect) {
+    if (data && data.success) return data;
+    if (data && data.redirect) {
         window.location.href = data.redirect;
         return false;
     }
-
-    if (data.success) {
-        return data;
-    }
-    if (quiet) return false;
-    // Se showToast for preferido globalmente ou showAlert não existir
-    if (typeof showAlert === 'function') {
-        await showAlert({ title: 'Atenção', message: data.message || 'Não foi possível concluir a operação.', type: 'warning' });
-    } else {
-        showToast(data.message || 'Não foi possível concluir a operação.', 'error');
+    if (!quiet) {
+        if (failure) await showAjaxError('Não foi possível concluir', requestErrorMessage(failure), 'error');
+        else await showAjaxError('Atenção', (data && data.message) || 'Não foi possível concluir a operação.', 'warning');
     }
     return false;
+}
+
+// Último botão tocado: é nele que a espera aparece (giro no lugar do texto)
+let lastPressed = null;
+document.addEventListener('click', (e) => {
+    const btn = e.target.closest('.btn');
+    lastPressed = btn ? { btn, at: Date.now() } : null;
+}, true);
+
+/**
+ * Liga o véu de carregamento e devolve a função que desliga.
+ * O véu segura cliques na hora, mas o CSS só o mostra após .3s. Se a ação veio de um
+ * botão ainda visível (tocado há pouco), o giro vai no botão e o véu fica invisível.
+ */
+function showLoading() {
+    const overlay = document.querySelector('.loading-overlay');
+    const recent = lastPressed && Date.now() - lastPressed.at < 1500 ? lastPressed.btn : null;
+    const btn = recent && recent.isConnected && recent.offsetParent !== null ? recent : null;
+    const ownsBusy = btn && btn.getAttribute('aria-busy') !== 'true'; // a tela pode já ter marcado
+    if (ownsBusy) btn.setAttribute('aria-busy', 'true');
+    if (overlay) {
+        overlay.classList.toggle('is-quiet', !!btn);
+        overlay.style.display = 'flex';
+    }
+    return () => {
+        if (overlay) overlay.style.display = 'none';
+        if (ownsBusy) btn.removeAttribute('aria-busy');
+    };
+}
+
+// Janela de aviso (showAlert) quando existe; senão, aviso rápido no canto
+async function showAjaxError(title, message, type) {
+    if (typeof showAlert === 'function') await showAlert({ title, message, type });
+    else showToast(message, 'error');
 }
 
 // =====================================================================
@@ -691,8 +714,7 @@ async function globalRequestAction(action, id, table, value = '') {
     let fullTable = table;
     if (!table.startsWith('ctd_')) fullTable = 'ctd_' + table + '_frm';
 
-    const overlay = document.querySelector('.loading-overlay');
-    if (overlay) overlay.style.display = "flex";
+    const hideLoading = showLoading();
 
     try {
         const formData = new URLSearchParams();
@@ -731,7 +753,7 @@ async function globalRequestAction(action, id, table, value = '') {
         console.error("Erro fatal", error);
         showToast(requestErrorMessage(error), "error");
     } finally {
-        if (overlay) overlay.style.display = "none";
+        hideLoading();
     }
 }
 

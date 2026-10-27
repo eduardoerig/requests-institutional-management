@@ -87,14 +87,14 @@ body.page-login { background: var(--superficie); }
     border: 1px solid var(--linha);
     border-radius: var(--r-3);
     box-shadow: var(--sombra-1);
-    transition: opacity .35s ease, transform .35s ease;
+    transition: opacity var(--dur-3) var(--ease-out), transform var(--dur-3) var(--ease-out);
 }
 .auth-demo__card.is-leaving { opacity: 0; transform: translateY(8px); }
 .auth-demo__head { display: flex; justify-content: space-between; align-items: center; gap: 12px; }
 .auth-demo__ref { font-size: var(--t-xs); color: var(--texto-2); }
 .auth-demo__title { margin: 0; font-size: var(--t-lg); font-weight: 600; line-height: 1.35; }
 .auth-demo .steps4 { gap: 8px; }
-.auth-demo .steps4 li::before { transition: background-color .4s ease; }
+.auth-demo .steps4 li::before { transition: background-color var(--dur-3) var(--ease-out); }
 .auth-demo__msg {
     display: flex;
     gap: 10px;

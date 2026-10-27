@@ -98,7 +98,7 @@
     position: fixed; inset: 0; z-index: 80;
     display: flex; flex-direction: column;
     background: var(--fundo);
-    animation: acc-sheet-in .22s ease-out;
+    animation: acc-sheet-in var(--dur-2) var(--ease-out);
 }
 @keyframes acc-sheet-in { from { transform: translateY(100%); } to { transform: translateY(0); } }
 .acc-editor__top {
@@ -209,7 +209,7 @@
 /* ---------- Assistente "Nova pessoa" (celular: tela cheia) ---------- */
 .acc-wizard { position: fixed; inset: 0; z-index: 85; display: flex; background: var(--superficie); }
 .acc-wizard[hidden], .acc-wizard [hidden] { display: none !important; }
-.acc-wizard__card { flex: 1; display: flex; flex-direction: column; min-height: 0; width: 100%; background: var(--superficie); animation: acc-sheet-in .22s ease-out; }
+.acc-wizard__card { flex: 1; display: flex; flex-direction: column; min-height: 0; width: 100%; background: var(--superficie); animation: acc-sheet-in var(--dur-2) var(--ease-out); }
 .acc-wizard__head { display: flex; flex-direction: column; gap: 14px; padding: calc(16px + env(safe-area-inset-top)) 20px 14px; }
 .acc-wizard__titlebar { display: flex; align-items: center; gap: 12px; }
 .acc-wizard__step { font-size: var(--t-xs); color: var(--texto-2); }

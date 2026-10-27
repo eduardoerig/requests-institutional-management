@@ -41,7 +41,7 @@ a.dash-stage:focus-visible { outline: none; box-shadow: var(--anel); }
 .dash-more__toggle::-webkit-details-marker { display: none; }
 .dash-more__toggle:hover { color: var(--texto); }
 .dash-more__toggle:focus-visible { outline: none; box-shadow: var(--anel); border-radius: var(--r-1); }
-.dash-more__chev { font-size: 11px; transition: transform .15s; }
+.dash-more__chev { font-size: 11px; transition: transform var(--dur-1); }
 .dash-more[open] .dash-more__chev { transform: rotate(180deg); }
 .dash-more[open] .dash-cols { margin-top: 10px; }
 

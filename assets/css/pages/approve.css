@@ -32,7 +32,7 @@
 .approve-progress__text { font-size: var(--t-sm); font-weight: 600; color: var(--texto-2); font-variant-numeric: tabular-nums; }
 .approve-progress__toggle { min-height: var(--h-md); }
 .approve-progress__track { height: 4px; border-radius: 2px; background: var(--linha); overflow: hidden; }
-.approve-progress__track > span { display: block; width: 0; height: 100%; background: var(--laranja); transition: width .25s ease; }
+.approve-progress__track > span { display: block; width: 0; height: 100%; background: var(--laranja); transition: width var(--dur-2) var(--ease-out); }
 @media (prefers-reduced-motion: reduce) { .approve-progress__track > span { transition: none; } }
 
 /* Selecionar todos (lote) */
