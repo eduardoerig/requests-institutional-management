@@ -138,7 +138,7 @@ if (!function_exists('renderWorkRow')) {
      *   note    [texto, tipo] situação curta ('in', 'bad', 'ok' ou '')
      *   due     false para não mostrar o prazo (histórico)
      *   tab     nome da aba (resultados de busca)
-     *   action  null | [label, quick ('start'|'finish'|'accept'|'return'|''), forward id, primário?]
+     *   action  null | [label, quick ('start'|'finish'|'accept'|'assume'|'return'|''), forward id, primário?]
      *           quick '' vira link para o pedido
      */
     function renderWorkRow(array $row, array $opt = []): string

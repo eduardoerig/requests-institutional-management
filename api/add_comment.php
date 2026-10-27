@@ -55,6 +55,17 @@ if ($role === 'solicitante') {
     $channel = 'internal';
 } else {
     $channel = $wanted === 'internal' ? 'internal' : 'public';
+    // Setor que transferiu o pedido não fala mais com quem pediu: só com quem assumiu
+    if ($channel === 'public') {
+        $myAreas = RequestForwardService::userAreaIds($pdo, $userId);
+        if (!in_array(RequestForwardService::ownerAreaId($pdo, $reqId, $sector), $myAreas, true)) {
+            foreach (RequestForwardService::forRequest($pdo, $reqId, $sector) as $f) {
+                if ($f['mode'] === 'transfer' && in_array($f['status'], ['accepted', 'completed'], true) && in_array((int)$f['from_area_id'], $myAreas, true)) {
+                    jsonResponse(['success' => false, 'message' => 'O pedido foi transferido. Fale com o setor que assumiu na conversa entre setores.'], 403);
+                }
+            }
+        }
+    }
 }
 
 $userName = $_SESSION['name'] ?? 'Usuário';
@@ -86,7 +97,7 @@ if ($channel === 'helper') {
         $areas = [RequestForwardService::ownerAreaId($pdo, $reqId, $sector)];
         foreach (RequestForwardService::forRequest($pdo, $reqId, $sector) as $f) {
             if (($f['mode'] === 'help' && !in_array($f['status'], ['refused', 'cancelled'], true))
-                || ($f['mode'] === 'transfer' && $f['status'] === 'pending')) {
+                || ($f['mode'] === 'transfer' && in_array($f['status'], ['pending', 'accepted', 'completed'], true))) {
                 $areas[] = (int)$f['to_area_id'];
                 $areas[] = (int)$f['from_area_id'];
             }

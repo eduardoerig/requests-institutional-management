@@ -1032,10 +1032,12 @@ async function decideRequest(value, id, table) {
     if (data.success) refreshAfterChange({ advance: true, message: data.message });
 }
 
-async function forwardAct(action, forwardId) {
+async function forwardAct(action, forwardId, mode = 'help') {
     const fields = { action, forward_id: forwardId };
     if (action === 'accept') {
-        const ok = await showConfirm({ title: 'Aceitar encaminhamento', message: 'Seu setor passa a cuidar desta parte do pedido.', type: 'info', confirmLabel: 'Aceitar' });
+        const ok = await showConfirm(mode === 'transfer'
+            ? { title: 'Assumir o pedido', message: 'Seu setor passa a cuidar do pedido inteiro e a falar com quem pediu. O setor que enviou só acompanha.', type: 'info', confirmLabel: 'Aceitar e assumir' }
+            : { title: 'Aceitar ajuda', message: 'Seu setor faz esta parte e depois devolve com um retorno. O pedido continua com o setor que pediu ajuda.', type: 'info', confirmLabel: 'Aceitar ajuda' });
         if (!ok) return;
     } else if (action === 'refuse') {
         const reason = await showConfirm({
@@ -1058,7 +1060,9 @@ async function forwardAct(action, forwardId) {
     const data = await postForm('api/request_forwards.php', fields);
     if (!data) return;
     showToast(data.message, data.success ? 'success' : 'error');
-    if (data.success) refreshAfterChange({ advance: action === 'refuse' || action === 'return', message: data.message });
+    // Recusou: o pedido some para este setor, segue para o próximo. Devolveu: fica no pedido (agora só
+    // consulta) para ver o que foi feito; não pula para outro com o botão de ação já pronto
+    if (data.success) refreshAfterChange({ advance: action === 'refuse', message: data.message });
 }
 
 // ---------------------------------------------------------------------

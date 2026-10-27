@@ -39,7 +39,7 @@ class RequestInbox
      */
     public const LANES = [
         'urgentes' => ['Urgentes', 'resolva primeiro'],
-        'outros' => ['Outros setores pedindo ajuda', 'vocês fazem uma parte e devolvem'],
+        'outros' => ['Vindos de outros setores', 'pedidos de ajuda e transferências esperando vocês aceitarem'],
         'novos' => ['Chegaram', 'aprovados pela coordenação'],
         'andamento' => ['Em andamento', 'já começaram'],
     ];

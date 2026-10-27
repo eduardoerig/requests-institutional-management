@@ -361,6 +361,17 @@ check('Compras aceita a transferência', ($res['json']['success'] ?? false) === 
 check('aceite volta o pedido para Em atendimento', $reqStatus() === 'W', $reqStatus());
 $res = $shop->get("request_detail?id=$fwdReqId&table=ti");
 check('depois de aceitar, Compras (responsável) lê a conversa com quem pediu', str_contains($res['body'], '7750'));
+check('depois de assumir, Compras conversa "Com TI" e não consigo mesma', str_contains($res['body'], 'Mensagem para TI') && !str_contains($res['body'], 'Mensagem para Compras'));
+$res = $ti->get("request_detail?id=$fwdReqId&table=ti");
+check('TI que transferiu só consulta a conversa com quem pediu', str_contains($res['body'], 'O pedido foi transferido para Compras'));
+$res = $ti->post('api/add_comment.php', ['id' => $fwdReqId, 'table' => 'ti', 'comment' => 'TI depois de transferir 7760', 'channel' => 'public']);
+check('TI que transferiu não escreve para quem pediu', $res['status'] === 403, snippet($res));
+$res = $ti->post('api/add_comment.php', ['id' => $fwdReqId, 'table' => 'ti', 'comment' => 'TI fala com Compras 7761', 'channel' => 'internal']);
+check('TI que transferiu ainda fala com Compras', ($res['json']['success'] ?? false) === true, snippet($res));
+$res = $ti->get("api/get_comments.php?id=$fwdReqId&table=ti&thread=main");
+check('recado do encaminhamento não aparece na conversa com quem pediu', !str_contains($res['body'], 'Agora sim, comprar'));
+$res = $ti->get("api/get_comments.php?id=$fwdReqId&table=ti&thread=internal");
+check('recado do encaminhamento aparece na conversa entre setores', str_contains($res['body'], 'Agora sim, comprar') && str_contains($res['body'], '7761'));
 $res = $ti->post('api/request_actions.php', ['id' => $fwdReqId, 'table' => 'ctd_ti_frm', 'action' => 'finish']);
 check('TI não conclui depois de transferir', ($res['json']['success'] ?? true) === false);
 $res = $sol->get("request_detail?id=$fwdReqId&table=ti");

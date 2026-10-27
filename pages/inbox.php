@@ -89,7 +89,7 @@ $present = function (array $row) use ($tab, $cut): array {
         $msg = trim((string)($fwd['observation'] ?? ''));
         $out['badge'] = ($isHelp ? 'Ajuda para ' : 'Transferência de ') . $fwd['from_label'];
         $out['meta'] = $fwd['from_label'] . ($isHelp ? ' pede' : ' quer transferir') . ($msg !== '' ? ': “' . $cut($msg) . '”' : '');
-        $out['action'] = [$isHelp ? 'Aceitar ajuda' : 'Aceitar', 'accept', (int)$fwd['id'], true];
+        $out['action'] = [$isHelp ? 'Aceitar ajuda' : 'Aceitar e assumir', $isHelp ? 'accept' : 'assume', (int)$fwd['id'], true];
         return $out;
     }
     if ($group === 'ajudando' && $fwd) {

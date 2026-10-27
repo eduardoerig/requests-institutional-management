@@ -172,21 +172,41 @@ if (!function_exists('renderRequestView')) {
                     'readHint' => 'A ajuda já foi devolvida. Esta conversa fica só para consulta.'];
             }
         } else {
-            $party = in_array($ownerArea, RequestForwardService::userAreaIds($pdo, $viewerId), true); // coordenação e admin só acompanham
-            $helpers = []; // setores com quem o responsável conversa: chamados para ajudar ou com transferência pendente
+            $myAreas = RequestForwardService::userAreaIds($pdo, $viewerId);
+            $party = in_array($ownerArea, $myAreas, true); // coordenação e admin só acompanham
+            // Setores do outro lado da conversa entre setores: chamados para ajudar, com transferência
+            // pendente ou que já passaram o pedido adiante. Sempre o setor que não é o de quem vê (depois
+            // de uma transferência, quem assumiu fala "Com TI", não consigo mesmo)
+            $helpers = [];
+            $handedOver = false; // meu setor transferiu o pedido e não é mais o responsável
             foreach ($forwards as $f) {
-                if (($f['mode'] === 'help' && !in_array($f['status'], ['refused', 'cancelled'], true))
-                    || ($f['mode'] === 'transfer' && $f['status'] === 'pending')) {
-                    $helpers[(int)$f['to_area_id']] = (string)$f['to_label'];
+                $live = ($f['mode'] === 'help' && !in_array($f['status'], ['refused', 'cancelled'], true))
+                    || ($f['mode'] === 'transfer' && in_array($f['status'], ['pending', 'accepted', 'completed'], true));
+                if (!$live) {
+                    continue;
                 }
+                $to = (int)$f['to_area_id'];
+                $from = (int)$f['from_area_id'];
+                $other = match (true) {
+                    in_array($to, $myAreas, true) => $from,
+                    in_array($from, $myAreas, true) => $to,
+                    default => $to === $ownerArea ? $from : $to, // coordenação e admin: o setor que não é o responsável
+                };
+                if (!in_array($other, $myAreas, true)) {
+                    $helpers[$other] = $other === $to ? (string)$f['to_label'] : (string)$f['from_label'];
+                }
+                $handedOver = $handedOver || ($f['mode'] === 'transfer' && $f['status'] !== 'pending' && in_array($from, $myAreas, true) && !$party);
             }
-            $threads[] = ['key' => 'main', 'label' => 'Com ' . $who, 'events' => true,
+            unset($helpers[0]);
+            $threads[] = ['key' => 'main', 'label' => 'Com ' . $who, 'events' => true, 'fwdEvents' => !$helpers,
                 'sources' => array_merge([['public', 0, '', false]], $helperSources),
-                'target' => $target('public', 0, "$who (quem pediu) vê esta conversa. Dúvidas sobre o pedido, pergunte aqui.", 'Mensagem para ' . $who . ' (quem pediu)'),
-                'empty' => 'Ninguém escreveu ainda. Use o campo abaixo para falar sobre o pedido.', 'readHint' => ''];
+                'target' => $handedOver ? null : $target('public', 0, "$who (quem pediu) vê esta conversa. Dúvidas sobre o pedido, pergunte aqui.", 'Mensagem para ' . $who . ' (quem pediu)'),
+                'empty' => 'Ninguém escreveu ainda. Use o campo abaixo para falar sobre o pedido.',
+                'readHint' => $handedOver ? "O pedido foi transferido para $ownerLabel. Esta conversa fica só para consulta; fale com $ownerLabel na aba ao lado." : ''];
             if ($helpers) {
                 $with = count($helpers) === 1 ? reset($helpers) : 'os setores';
-                $threads[] = ['key' => 'internal', 'label' => 'Com ' . $with, 'events' => false, 'sources' => [['internal', 0, '', false]],
+                // Os encaminhamentos (pediu ajuda, devolveu, transferiu) ficam aqui: $who não vê
+                $threads[] = ['key' => 'internal', 'label' => 'Com ' . $with, 'events' => false, 'fwdEvents' => true, 'sources' => [['internal', 0, '', false]],
                     'target' => $target('internal', 0, "Só os setores veem. $who não vê esta mensagem.", 'Mensagem para ' . $with),
                     'empty' => "Nenhuma mensagem com $with ainda.", 'readHint' => ''];
             }
@@ -240,16 +260,18 @@ if (!function_exists('renderRequestView')) {
 
         $allForwards = $forwards ?? RequestForwardService::forRequest($pdo, $reqId, $sector);
         $ownerArea = requestOwnerFromForwards($pdo, $allForwards, $sector);
-        if ($thread['events']) {
-            // Encaminhamentos com a mensagem: só para os setores
-            $forwards = $isStaff ? $allForwards : [];
+        // Encaminhamentos (pediu ajuda, devolveu, transferiu) com a mensagem: só para os setores e, quando há
+        // conversa entre setores, só nela — na conversa com quem pediu ele não vê esses recados
+        $fwdEvents = $thread['fwdEvents'] ?? $thread['events'];
+        if ($thread['events'] || $fwdEvents) {
+            $forwards = $isStaff && $fwdEvents ? $allForwards : [];
             $skip = '/^(Encaminhou|Pediu ajuda|Setor .* (assumiu|aceitou|recusou|devolveu)|Cancelou o encaminhamento|Assumiu o pedido|Aceitou ajudar|Recusou o encaminhamento|Devolveu a ajuda'
                 . ($forwards ? '|Requisição repassada|Repasse aceito' : '') . ')/u';
 
-            if ($history === null) {
+            if ($history === null && $thread['events']) {
                 $history = requestHistoryRows($pdo, $reqId, $sector);
             }
-            foreach ($history as $h) {
+            foreach ($thread['events'] ? $history : [] as $h) {
                 if ($isStaff && preg_match($skip, (string)$h['action'])) {
                     continue; // vem dos encaminhamentos, com a mensagem
                 }
@@ -369,7 +391,7 @@ if (!function_exists('renderRequestView')) {
             if ($open['status'] === 'pending') {
                 return $open['mode'] === 'transfer'
                     ? "$from quer passar este pedido para $to. Como administração, você pode tocar em " . $b('Aceitar e assumir') . " ou recusar no lugar de $to."
-                    : "$from pediu ajuda a $to. Como administração, você pode tocar em " . $b('Aceitar ajudar') . " ou recusar no lugar de $to.";
+                    : "$from pediu ajuda a $to. Como administração, você pode tocar em " . $b('Aceitar ajuda') . " ou recusar no lugar de $to.";
             }
             if ($open['mode'] === 'help' && $open['status'] === 'accepted') {
                 return "$to está ajudando $from. Como administração, você pode tocar em " . $b('Devolver com retorno') . " no lugar de $to.";
@@ -378,7 +400,7 @@ if (!function_exists('renderRequestView')) {
         if ($open && $openIsForMe && $open['status'] === 'pending') {
             return $open['mode'] === 'transfer'
                 ? e($open['from_label']) . ' quer passar este pedido para vocês. Toque em ' . $b('Aceitar e assumir') . ' ou recuse dizendo o motivo.'
-                : e($open['from_label']) . ' pediu a ajuda de vocês. Toque em ' . $b('Aceitar ajudar') . ' ou recuse dizendo o motivo.';
+                : e($open['from_label']) . ' pediu a ajuda de vocês. Toque em ' . $b('Aceitar ajuda') . ' ou recuse dizendo o motivo.';
         }
         if ($open && $openIsForMe && $open['mode'] === 'help' && $open['status'] === 'accepted') {
             return 'Vocês estão ajudando ' . e($open['from_label']) . '. Quando terminar a sua parte, toque em ' . $b('Devolver com retorno') . '.';
@@ -639,7 +661,7 @@ if (!function_exists('renderRequestView')) {
         $jsSector = e($sector);
         $candidates = [];
         if ($openIsForMe && $open['status'] === 'pending') {
-            $candidates[] = ['main', '<button type="button" class="btn %s" onclick="forwardAct(\'accept\', ' . (int)$open['id'] . ')"><i class="fa-solid fa-check" aria-hidden="true"></i> ' . ($open['mode'] === 'transfer' ? 'Aceitar e assumir' : 'Aceitar ajudar') . '</button>'];
+            $candidates[] = ['main', '<button type="button" class="btn %s" onclick="forwardAct(\'accept\', ' . (int)$open['id'] . ', \'' . ($open['mode'] === 'transfer' ? 'transfer' : 'help') . '\')"><i class="fa-solid fa-check" aria-hidden="true"></i> ' . ($open['mode'] === 'transfer' ? 'Aceitar e assumir' : 'Aceitar ajuda') . '</button>'];
             $candidates[] = ['side', '<button type="button" class="btn" onclick="forwardAct(\'refuse\', ' . (int)$open['id'] . ')">Recusar</button>'];
         }
         if ($openIsForMe && $open['mode'] === 'help' && $open['status'] === 'accepted') {
