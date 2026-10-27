@@ -174,6 +174,11 @@
 .acc-sector__head h3 { display: flex; align-items: center; gap: 8px; font-size: var(--t-lg); }
 .acc-sector__head h3 i { color: var(--texto-2); }
 .acc-sector__open { font-size: var(--t-xs); color: var(--texto-2); font-variant-numeric: tabular-nums; }
+.acc-sector__desc { display: flex; align-items: flex-start; gap: 8px; }
+.acc-sector__desc-text { flex: 1; min-width: 0; margin: 0; font-size: var(--t-sm); color: var(--texto-2); line-height: 1.45; }
+.acc-sector__desc-text.is-empty { font-style: italic; color: var(--texto-3); }
+.acc-sector__desc .btn { flex: none; }
+.acc-add-form label small, .acc-sector--new label small { font-weight: 400; color: var(--texto-2); }
 .acc-sector .acc-label { text-transform: uppercase; letter-spacing: .04em; font-size: 12px; color: var(--texto-2); }
 .acc-resp { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 8px; }
 .acc-resp li { display: flex; align-items: center; gap: 10px; min-height: var(--h-md); }

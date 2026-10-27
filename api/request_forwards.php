@@ -32,7 +32,11 @@ if ($action === 'areas') {
     $sector = normalizeRequestTable((string)($_GET['table'] ?? ''));
     $reqId = (int)($_GET['id'] ?? 0);
     $exclude = ($sector && $reqId) ? RequestForwardService::ownerAreaId($pdo, $reqId, $sector) : null;
-    jsonResponse(['success' => true, 'data' => RequestForwardService::availableAreas($pdo, $exclude)]);
+    jsonResponse([
+        'success' => true,
+        'data' => RequestForwardService::availableAreas($pdo, $exclude),
+        'from' => $exclude ? RequestForwardService::areaLabel($pdo, $exclude) : '', // responsável atual, para as frases do assistente
+    ]);
 }
 
 requirePostJson();

@@ -359,6 +359,18 @@ function areaTitles(PDO $pdo, bool $refresh = false): array
     return $titles;
 }
 
+/**
+ * Frase curta do que cada setor faz: [id => descrição] (só os que têm). Usada no Encaminhar.
+ */
+function areaDescriptions(PDO $pdo): array
+{
+    $descriptions = [];
+    foreach ($pdo->query("SELECT id, description FROM ctd_area WHERE description IS NOT NULL AND description <> ''")->fetchAll(PDO::FETCH_ASSOC) as $row) {
+        $descriptions[(int)$row['id']] = (string)$row['description'];
+    }
+    return $descriptions;
+}
+
 function getAreaIdBySector(PDO $pdo, string $sector): ?int
 {
     $aliases = sectorAreaAliases($sector);

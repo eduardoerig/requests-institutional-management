@@ -18,9 +18,14 @@ if (!isGlobalAdminRole($_SESSION['role'] ?? '')) {
 }
 
 $title = trim($_POST['sector_title'] ?? '');
+$description = trim(preg_replace('/\s+/u', ' ', (string)($_POST['sector_description'] ?? '')));
 
 if (empty($title)) {
     echo json_encode(['success' => false, 'message' => 'O título do setor é obrigatório.']);
+    exit;
+}
+if (mb_strlen($description) > 160) {
+    echo json_encode(['success' => false, 'message' => 'A descrição pode ter até 160 letras.']);
     exit;
 }
 
@@ -33,8 +38,8 @@ try {
         exit;
     }
 
-    $stmt = $pdo->prepare("INSERT INTO ctd_area (title) VALUES (?)");
-    $stmt->execute([$title]);
+    $stmt = $pdo->prepare("INSERT INTO ctd_area (title, description) VALUES (?, ?)");
+    $stmt->execute([$title, $description !== '' ? $description : null]);
 
     echo json_encode(['success' => true, 'message' => 'Setor criado com sucesso!']);
 } catch (PDOException $e) {

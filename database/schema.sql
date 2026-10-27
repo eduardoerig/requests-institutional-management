@@ -23,6 +23,7 @@ CREATE TABLE `cfg_user_subdivision` (
 CREATE TABLE `ctd_area` (
   `id` int NOT NULL AUTO_INCREMENT,
   `title` varchar(255) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci DEFAULT NULL,
+  `description` varchar(160) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
   PRIMARY KEY (`id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 CREATE TABLE `ctd_mkt_frm` (
@@ -229,11 +230,11 @@ CREATE TABLE `request_history` (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- Dados de referência
-INSERT INTO `ctd_area` VALUES (1,'shop');
-INSERT INTO `ctd_area` VALUES (2,'mkt');
-INSERT INTO `ctd_area` VALUES (3,'service');
-INSERT INTO `ctd_area` VALUES (4,'Reprografia');
-INSERT INTO `ctd_area` VALUES (5,'ti');
+INSERT INTO `ctd_area` VALUES (1,'shop','Compra de peças, materiais e serviços');
+INSERT INTO `ctd_area` VALUES (2,'mkt','Artes, comunicação e redes');
+INSERT INTO `ctd_area` VALUES (3,'service','Elétrica, hidráulica, móveis e prédio');
+INSERT INTO `ctd_area` VALUES (4,'Reprografia','Cópias, impressões e encadernação');
+INSERT INTO `ctd_area` VALUES (5,'ti','Computadores, internet, projetores e sistemas');
 INSERT INTO `ctd_requests_models` VALUES (1,'Solicitação de Serviço','form_servico.php','Pedido de serviços','#ffcd00','Y','2025-11-26 10:03:22');
 INSERT INTO `ctd_requests_models` VALUES (2,'Solicitação de Compra','form_compra.php','Pedido de materiais','#2ecc71','Y','2025-11-26 10:03:22');
 INSERT INTO `ctd_requests_models` VALUES (3,'Solicitação de Cópia Colorida','form_color_print.php','Liberação de copias coloridas na reprografia','#00cdff','Y','2025-11-26 00:00:00');

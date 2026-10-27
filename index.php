@@ -346,45 +346,51 @@ $useCombo = in_array($assetPage, $comboPages, true);
     <script src="assets/js/pages/<?= e($assetPage) ?>.js?v=<?php echo $assetVersion; ?>"></script>
     <?php endif; ?>
 
-    <!-- Encaminhar: um passo por vez (como → para quem → mensagem); o botão diz o que vai acontecer -->
+    <!-- Encaminhar: três passos, um por tela (como → para qual setor → recado); o botão final diz o que vai acontecer -->
     <div class="modal-overlay fw" id="forwardWizard" role="dialog" aria-modal="true" aria-labelledby="fwTitle" hidden>
         <form class="modal-card fw__card" id="fwForm" novalidate>
             <header class="fw__head">
-                <div>
-                    <h3 id="fwTitle">Encaminhar pedido</h3>
-                    <p class="fw__req" id="fwReq"></p>
+                <div class="fw__titles">
+                    <p class="fw__kicker" id="fwKicker"></p>
+                    <h3 id="fwTitle">O que você quer fazer?</h3>
                 </div>
                 <button type="button" class="fw__close" data-fw-close aria-label="Fechar"><i class="fa-solid fa-xmark" aria-hidden="true"></i></button>
             </header>
+            <ol class="fw__progress" aria-hidden="true"><li></li><li></li><li></li></ol>
 
-            <fieldset class="fw__step">
-                <legend class="fw__legend">O que você quer fazer?</legend>
-                <div class="fw__choices">
-                    <label class="fw__choice">
-                        <input type="radio" name="mode" value="transfer" required>
-                        <span><strong><i class="fa-solid fa-right-left" aria-hidden="true"></i> Transferir</strong>O outro setor passa a cuidar do pedido. Ex.: não é da sua área.</span>
-                    </label>
-                    <label class="fw__choice">
-                        <input type="radio" name="mode" value="help" required>
-                        <span><strong><i class="fa-solid fa-handshake-angle" aria-hidden="true"></i> Pedir ajuda</strong>O outro setor faz uma parte e devolve; o pedido continua com você. Ex.: Compras compra a peça.</span>
-                    </label>
+            <div class="fw__body">
+                <fieldset class="fw__step" data-fw-step="1">
+                    <legend class="visually-hidden">O que você quer fazer?</legend>
+                    <div class="fw__choices">
+                        <label class="fw__choice">
+                            <input type="radio" name="mode" value="transfer" required>
+                            <span class="fw__radio" aria-hidden="true"></span>
+                            <span class="fw__text"><strong>Transferir</strong><span data-fw-mode-text="transfer">O outro setor assume o pedido inteiro.</span><small>Exemplo: o "computador que não liga" era uma tomada queimada. Vai para Manutenção.</small></span>
+                        </label>
+                        <label class="fw__choice">
+                            <input type="radio" name="mode" value="help" required>
+                            <span class="fw__radio" aria-hidden="true"></span>
+                            <span class="fw__text"><strong>Pedir ajuda</strong><span data-fw-mode-text="help">O outro setor faz uma parte e devolve com um retorno. O pedido continua com você.</span><small>Exemplo: Compras compra a lâmpada do projetor e vocês instalam.</small></span>
+                        </label>
+                    </div>
+                </fieldset>
+
+                <fieldset class="fw__step" data-fw-step="2" hidden>
+                    <legend class="visually-hidden">Para qual setor?</legend>
+                    <div class="fw__choices fw__choices--areas" id="fwAreas"><p class="fw__hint">Carregando setores...</p></div>
+                </fieldset>
+
+                <div class="fw__step" data-fw-step="3" hidden>
+                    <label for="fwMessage" class="fw__label" id="fwMessageLabel">Recado</label>
+                    <textarea id="fwMessage" name="message" rows="4" maxlength="1000" required aria-describedby="fwCount fwAfter"></textarea>
+                    <p class="fw__count" id="fwCount" aria-live="polite"></p>
+                    <p class="fw__after" id="fwAfter"></p>
                 </div>
-            </fieldset>
-
-            <fieldset class="fw__step" data-fw-step="area" hidden>
-                <legend class="fw__legend">Para qual setor?</legend>
-                <div class="fw__choices fw__choices--areas" id="fwAreas"><p class="fw__hint">Carregando setores...</p></div>
-            </fieldset>
-
-            <div class="fw__step" data-fw-step="message" hidden>
-                <label for="fwMessage" class="fw__legend">O que eles precisam saber?</label>
-                <textarea id="fwMessage" name="message" rows="3" maxlength="1000" required aria-describedby="fwCount" placeholder="Ex.: o projetor da sala 12 não liga, já trocamos o cabo."></textarea>
-                <p class="fw__hint" id="fwCount" aria-live="polite" hidden></p>
             </div>
 
             <div class="fw__actions">
-                <button type="button" class="btn btn--ghost" data-fw-close>Cancelar</button>
-                <button type="submit" class="btn btn--primary" id="fwSubmit" disabled><i class="fa-solid fa-paper-plane" aria-hidden="true"></i> Enviar</button>
+                <button type="button" class="btn" id="fwBack">Cancelar</button>
+                <button type="submit" class="btn btn--primary" id="fwNext" disabled>Continuar</button>
             </div>
         </form>
     </div>
@@ -397,36 +403,71 @@ $useCombo = in_array($assetPage, $comboPages, true);
         const form = document.getElementById('fwForm');
         const areasBox = document.getElementById('fwAreas');
         const msg = document.getElementById('fwMessage');
-        const submit = document.getElementById('fwSubmit');
+        const next = document.getElementById('fwNext');
+        const back = document.getElementById('fwBack');
         const count = document.getElementById('fwCount');
-        const stepArea = wiz.querySelector('[data-fw-step="area"]');
-        const stepMessage = wiz.querySelector('[data-fw-step="message"]');
+        const after = document.getElementById('fwAfter');
+        const kicker = document.getElementById('fwKicker');
+        const title = document.getElementById('fwTitle');
+        const msgLabel = document.getElementById('fwMessageLabel');
+        const steps = [...wiz.querySelectorAll('[data-fw-step]')];
+        const bars = [...wiz.querySelectorAll('.fw__progress li')];
+        const questions = ['O que você quer fazer?', 'Para qual setor?', 'O que eles precisam saber?'];
         const placeholders = {
-            transfer: 'Ex.: isso é com vocês: troca de lâmpadas da sala 12, não é da TI.',
-            help: 'Ex.: precisamos de 2 cabos HDMI para terminar a instalação na sala 12.'
+            transfer: 'Ex.: o computador está bom. A tomada atrás da mesa não tem energia; testei com outro aparelho.',
+            help: 'Ex.: precisamos de uma lâmpada para o projetor da sala 21 (modelo na etiqueta: ELPLP96).'
         };
-        const sendIcon = '<i class="fa-solid fa-paper-plane" aria-hidden="true"></i> ';
-        let current = null;
+        const MIN = 10;
+        let current = null; // { id, table, from }
+        let step = 1;
 
-        // Mostra o próximo passo só depois do anterior; o botão diz exatamente o que vai acontecer
-        function update(e) {
-            const mode = form.mode.value;
-            const area = form.querySelector('input[name="area"]:checked');
-            const len = msg.value.trim().length;
-            if (mode) msg.placeholder = placeholders[mode];
-            stepArea.hidden = !mode;
-            const showMessage = !!(mode && area);
-            if (showMessage && stepMessage.hidden && e && e.target && e.target.name === 'area') {
-                stepMessage.hidden = false;
-                msg.focus();
+        const mode = () => form.mode.value;
+        const area = () => form.querySelector('input[name="area"]:checked');
+        const len = () => msg.value.trim().length;
+
+        // Monta a tela do passo atual: título, linha de cima, barra, botões
+        function render(focus) {
+            const m = mode();
+            const a = area();
+            const to = a ? a.dataset.label : '';
+            const from = current && current.from ? current.from : 'seu setor';
+            steps.forEach(s => { s.hidden = Number(s.dataset.fwStep) !== step; });
+            bars.forEach((b, i) => b.classList.toggle('is-done', i < step));
+            title.textContent = questions[step - 1];
+            const what = m === 'help' ? 'Pedir ajuda' : 'Transferir';
+            kicker.textContent = (step === 1
+                ? 'Encaminhar #' + current.id + (current.from ? ' · ' + current.from : '')
+                : step === 2 ? what : what + (m === 'help' ? ' a ' : ' para ') + to) + ' · Passo ' + step + ' de 3';
+            back.textContent = step === 1 ? 'Cancelar' : 'Voltar';
+
+            if (step < 3) {
+                next.textContent = 'Continuar';
+                next.disabled = step === 1 ? !m : !a;
+            } else {
+                const n = len();
+                msgLabel.textContent = 'Recado para ' + to;
+                msg.placeholder = placeholders[m];
+                count.className = 'fw__count' + (n >= MIN ? ' is-ok' : n > 0 ? ' is-short' : '');
+                count.innerHTML = n >= MIN
+                    ? '<i class="fa-solid fa-check" aria-hidden="true"></i> Pronto para enviar.'
+                    : n > 0 ? '<i class="fa-regular fa-circle-question" aria-hidden="true"></i> Escreva mais ' + (MIN - n) + (MIN - n === 1 ? ' letra.' : ' letras.') : '';
+                after.textContent = m === 'help'
+                    ? to + ' precisa aceitar. Se recusar, diz o motivo e o pedido continua com ' + from + ' como está.'
+                    : 'Quando ' + to + ' aceitar, o pedido sai da Caixa de ' + from + '. Você continua lendo a conversa com quem pediu, só para leitura.';
+                next.textContent = (m === 'help' ? 'Pedir ajuda a ' : 'Transferir para ') + to;
+                next.disabled = n < MIN;
             }
-            stepMessage.hidden = !showMessage;
-            count.hidden = !(len > 0 && len < 10);
-            count.textContent = 'Escreva mais ' + (10 - len) + (10 - len === 1 ? ' letra.' : ' letras.');
-            submit.innerHTML = sendIcon + (mode && area
-                ? (mode === 'help' ? 'Pedir ajuda a ' : 'Transferir para ') + escapeHtml(area.dataset.label)
-                : 'Enviar');
-            submit.disabled = !(mode && area && len >= 10);
+            if (focus) {
+                const target = step === 1 ? (form.querySelector('input[name="mode"]:checked') || form.querySelector('input[name="mode"]'))
+                    : step === 2 ? (area() || areasBox.querySelector('input'))
+                    : msg;
+                if (target) target.focus();
+            }
+        }
+
+        function go(to) {
+            step = to;
+            render(true);
         }
 
         let opener = null; // ao fechar, o foco volta para o botão que abriu
@@ -439,56 +480,70 @@ $useCombo = in_array($assetPage, $comboPages, true);
 
         window.openForwardWizard = async function (id, table) {
             opener = document.activeElement;
-            current = { id: id, table: table };
+            current = { id: id, table: table, from: '' };
             form.reset();
-            const view = document.querySelector('.request-view[data-id="' + id + '"][data-table="' + table + '"]');
-            const title = view && view.querySelector('.rv-title') ? view.querySelector('.rv-title').textContent.trim() : '';
-            document.getElementById('fwReq').textContent = 'Nº ' + id + (title ? ' · ' + title : '');
+            step = 1;
             areasBox.innerHTML = '<p class="fw__hint">Carregando setores...</p>';
-            update();
             wiz.hidden = false;
             requestAnimationFrame(() => wiz.classList.add('show'));
-            form.querySelector('input[name="mode"]').focus();
+            render(true);
             try {
                 const response = await fetch('api/request_forwards.php?action=areas&id=' + encodeURIComponent(id) + '&table=' + encodeURIComponent(table));
-                const data = await response.json();
+                const data = await readJson(response);
+                if (!current || current.id !== id) return; // fechou ou abriu outro enquanto carregava
+                current.from = data.from || '';
                 if (!data.success || !data.data.length) {
                     areasBox.innerHTML = '<p class="fw__hint">Nenhum outro setor disponível.</p>';
+                    render(false);
                     return;
                 }
                 areasBox.innerHTML = '';
                 data.data.forEach(a => {
                     const label = document.createElement('label');
                     label.className = 'fw__choice fw__choice--area';
-                    label.innerHTML = '<input type="radio" name="area" required><span><strong></strong></span>';
+                    label.innerHTML = '<input type="radio" name="area" required><span class="fw__radio" aria-hidden="true"></span><span class="fw__text"><strong></strong><small></small></span>';
                     const input = label.querySelector('input');
                     input.value = a.id;
                     input.dataset.label = a.label;
                     label.querySelector('strong').textContent = a.label;
+                    const small = label.querySelector('small');
+                    if (a.description) small.textContent = a.description; else small.remove();
                     areasBox.appendChild(label);
                 });
+                render(false);
             } catch (err) {
                 areasBox.innerHTML = '<p class="fw__hint">Não foi possível carregar os setores. Feche e tente de novo.</p>';
             }
         };
 
-        form.addEventListener('input', update);
-        form.addEventListener('change', update);
+        form.addEventListener('input', () => render(false));
+        form.addEventListener('change', () => render(false));
+        back.addEventListener('click', () => { if (step === 1) close(); else go(step - 1); });
         wiz.addEventListener('click', e => { if (e.target === wiz || e.target.closest('[data-fw-close]')) close(); });
         document.addEventListener('keydown', e => { if (e.key === 'Escape' && !wiz.hidden) close(); });
+        // Enter na escolha avança; no recado, Enter quebra linha (o envio é pelo botão)
+        form.addEventListener('keydown', e => {
+            if (e.key === 'Enter' && e.target.type === 'radio') {
+                e.preventDefault();
+                if (!next.disabled) form.requestSubmit();
+            }
+        });
 
         form.addEventListener('submit', async (e) => {
             e.preventDefault();
-            update();
-            if (submit.disabled || !current) return;
-            submit.disabled = true;
+            render(false);
+            if (next.disabled || !current) return;
+            if (step < 3) { go(step + 1); return; }
+            next.disabled = true;
+            next.setAttribute('aria-busy', 'true');
             const data = await postForm('api/request_forwards.php', {
                 action: 'forward', id: current.id, table: current.table,
-                mode: form.mode.value,
-                to_area_id: form.querySelector('input[name="area"]:checked').value,
+                mode: mode(),
+                to_area_id: area().value,
                 message: msg.value.trim()
             });
-            submit.disabled = false;
+            next.removeAttribute('aria-busy');
+            next.disabled = false;
             if (!data) return;
             showToast(data.message, data.success ? 'success' : 'error');
             if (data.success) {

@@ -35,6 +35,7 @@ foreach ($pdo->query("SELECT id, name FROM ctd_subdivision ORDER BY name ASC")->
     $accSubdivisions[(int)$row['id']] = (string)$row['name'];
 }
 $accAreas = areaTitles($pdo);
+$accAreaDescriptions = areaDescriptions($pdo);
 
 // Setores de atendimento do sistema: o perfil (role) é o próprio setor. Ícones iguais aos de "Novo pedido".
 $accSectorMeta = [
@@ -158,6 +159,7 @@ foreach ($accAreas as $areaId => $title) {
     $accSectorCards[] = [
         'id' => $areaId,
         'label' => $accAreaLabel($title),
+        'description' => $accAreaDescriptions[$areaId] ?? '',
         'icon' => $isSystem ? $accSectorMeta[$key]['icon'] : 'fa-building',
         'system' => $isSystem,
         'open' => $isSystem ? ($accOpen[$key] ?? null) : null,
@@ -352,6 +354,19 @@ $accData = [
                         <?php endif; ?>
                     </header>
 
+                    <div class="acc-sector__desc">
+                        <p class="acc-sector__desc-text<?= $s['description'] === '' ? ' is-empty' : '' ?>"><?= $s['description'] !== '' ? e($s['description']) : 'Sem descrição. Ela aparece para quem encaminha um pedido.' ?></p>
+                        <button type="button" class="btn btn--ghost btn--sm" data-acc-action="toggle-desc" aria-expanded="false" aria-label="<?= $s['description'] !== '' ? 'Editar' : 'Escrever' ?> a descrição de <?= e($s['label']) ?>"><i class="fa-solid fa-pen" aria-hidden="true"></i> <?= $s['description'] !== '' ? 'Editar' : 'Escrever' ?></button>
+                    </div>
+                    <form class="acc-add-form" data-acc-form="sector-desc" hidden>
+                        <label for="accDesc<?= (int)$s['id'] ?>">O que <?= e($s['label']) ?> faz <small>(aparece no Encaminhar)</small></label>
+                        <input type="text" id="accDesc<?= (int)$s['id'] ?>" name="description" maxlength="160" value="<?= e($s['description']) ?>" placeholder="Ex.: Compra de peças, materiais e serviços">
+                        <div class="acc-add-form__actions">
+                            <button type="button" class="btn" data-acc-action="toggle-desc">Cancelar</button>
+                            <button type="submit" class="btn btn--primary">Salvar</button>
+                        </div>
+                    </form>
+
                     <p class="acc-label">Responsáveis</p>
                     <?php if (!empty($s['resp'])): ?>
                         <ul class="acc-resp">
@@ -404,6 +419,8 @@ $accData = [
                 <h3><i class="fa-solid fa-plus" aria-hidden="true"></i> Novo setor</h3>
                 <label for="accNewSector">Nome do setor</label>
                 <input type="text" id="accNewSector" name="sector_title" maxlength="255" required placeholder="Ex.: Secretaria">
+                <label for="accNewSectorDesc">O que o setor faz <small>(opcional)</small></label>
+                <input type="text" id="accNewSectorDesc" name="sector_description" maxlength="160" placeholder="Ex.: Matrículas, declarações e documentos">
                 <button type="submit" class="btn btn--block"><i class="fa-solid fa-plus" aria-hidden="true"></i> Criar setor</button>
             </form>
         </div>

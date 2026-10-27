@@ -969,11 +969,35 @@
         if (!title) { input.focus(); return; }
         const btn = form.querySelector('button[type="submit"]');
         setBusy(btn, true);
-        const data = await send('api/create_sector.php', [['sector_title', title]]);
+        const desc = form.querySelector('input[name="sector_description"]');
+        const data = await send('api/create_sector.php', [['sector_title', title], ['sector_description', desc ? desc.value.trim() : '']]);
         setBusy(btn, false);
         if (!data) return;
         if (!data.success) { showToast(data.message || 'Não foi possível criar.', 'error'); return; }
         reloadTo('setores', 'Setor criado.');
+    }
+
+    // Descrição do setor: frase curta que aparece no passo "Para qual setor?" do Encaminhar
+    function toggleDescForm(btn) {
+        const card = btn.closest('.acc-sector');
+        const form = card.querySelector('[data-acc-form="sector-desc"]');
+        const opener = card.querySelector('.acc-sector__desc [data-acc-action="toggle-desc"]');
+        const open = form.hidden;
+        form.hidden = !open;
+        opener.setAttribute('aria-expanded', open ? 'true' : 'false');
+        if (open) form.querySelector('input').focus();
+        else opener.focus();
+    }
+
+    async function saveSectorDesc(form) {
+        const card = form.closest('.acc-sector');
+        const btn = form.querySelector('button[type="submit"]');
+        setBusy(btn, true);
+        const data = await send('api/update_sector.php', [['id', card.dataset.areaId], ['description', form.description.value.trim()]]);
+        setBusy(btn, false);
+        if (!data) return;
+        if (!data.success) { showToast(data.message || 'Não foi possível salvar.', 'error'); return; }
+        reloadTo('setores', 'Descrição salva.');
     }
 
     function toggleAddForm(btn) {
@@ -1037,6 +1061,7 @@
                 break;
             }
             case 'toggle-add-resp': toggleAddForm(el); break;
+            case 'toggle-desc': toggleDescForm(el); break;
             case 'remove-resp': removeResponsible(el); break;
             case 'delete-sector': deleteSector(el); break;
             default: break;
@@ -1049,6 +1074,7 @@
         e.preventDefault();
         if (form.dataset.accForm === 'add-resp') addResponsible(form);
         if (form.dataset.accForm === 'create-sector') createSector(form);
+        if (form.dataset.accForm === 'sector-desc') saveSectorDesc(form);
     });
 
     // Passou de celular para PC (ou o contrário) com a edição aberta: ajusta o papel do painel

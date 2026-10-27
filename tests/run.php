@@ -314,6 +314,20 @@ check('modo inválido é bloqueado', ($res['json']['success'] ?? true) === false
 $res = $shop->post('api/request_forwards.php', ['action' => 'forward', 'id' => $fwdReqId, 'table' => 'ti', 'to_area_id' => $shopAreaId, 'mode' => 'transfer', 'message' => 'Compras tentando encaminhar algo que não é dela']);
 check('setor que não é responsável não encaminha', ($res['json']['success'] ?? true) === false);
 
+$res = $ti->get("api/request_forwards.php?action=areas&id=$fwdReqId&table=ti");
+$areas = array_column($res['json']['data'] ?? [], null, 'id');
+check('setores do Encaminhar vêm com a descrição', ($areas[$shopAreaId]['description'] ?? '') !== '' && !isset($areas[(int)$pdo->query("SELECT id FROM ctd_area WHERE LOWER(title) = 'ti' LIMIT 1")->fetchColumn()]), snippet($res));
+check('Encaminhar diz quem é o responsável atual', ($res['json']['from'] ?? '') === 'TI', snippet($res));
+$shopDesc = (string)($areas[$shopAreaId]['description'] ?? '');
+$res = $ti->post('api/update_sector.php', ['id' => $shopAreaId, 'description' => 'Gestor tentando mudar']);
+check('só o admin muda a descrição do setor', $res['status'] === 403, snippet($res));
+$res = $adm->post('api/update_sector.php', ['id' => $shopAreaId, 'description' => str_repeat('x', 161)]);
+check('descrição longa demais é recusada', ($res['json']['success'] ?? true) === false);
+$res = $adm->post('api/update_sector.php', ['id' => $shopAreaId, 'description' => 'Descrição de teste 7790']);
+$saved = (string)$pdo->query("SELECT description FROM ctd_area WHERE id = $shopAreaId")->fetchColumn();
+check('admin muda a descrição do setor', ($res['json']['success'] ?? false) === true && $saved === 'Descrição de teste 7790', snippet($res));
+$adm->post('api/update_sector.php', ['id' => $shopAreaId, 'description' => $shopDesc]);
+
 $res = $fwd([]);
 check('TI transfere para Compras', ($res['json']['success'] ?? false) === true, snippet($res));
 $fwdId = $lastFwd();
@@ -353,7 +367,7 @@ $shop->post('api/add_comment.php', ['id' => $fwdReqId, 'table' => 'ti', 'comment
 $ch = $pdo->query("SELECT channel FROM request_comments WHERE request_id = $fwdReqId AND request_table = 'ti' AND comment LIKE '%7751%'")->fetchColumn();
 check('antes de aceitar, mensagem de Compras vai só para a TI', $ch === 'internal', (string)$ch);
 $res = $ti->get("request_detail?id=$fwdReqId&table=ti");
-check('TI vê o cartão da transferência pendente e conversa com Compras', str_contains($res['body'], 'Encaminhamento em aberto') && str_contains($res['body'], '7751'));
+check('TI vê o cartão da transferência pendente e conversa com Compras', str_contains($res['body'], 'Transferência para Compras') && str_contains($res['body'], 'Esperando Compras aceitar') && str_contains($res['body'], 'Você pediu') && str_contains($res['body'], '7751'));
 $res = $adm->get("request_detail?id=$fwdReqId&table=ti");
 check('admin lê a transferência sem "vocês"', str_contains($res['body'], 'Como administração') && !str_contains($res['body'], 'para vocês'));
 $res = $shop->post('api/request_forwards.php', ['action' => 'accept', 'forward_id' => $fwdId]);
@@ -456,7 +470,8 @@ check('a TI é avisada da mensagem de quem pediu durante a ajuda', $n > 0, (stri
 $res = $ti->get("request_detail?id=$helpReqId&table=ti");
 check('responsável tem só duas abas', substr_count($res['body'], 'data-chat-thread=') === 2, (string)substr_count($res['body'], 'data-chat-thread='));
 check('responsável vê a bolinha quando quem pediu escreve', str_contains($res['body'], 'chat-threads__tab has-new'));
-check('com a ajuda aceita, sem cartão repetindo o encaminhamento', !str_contains($res['body'], 'Encaminhamento em aberto'));
+check('com a ajuda aceita, o cartão mostra a ajuda aceita', str_contains($res['body'], 'Ajuda de Compras') && str_contains($res['body'], 'Aceita por'));
+check('cabeçalho sem a linha de etapas e com o selo da situação', !str_contains($res['body'], 'steps4') && str_contains($res['body'], 'class="rv-pill rv-pill--'));
 $res = $apr->get("request_detail?id=$helpReqId&table=ti");
 check('coordenação acompanha sem bolinha', $res['status'] === 200 && !str_contains($res['body'], 'has-new'));
 $res = $ti->get("api/get_comments.php?id=$helpReqId&table=ti&thread=main");

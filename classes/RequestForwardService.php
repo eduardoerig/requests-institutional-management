@@ -79,14 +79,16 @@ class RequestForwardService
     {
         $areas = [];
         $titles = areaTitles($pdo);
-        uasort($titles, 'strcasecmp');
+        $descriptions = areaDescriptions($pdo);
         foreach ($titles as $id => $title) {
             $slug = areaTitleToSector($title);
             if ($slug === null || $id === (int)$excludeAreaId) {
                 continue;
             }
-            $areas[] = ['id' => $id, 'slug' => $slug, 'label' => self::sectorName($slug)];
+            $areas[] = ['id' => $id, 'slug' => $slug, 'label' => self::sectorName($slug), 'description' => $descriptions[$id] ?? ''];
         }
+        // Em ordem do nome que a pessoa lê (o título no banco pode ser "shop", "mkt"...)
+        usort($areas, fn($a, $b) => strcoll(mb_strtolower($a['label']), mb_strtolower($b['label'])));
         return $areas;
     }
 
