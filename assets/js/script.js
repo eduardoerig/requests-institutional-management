@@ -104,15 +104,17 @@ const notifBody = document.getElementById('notif-body');
 
 const NOTIF_POLL_MS = 20000;
 const NOTIF_KINDS = {
-    approve:  ['fa-inbox',             'kind-approve'],
-    approved: ['fa-circle-check',      'kind-ok'],
-    done:     ['fa-check-double',      'kind-ok'],
-    refused:  ['fa-circle-xmark',      'kind-bad'],
-    forward:  ['fa-share-from-square', 'kind-forward'],
-    message:  ['fa-comment-dots',      'kind-message'],
-    started:  ['fa-gears',             'kind-info'],
-    priority: ['fa-bolt',              'kind-warn'],
-    info:     ['fa-bell',              'kind-info'],
+    approve:  ['fa-regular fa-clipboard', 'kind-approve'],
+    approved: ['fa-solid fa-check',       'kind-ok'],
+    done:     ['fa-solid fa-check-double', 'kind-ok'],
+    refused:  ['fa-solid fa-xmark',       'kind-bad'],
+    transfer: ['fa-solid fa-share',       'kind-forward'],
+    help:     ['fa-solid fa-handshake-angle', 'kind-forward'],
+    returned: ['fa-solid fa-rotate-left', 'kind-returned'],
+    message:  ['fa-regular fa-message',   'kind-message'],
+    started:  ['fa-solid fa-wrench',      'kind-info'],
+    priority: ['fa-solid fa-bolt',        'kind-warn'],
+    info:     ['fa-regular fa-bell',      'kind-message'],
 };
 const notifState = { lastId: null, unread: 0, items: [], loading: false, baseTitle: document.title, pending: [], lastFetch: 0 };
 
@@ -210,6 +212,8 @@ function setNotifCount(count, bump) {
     document.title = (count > 0 ? `(${count}) ` : '') + notifState.baseTitle;
     const markAll = document.getElementById('notif-mark-all');
     if (markAll) markAll.disabled = count === 0;
+    const unreadText = document.getElementById('notif-unread');
+    if (unreadText) unreadText.textContent = count > 0 ? ` · ${count > 99 ? '99+' : count} ${count === 1 ? 'não lido' : 'não lidos'}` : '';
     if (bump) {
         notifBtn.classList.remove('ring');
         void notifBtn.offsetWidth; // reinicia a animação
@@ -223,7 +227,9 @@ function notifRelativeTime(dateStr) {
     if (diff < 1) return 'agora';
     if (diff < 60) return `há ${diff} min`;
     if (diff < 60 * 24 && date.getDate() === new Date().getDate()) return `há ${Math.floor(diff / 60)} h`;
-    return date.toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' }) + ' às ' + date.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
+    const hour = String(date.getHours()).padStart(2, '0') + 'h' + String(date.getMinutes()).padStart(2, '0');
+    if (notifGroup(dateStr) === 'Ontem') return `ontem, ${hour}`;
+    return date.toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' }) + ', ' + hour;
 }
 
 function notifGroup(dateStr) {
@@ -236,7 +242,7 @@ function notifGroup(dateStr) {
 
 function notifIcon(kind) {
     const [icon, cls] = NOTIF_KINDS[kind] || NOTIF_KINDS.info;
-    return `<span class="notif-icon ${cls}" aria-hidden="true"><i class="fa-solid ${icon}"></i></span>`;
+    return `<span class="notif-icon ${cls}" aria-hidden="true"><i class="${icon}"></i></span>`;
 }
 
 function renderNotifList() {

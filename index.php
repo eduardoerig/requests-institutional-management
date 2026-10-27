@@ -251,7 +251,7 @@ $useCombo = in_array($assetPage, $comboPages, true);
                     <span class="notif-badge" id="notif-badge" hidden>0</span>
                     <div class="notif-dropdown" id="notif-dropdown" role="dialog" aria-label="Avisos">
                         <div class="notif-header">
-                            <span>Avisos</span>
+                            <span><strong>Avisos</strong><span class="notif-header__count" id="notif-unread"></span></span>
                             <button type="button" id="notif-mark-all" onclick="markAllRead()" disabled>Marcar todos como lidos</button>
                         </div>
                         <div class="notif-body" id="notif-body">
