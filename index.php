@@ -74,6 +74,9 @@ $roleClass = preg_replace('/[^a-z_]/', '', (string)$role);
 $pageClass = preg_replace('/[^a-zA-Z_]/', '', (string)$page);
 // CSS/JS próprios da tela (assets/css/pages/<tela>.css, assets/js/pages/<tela>.js), se existirem
 $assetPage = $logged ? $pageClass : 'login';
+// Bibliotecas de terceiros (assets/vendor/<lib>-<versão>/) só nas telas que usam
+$comboPages = ['accounts']; // <select data-combo>: Tom Select + assets/js/combo.js
+$useCombo = in_array($assetPage, $comboPages, true);
 ?>
 <!DOCTYPE html>
 <html lang="pt-br">
@@ -89,6 +92,10 @@ $assetPage = $logged ? $pageClass : 'login';
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.2/css/all.min.css" crossorigin="anonymous" referrerpolicy="no-referrer">
     <link rel="icon" href="assets/img/LogoFavConSisreq.png">
     <link rel="stylesheet" href="assets/css/app.css?v=<?php echo $assetVersion; ?>">
+    <?php if ($useCombo): ?>
+    <link rel="stylesheet" href="assets/vendor/tom-select-2.6.2/tom-select.min.css">
+    <link rel="stylesheet" href="assets/css/combo.css?v=<?php echo $assetVersion; ?>">
+    <?php endif; ?>
     <?php if (is_file(__DIR__ . '/assets/css/pages/' . $assetPage . '.css')): ?>
     <link rel="stylesheet" href="assets/css/pages/<?= e($assetPage) ?>.css?v=<?php echo $assetVersion; ?>">
     <?php endif; ?>
@@ -331,6 +338,10 @@ $assetPage = $logged ? $pageClass : 'login';
         <div class="spinner" aria-label="Carregando"></div>
     </div>
     <script src="assets/js/script.js?v=<?php echo $assetVersion; ?>"></script>
+    <?php if ($useCombo): ?>
+    <script src="assets/vendor/tom-select-2.6.2/tom-select.complete.min.js"></script>
+    <script src="assets/js/combo.js?v=<?php echo $assetVersion; ?>"></script>
+    <?php endif; ?>
     <?php if (is_file(__DIR__ . '/assets/js/pages/' . $assetPage . '.js')): ?>
     <script src="assets/js/pages/<?= e($assetPage) ?>.js?v=<?php echo $assetVersion; ?>"></script>
     <?php endif; ?>

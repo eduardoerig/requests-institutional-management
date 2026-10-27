@@ -916,7 +916,7 @@
         const select = form.querySelector('select[name="user_id"]');
         if (!select || !select.value) {
             showToast('Escolha a pessoa.', 'error');
-            if (select) select.focus();
+            if (select) (select.tomselect || select).focus();
             return;
         }
         const btn = form.querySelector('button[type="submit"]');
@@ -985,7 +985,7 @@
         opener.setAttribute('aria-expanded', open ? 'true' : 'false');
         if (open) {
             const sel = form.querySelector('select');
-            (sel || form).focus?.();
+            ((sel && sel.tomselect) || sel || form).focus?.();
         } else {
             opener.focus();
         }

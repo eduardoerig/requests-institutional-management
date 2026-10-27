@@ -375,7 +375,7 @@ $accData = [
                     <form class="acc-add-form" data-acc-form="add-resp" hidden>
                         <?php if (!empty($s['eligible'])): ?>
                             <label for="accAddResp<?= (int)$s['id'] ?>">Quem passa a responder por <?= e($s['label']) ?></label>
-                            <select id="accAddResp<?= (int)$s['id'] ?>" name="user_id" required>
+                            <select id="accAddResp<?= (int)$s['id'] ?>" name="user_id" required data-combo data-combo-empty="Ninguém com esse nome">
                                 <option value="">Escolha a pessoa</option>
                                 <?php foreach ($s['eligible'] as $p): ?>
                                     <option value="<?= (int)$p['id'] ?>"><?= e($p['name'] . ' · ' . $p['roleLabel']) ?></option>
