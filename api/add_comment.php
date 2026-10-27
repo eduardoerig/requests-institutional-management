@@ -85,7 +85,8 @@ if ($channel === 'helper') {
         require_once __DIR__ . '/../classes/RequestForwardService.php';
         $areas = [RequestForwardService::ownerAreaId($pdo, $reqId, $sector)];
         foreach (RequestForwardService::forRequest($pdo, $reqId, $sector) as $f) {
-            if ($f['mode'] === 'help' && !in_array($f['status'], ['refused', 'cancelled'], true)) {
+            if (($f['mode'] === 'help' && !in_array($f['status'], ['refused', 'cancelled'], true))
+                || ($f['mode'] === 'transfer' && $f['status'] === 'pending')) {
                 $areas[] = (int)$f['to_area_id'];
                 $areas[] = (int)$f['from_area_id'];
             }

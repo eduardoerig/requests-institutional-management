@@ -172,9 +172,11 @@ if (!function_exists('renderRequestView')) {
                     'readHint' => 'A ajuda já foi devolvida. Esta conversa fica só para consulta.'];
             }
         } else {
-            $helpers = []; // setores chamados para ajudar (nome)
+            $party = in_array($ownerArea, RequestForwardService::userAreaIds($pdo, $viewerId), true); // coordenação e admin só acompanham
+            $helpers = []; // setores com quem o responsável conversa: chamados para ajudar ou com transferência pendente
             foreach ($forwards as $f) {
-                if ($f['mode'] === 'help' && !in_array($f['status'], ['refused', 'cancelled'], true)) {
+                if (($f['mode'] === 'help' && !in_array($f['status'], ['refused', 'cancelled'], true))
+                    || ($f['mode'] === 'transfer' && $f['status'] === 'pending')) {
                     $helpers[(int)$f['to_area_id']] = (string)$f['to_label'];
                 }
             }
@@ -191,7 +193,9 @@ if (!function_exists('renderRequestView')) {
         }
 
         // Esperando resposta: a última mensagem para mim é de outra pessoa (pedido encerrado não pede
-        // resposta). Para mim = no canal em que escrevo, ou de quem pediu em qualquer fonte da aba
+        // resposta). Para mim = no canal em que escrevo, ou de quem pediu em qualquer fonte da aba.
+        // Só para quem participa da conversa: coordenação e admin acompanham sem bolinha
+        $party = $party ?? true;
         $st = $pdo->prepare('SELECT user_id, channel, helper_area_id FROM request_comments WHERE request_id = ? AND request_table = ? ORDER BY created_at ASC, id ASC');
         $st->execute([(int)$req['id'], $sector]);
         $comments = $st->fetchAll(PDO::FETCH_ASSOC);
@@ -209,7 +213,7 @@ if (!function_exists('renderRequestView')) {
                     $last = $c;
                 }
             }
-            $t['unread'] = !$closed && $last && (int)$last['user_id'] !== $viewerId;
+            $t['unread'] = $party && !$closed && $last && (int)$last['user_id'] !== $viewerId;
             $t['default'] = false;
         }
         unset($t);
@@ -261,7 +265,8 @@ if (!function_exists('renderRequestView')) {
                     'at' => (string)$f['created_at'], 'type' => 'event',
                     'who' => $by !== '' ? $by . ' (' . $f['from_label'] . ')' : (string)$f['from_label'],
                     'text' => ($f['mode'] === 'help' ? 'pediu ajuda a ' : 'encaminhou para ') . $f['to_label'],
-                    'note' => (string)($f['observation'] ?? ''), 'bad' => false,
+                    // Pendente: o recado está no cartão acima da conversa; não repete aqui
+                    'note' => $f['status'] === 'pending' ? '' : (string)($f['observation'] ?? ''), 'bad' => false,
                 ];
                 if (!empty($f['responded_at']) && isset($responses[$f['status']])) {
                     $items[] = [
@@ -354,9 +359,22 @@ if (!function_exists('renderRequestView')) {
      * Próximo passo para quem trabalha no pedido (setor, coordenação, administração), em uma frase.
      * Nomeia o botão a usar; devolve HTML já escapado ('' quando não há nada a dizer).
      */
-    function requestStaffGuide(string $status, ?array $open, bool $openIsForMe, bool $openIsFromMe, bool $canApprove, bool $canWork, bool $canReopen, bool $canForward, string $ownerLabel, string $sectorName): string
+    function requestStaffGuide(string $status, ?array $open, bool $openIsForMe, bool $openIsFromMe, bool $canApprove, bool $canWork, bool $canReopen, bool $canForward, string $ownerLabel, string $sectorName, bool $asAdmin = false): string
     {
         $b = fn(string $label) => '<strong>' . e($label) . '</strong>';
+        // Administração age no lugar dos setores: a frase diz quem é quem, sem "vocês"
+        if ($open && $asAdmin) {
+            $from = e($open['from_label']);
+            $to = e($open['to_label']);
+            if ($open['status'] === 'pending') {
+                return $open['mode'] === 'transfer'
+                    ? "$from quer passar este pedido para $to. Como administração, você pode tocar em " . $b('Aceitar e assumir') . " ou recusar no lugar de $to."
+                    : "$from pediu ajuda a $to. Como administração, você pode tocar em " . $b('Aceitar ajudar') . " ou recusar no lugar de $to.";
+            }
+            if ($open['mode'] === 'help' && $open['status'] === 'accepted') {
+                return "$to está ajudando $from. Como administração, você pode tocar em " . $b('Devolver com retorno') . " no lugar de $to.";
+            }
+        }
         if ($open && $openIsForMe && $open['status'] === 'pending') {
             return $open['mode'] === 'transfer'
                 ? e($open['from_label']) . ' quer passar este pedido para vocês. Toque em ' . $b('Aceitar e assumir') . ' ou recuse dizendo o motivo.'
@@ -652,7 +670,8 @@ if (!function_exists('renderRequestView')) {
         $actionsHtml = implode('', $sideButtons) . $mainButton;
         $canCancelForward = $openIsFromMe && $open['status'] === 'pending' && !$openIsForMe;
         $hasMenu = $canReopen || $canCancelForward || $canCancelRequest;
-        $guide = $isStaff ? requestStaffGuide($status, $open, (bool)$openIsForMe, (bool)$openIsFromMe, $canApprove, $canWork, $canReopen, $canForward, $ownerLabel, $sectorName) : '';
+        $asAdmin = $open && $isGlobalAdmin && !in_array((int)$open['to_area_id'], $viewerAreas, true) && !in_array((int)$open['from_area_id'], $viewerAreas, true);
+        $guide = $isStaff ? requestStaffGuide($status, $open, (bool)$openIsForMe, (bool)$openIsFromMe, $canApprove, $canWork, $canReopen, $canForward, $ownerLabel, $sectorName, $asAdmin) : '';
 
         // Detalhes
         $props = [];
@@ -782,7 +801,7 @@ if (!function_exists('renderRequestView')) {
             </div>
 
             <?php if (!$isStaff): // a situação de quem pediu fica em destaque no topo do pedido
-            elseif ($open): ?>
+            elseif ($open && $open['status'] === 'pending'): // cartão só enquanto há uma decisão pendente ?>
                 <div class="rv-notice forward-box" role="note" aria-label="Encaminhamento em aberto">
                     <p class="forward-box__title">
                         <?php if ($open['mode'] === 'transfer'): ?>
@@ -798,7 +817,7 @@ if (!function_exists('renderRequestView')) {
                     <?php endif; ?>
                     <p class="forward-box__meta"><?= e($open['forwarded_by_name'] ?? '') ?>, <?= e(date('d/m \à\s H:i', strtotime($open['created_at']))) ?></p>
                 </div>
-            <?php elseif ($lastDone):
+            <?php elseif ($lastDone && $lastDone['status'] === 'refused'): // aceito ou devolvido já está na conversa
                 $doneText = [
                     'accepted' => $lastDone['mode'] === 'transfer'
                         ? 'Veio de ' . $lastDone['from_label'] . ' por transferência'
@@ -833,9 +852,14 @@ if (!function_exists('renderRequestView')) {
                 <div class="rv-feed" id="<?= $tabId ?>feed-<?= e($t['key']) ?>" data-chat-feed data-thread="<?= e($t['key']) ?>" <?= $data ?> role="log" aria-label="<?= e($t['label']) ?>"<?= $t['default'] ? '' : ' hidden' ?>><?= renderRequestFeed($pdo, $req, $sector, $viewerId, $isStaff, $t, $forwards, $history) ?></div>
             <?php endforeach; ?>
 
-            <div class="rv-dock">
-                <?php if ($actionsHtml !== ''): ?>
-                    <div class="rv-actions rv-actions--dock"><?= $actionsHtml ?></div>
+            <?php // Celular com botões de ação: o campo de mensagem fica recolhido atrás do botão de conversa ?>
+            <div class="rv-dock<?= $actionsHtml !== '' ? ' has-actions' : '' ?>">
+                <?php if ($actionsHtml !== ''):
+                    $anyNew = (bool)array_filter($threads, fn($t) => $t['unread']); ?>
+                    <div class="rv-actions rv-actions--dock">
+                        <button type="button" class="btn rv-write-btn<?= $anyNew ? ' has-new' : '' ?>" data-write-toggle aria-expanded="false" aria-label="Escrever mensagem<?= $anyNew ? ' (mensagem esperando resposta)' : '' ?>"><i class="fa-regular fa-comment" aria-hidden="true"></i></button>
+                        <?= $actionsHtml ?>
+                    </div>
                 <?php endif; ?>
                 <?php foreach ($threads as $t):
                     $hide = $t['default'] ? '' : ' hidden';
@@ -848,6 +872,7 @@ if (!function_exists('renderRequestView')) {
                         <input type="hidden" name="channel" value="<?= e($to['channel']) ?>">
                         <input type="hidden" name="area" value="<?= (int)$to['area'] ?>">
                         <div class="chat-input-area">
+                            <button type="button" class="rv-write-close" data-write-toggle aria-label="Voltar para as ações"><i class="fa-solid fa-xmark" aria-hidden="true"></i></button>
                             <textarea name="comment" class="chat-input" placeholder="<?= e($to['placeholder']) ?>" rows="1" required maxlength="3000" aria-label="Mensagem"></textarea>
                             <button type="submit" class="btn-send" aria-label="Enviar mensagem"><i class="fa-solid fa-paper-plane" aria-hidden="true"></i></button>
                         </div>

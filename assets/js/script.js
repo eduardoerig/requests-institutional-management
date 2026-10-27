@@ -1131,6 +1131,18 @@ document.addEventListener('click', (e) => {
     reloadChat(view);
 });
 
+// Celular com botões de ação: o botão de conversa troca as ações pelo campo de mensagem e o × volta
+document.addEventListener('click', (e) => {
+    const toggle = e.target.closest('[data-write-toggle]');
+    if (!toggle) return;
+    const dock = toggle.closest('.rv-dock');
+    const writing = dock.classList.toggle('is-writing');
+    const openBtn = dock.querySelector('.rv-write-btn');
+    openBtn?.setAttribute('aria-expanded', writing ? 'true' : 'false');
+    if (writing) dock.querySelector('[data-chat-form]:not([hidden]) textarea')?.focus();
+    else openBtn?.focus();
+});
+
 // Setas, Home e End entre as abas de conversa (padrão de abas WAI-ARIA)
 document.addEventListener('keydown', (e) => {
     const tab = e.target.closest('[data-chat-thread]');

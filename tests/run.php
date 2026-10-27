@@ -342,13 +342,25 @@ $res = $ti->post('api/request_forwards.php', ['action' => 'cancel', 'forward_id'
 check('TI cancela envio pendente', ($res['json']['success'] ?? false) === true, snippet($res));
 check('cancelar devolve para Em atendimento', $reqStatus() === 'W', $reqStatus());
 
+$sol->post('api/add_comment.php', ['id' => $fwdReqId, 'table' => 'ti', 'comment' => 'Recado do solicitante para a TI 7750']);
 $fwd(['message' => 'Agora sim, comprar a peça para a sala 12']);
 $fwdId = $lastFwd();
 $res = $shop->get("api/request_view.php?id=$fwdReqId&table=ti");
 check('Compras vê o pedido que chegou', $res['status'] === 200 && str_contains($res['body'], 'Agora sim'), 'HTTP ' . $res['status']);
+// Transferência ainda não aceita: Compras conversa só com a TI, como quem ajuda
+check('antes de aceitar, Compras não lê a conversa com quem pediu', !str_contains($res['body'], '7750'));
+$shop->post('api/add_comment.php', ['id' => $fwdReqId, 'table' => 'ti', 'comment' => 'Compras pergunta antes de aceitar 7751', 'channel' => 'public']);
+$ch = $pdo->query("SELECT channel FROM request_comments WHERE request_id = $fwdReqId AND request_table = 'ti' AND comment LIKE '%7751%'")->fetchColumn();
+check('antes de aceitar, mensagem de Compras vai só para a TI', $ch === 'internal', (string)$ch);
+$res = $ti->get("request_detail?id=$fwdReqId&table=ti");
+check('TI vê o cartão da transferência pendente e conversa com Compras', str_contains($res['body'], 'Encaminhamento em aberto') && str_contains($res['body'], '7751'));
+$res = $adm->get("request_detail?id=$fwdReqId&table=ti");
+check('admin lê a transferência sem "vocês"', str_contains($res['body'], 'Como administração') && !str_contains($res['body'], 'para vocês'));
 $res = $shop->post('api/request_forwards.php', ['action' => 'accept', 'forward_id' => $fwdId]);
 check('Compras aceita a transferência', ($res['json']['success'] ?? false) === true, snippet($res));
 check('aceite volta o pedido para Em atendimento', $reqStatus() === 'W', $reqStatus());
+$res = $shop->get("request_detail?id=$fwdReqId&table=ti");
+check('depois de aceitar, Compras (responsável) lê a conversa com quem pediu', str_contains($res['body'], '7750'));
 $res = $ti->post('api/request_actions.php', ['id' => $fwdReqId, 'table' => 'ctd_ti_frm', 'action' => 'finish']);
 check('TI não conclui depois de transferir', ($res['json']['success'] ?? true) === false);
 $res = $sol->get("request_detail?id=$fwdReqId&table=ti");
@@ -432,6 +444,10 @@ $n = (int)$pdo->query("SELECT COUNT(*) FROM notifications n JOIN cfg_user_area c
 check('a TI é avisada da mensagem de quem pediu durante a ajuda', $n > 0, (string)$n);
 $res = $ti->get("request_detail?id=$helpReqId&table=ti");
 check('responsável tem só duas abas', substr_count($res['body'], 'data-chat-thread=') === 2, (string)substr_count($res['body'], 'data-chat-thread='));
+check('responsável vê a bolinha quando quem pediu escreve', str_contains($res['body'], 'chat-threads__tab has-new'));
+check('com a ajuda aceita, sem cartão repetindo o encaminhamento', !str_contains($res['body'], 'Encaminhamento em aberto'));
+$res = $apr->get("request_detail?id=$helpReqId&table=ti");
+check('coordenação acompanha sem bolinha', $res['status'] === 200 && !str_contains($res['body'], 'has-new'));
 $res = $ti->get("api/get_comments.php?id=$helpReqId&table=ti&thread=main");
 check('responsável lê a conversa de quem pediu com quem ajuda', str_contains($res['body'], '7734') && str_contains($res['body'], '7735') && str_contains($res['body'], '7740'));
 check('mensagem de quem pediu durante a ajuda vem marcada', str_contains($res['body'], 'Compras também vê'));

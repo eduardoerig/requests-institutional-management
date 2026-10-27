@@ -198,8 +198,9 @@ function userHasForwardAccess(PDO $pdo, int $userId, int $requestId, string $sec
 }
 
 /**
- * Está no pedido só porque o setor foi chamado para AJUDAR? Então vê e usa apenas a conversa
- * interna entre setores, nunca a conversa com quem pediu.
+ * Está no pedido só porque o setor foi chamado para AJUDAR (ou recebeu uma transferência que ainda
+ * não aceitou)? Então conversa com o responsável (internal) e, na ajuda, com quem pediu no canal helper;
+ * nunca vê a conversa de quem pediu com o responsável.
  * Não vale para o setor do formulário, o responsável atual (inclui quem assumiu por transferência)
  * nem para coordenação e administração.
  */
@@ -217,8 +218,9 @@ function userSeesOnlyInternalChat(PDO $pdo, array $request, string $sector, int 
         SELECT COUNT(*)
         FROM request_forwards rf
         JOIN cfg_user_area cua ON cua.id_area = rf.to_area_id
-        WHERE rf.request_id = ? AND rf.request_table = ? AND rf.mode = 'help'
-          AND rf.status NOT IN ('refused', 'cancelled') AND cua.id_user = ?
+        WHERE rf.request_id = ? AND rf.request_table = ? AND cua.id_user = ?
+          AND ((rf.mode = 'help' AND rf.status NOT IN ('refused', 'cancelled'))
+            OR (rf.mode = 'transfer' AND rf.status = 'pending'))
     ");
     $stmt->execute([$requestId, $normalizedSector, $userId]);
     return (int)$stmt->fetchColumn() > 0;

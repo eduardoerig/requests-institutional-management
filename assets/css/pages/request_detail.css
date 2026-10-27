@@ -342,6 +342,21 @@
     .detail-page { padding-bottom: calc(var(--rv-dock-h, 76px) + 8px); }
     .detail-page:has(.rv-actions--dock) { padding-bottom: calc(var(--rv-dock-h, 132px) + 8px); }
     .rv2 .rv-feed > * { scroll-margin-bottom: calc(var(--rv-dock-h, 132px) + var(--bottomnav-h) + 16px); }
+
+    /* Com botões de ação, a barra mostra só as ações e o botão de conversa; tocar nele troca
+       as ações pelo campo de mensagem (o × volta). Assim a barra nunca passa de uma linha */
+    .rv2 .rv-dock.has-actions:not(.is-writing) :is(.rv-composer, .chat-readonly) { display: none; }
+    .rv2 .rv-dock.has-actions.is-writing .rv-actions--dock { display: none; }
+    .rv2 .rv-dock.has-actions.is-writing .rv-write-close { display: grid; }
+}
+.rv2 .rv-actions--dock .rv-write-btn { flex: 0 0 46px; position: relative; padding: 0; font-size: 1.125rem; }
+.rv2 .rv-write-btn.has-new::after { content: ""; position: absolute; top: 8px; right: 8px; width: 8px; height: 8px; border-radius: 50%; background: var(--laranja); }
+.rv2 .rv-write-close {
+    display: none; place-items: center; flex: none;
+    width: 40px; height: 48px;
+    border: 0; border-radius: var(--r-2);
+    background: var(--fundo); color: var(--texto-2);
+    cursor: pointer;
 }
 
 /* ---------- Computador: duas colunas ---------- */
