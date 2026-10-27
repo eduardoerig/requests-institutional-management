@@ -355,7 +355,7 @@ function refreshForNotifications(fresh) {
     document.querySelectorAll('.request-view').forEach(view => {
         const link = `request_detail?id=${view.dataset.id}&table=${view.dataset.table}`;
         if (!links.includes(link)) return;
-        const typing = view.querySelector('[data-chat-form] textarea')?.value.trim();
+        const typing = [...view.querySelectorAll('[data-chat-form] textarea')].some(t => t.value.trim());
         const onlyMessages = fresh.every(n => n.kind === 'message' || n.link !== link);
         if (onlyMessages || typing) {
             reloadChat(view);
@@ -1087,8 +1087,8 @@ document.addEventListener('input', (e) => {
     if (area) { area.style.height = ''; area.style.height = area.scrollHeight + 'px'; }
 });
 
-// Conversas separadas (abas do components/request_view.php): a aba escolhida mostra a sua linha do
-// tempo e aponta o campo de mensagem para ela; conversa só de leitura esconde o campo.
+// Conversas separadas (abas do components/request_view.php): cada aba tem a sua linha do tempo e o
+// seu campo de mensagem (ou o aviso de só leitura), todos com data-thread; a aba mostra os dela.
 // Fica lembrada por pedido, para valer também depois que a visão é redesenhada (reloadRequestView)
 const chatThreadPicked = new Map();
 
@@ -1100,25 +1100,21 @@ function selectChatThread(view, key, focus = false) {
         t.setAttribute('aria-selected', t === tab ? 'true' : 'false');
         t.tabIndex = t === tab ? 0 : -1;
     });
-    view.querySelectorAll('[data-chat-feed]').forEach(feed => { feed.hidden = feed.dataset.thread !== key; });
-    const write = tab.dataset.write === '1';
-    const form = view.querySelector('[data-chat-form]');
-    if (form) {
-        form.hidden = !write;
-        form.elements.channel.value = tab.dataset.channel;
-        form.elements.area.value = tab.dataset.area;
-        form.classList.toggle('rv-composer--internal', tab.dataset.channel === 'internal');
-        form.elements.comment.placeholder = tab.dataset.placeholder;
-        const hint = form.querySelector('[data-chat-hint]');
-        if (hint) hint.textContent = tab.dataset.hint;
-    }
-    const readonly = view.querySelector('[data-chat-readonly]');
-    if (readonly) {
-        readonly.hidden = write;
-        readonly.querySelector('span').textContent = write ? '' : tab.dataset.hint;
-    }
+    tab.classList.remove('has-new'); // viu a conversa; volta a marcar se chegar outra pelo redesenho
+    view.querySelectorAll('[data-chat-feed], [data-chat-form], .chat-readonly').forEach(el => { el.hidden = el.dataset.thread !== key; });
     if (focus) tab.focus();
 }
+
+// "Para:" (quem pediu, com ajuda em andamento): aponta o campo para o destino escolhido
+document.addEventListener('change', (e) => {
+    if (!e.target.matches('[data-chat-form] [name="to"]')) return;
+    const form = e.target.form;
+    form.elements.channel.value = e.target.value;
+    form.elements.area.value = e.target.dataset.area;
+    form.elements.comment.placeholder = e.target.dataset.placeholder;
+    const hint = form.querySelector('[data-chat-hint]');
+    if (hint) hint.textContent = e.target.dataset.hint;
+});
 
 document.addEventListener('click', (e) => {
     const tab = e.target.closest('[data-chat-thread]');

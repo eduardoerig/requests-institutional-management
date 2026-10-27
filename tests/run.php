@@ -419,8 +419,11 @@ check('quem ajuda vê a conversa com quem pediu', str_contains($res['body'], '77
 $res = $shop->get("request_detail?id=$helpReqId&table=ti");
 check('quem ajuda continua sem ver a conversa com o responsável', $res['status'] === 200 && !str_contains($res['body'], '7731'));
 $res = $sol->get("request_detail?id=$helpReqId&table=ti");
-check('quem pediu vê as suas duas conversas', str_contains($res['body'], '7731') && str_contains($res['body'], '7735'));
-$res = $ti->get("api/get_comments.php?id=$helpReqId&table=ti&thread=helper-$shopAreaId");
+check('quem pediu vê uma conversa só, com o responsável e com quem ajuda', str_contains($res['body'], '7731') && str_contains($res['body'], '7735') && substr_count($res['body'], 'data-chat-thread=') === 0);
+check('quem pediu escolhe para quem escreve enquanto a ajuda está aberta', str_contains($res['body'], 'name="to"'));
+$res = $ti->get("request_detail?id=$helpReqId&table=ti");
+check('responsável tem só duas abas', substr_count($res['body'], 'data-chat-thread=') === 2, (string)substr_count($res['body'], 'data-chat-thread='));
+$res = $ti->get("api/get_comments.php?id=$helpReqId&table=ti&thread=main");
 check('responsável lê a conversa de quem pediu com quem ajuda', str_contains($res['body'], '7734') && str_contains($res['body'], '7735'));
 $res = $ti->post('api/add_comment.php', ['id' => $helpReqId, 'table' => 'ti', 'comment' => 'TI tentando escrever 7736', 'channel' => 'helper', 'area' => $shopAreaId]);
 check('responsável não escreve na conversa de quem pediu com quem ajuda', ($res['json']['success'] ?? true) === false);
@@ -434,6 +437,13 @@ $res = $shop->post('api/request_forwards.php', ['action' => 'return', 'forward_i
 check('devolver sem retorno é bloqueado', ($res['json']['success'] ?? true) === false);
 $res = $shop->post('api/request_forwards.php', ['action' => 'return', 'forward_id' => $helpFwd, 'note' => 'Cabos comprados, estão na secretaria.']);
 check('Compras devolve com retorno', ($res['json']['success'] ?? false) === true, snippet($res));
+// Ajuda devolvida: a conversa de quem pediu com quem ajudou fica só para consulta
+$res = $sol->post('api/add_comment.php', ['id' => $helpReqId, 'table' => 'ti', 'comment' => 'Depois da ajuda 7738', 'channel' => 'helper', 'area' => $shopAreaId]);
+check('ajuda devolvida: quem pediu não escreve mais para quem ajudou', ($res['json']['success'] ?? true) === false);
+$res = $shop->post('api/add_comment.php', ['id' => $helpReqId, 'table' => 'ti', 'comment' => 'Depois da ajuda 7739', 'channel' => 'helper', 'area' => $shopAreaId]);
+check('ajuda devolvida: quem ajudou não escreve mais para quem pediu', ($res['json']['success'] ?? true) === false);
+$res = $sol->get("request_detail?id=$helpReqId&table=ti");
+check('ajuda devolvida: quem pediu ainda lê a conversa e não tem mais "Para:"', str_contains($res['body'], '7735') && !str_contains($res['body'], 'name="to"'));
 $place = $inboxPlace($tiAreaId, $helpReqId);
 check('ajuda devolvida: volta para Para fazer da TI com o recado', $place[0] === 'fazer' && $place[1] === 'andamento' && str_contains((string)$place[2], 'devolveu'), json_encode($place, JSON_UNESCAPED_UNICODE));
 $res = $ti->post('api/request_actions.php', ['id' => $helpReqId, 'table' => 'ctd_ti_frm', 'action' => 'finish']);

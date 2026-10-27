@@ -280,10 +280,25 @@
 }
 .rv2 .chat-threads__tab i { font-size: 11px; }
 .rv2 .chat-threads__tab[aria-selected="true"] { background: var(--superficie); color: var(--texto); box-shadow: var(--sombra-1); }
-.rv2 .chat-threads__tab[data-channel="internal"][aria-selected="true"] { color: var(--roxo); }
+.rv2 .chat-threads__tab[data-chat-thread="internal"][aria-selected="true"] { color: var(--roxo); }
+/* Esperando resposta: bolinha laranja ao lado do nome */
+.rv2 .chat-threads__tab.has-new::after { content: ""; width: 7px; height: 7px; border-radius: 50%; background: var(--laranja); }
+
+/* Para quem vai a mensagem (quem pediu, com ajuda em andamento) */
+.rv2 .chat-to { display: flex; flex-wrap: wrap; align-items: center; gap: 4px; margin-bottom: 8px; font-size: var(--t-sm); }
+.rv2 .chat-to__label { margin-right: 4px; color: var(--texto-2); }
+.rv2 .chat-to label { position: relative; cursor: pointer; }
+.rv2 .chat-to input { position: absolute; opacity: 0; width: 1px; height: 1px; }
+.rv2 .chat-to span { display: inline-flex; align-items: center; min-height: 32px; padding: 0 12px; border: 1px solid var(--linha); border-radius: var(--r-pill); font-weight: 600; color: var(--texto-2); transition: background-color var(--dur-1), border-color var(--dur-1); }
+.rv2 .chat-to input:checked + span { border-color: var(--grafite); background: var(--grafite); color: var(--texto-inv); }
+.rv2 .chat-to input:focus-visible + span { box-shadow: var(--anel); }
+
+/* Em conversa que junta duas: para quem mais foi a mensagem */
+.rv2 .chat-to-tag { margin-left: 4px; padding: 1px 8px; border-radius: var(--r-pill); background: var(--fundo-2); color: var(--texto-2); font-weight: 600; }
 .rv2 .chat-readonly { display: flex; gap: 8px; align-items: center; margin: 0; font-size: var(--t-sm); color: var(--texto-2); }
 .rv2 .rv-composer--internal .chat-input { border-color: var(--roxo); }
 .rv2 .rv-composer--internal .chat-hint { display: block; color: var(--roxo); }
+.rv2 .rv-composer:has(.chat-to) .chat-hint { display: block; } /* com "Para:", diz quem mais lê */
 
 /* Envolvidos */
 .rv2 .rv-people, .rv2 .rv-info { display: grid; gap: 14px; padding: 16px; }

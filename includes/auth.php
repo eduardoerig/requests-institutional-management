@@ -240,6 +240,21 @@ function requestHelperAreaIds(array $forwards): array
 }
 
 /**
+ * Setores ajudando agora (ajuda aceita, ainda não devolvida): só com eles a conversa helper
+ * recebe mensagem; depois de devolvida ela fica para consulta.
+ */
+function requestOpenHelperAreaIds(array $forwards): array
+{
+    $areas = [];
+    foreach ($forwards as $f) {
+        if ($f['mode'] === 'help' && $f['status'] === 'accepted') {
+            $areas[] = (int)$f['to_area_id'];
+        }
+    }
+    return array_values(array_unique($areas));
+}
+
+/**
  * Setor responsável atual do pedido (ctd_area.id).
  * É o destino da última transferência aceita; sem transferência, o setor do formulário.
  */

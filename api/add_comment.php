@@ -38,7 +38,7 @@ require_once __DIR__ . '/../classes/RequestForwardService.php';
 $wanted = (string)($_POST['channel'] ?? 'public');
 $helperArea = null;
 if ($wanted === 'helper') {
-    $allowed = requestHelperAreaIds(RequestForwardService::forRequest($pdo, $reqId, $sector));
+    $allowed = requestOpenHelperAreaIds(RequestForwardService::forRequest($pdo, $reqId, $sector)); // devolvida = só consulta
     if ($role !== 'solicitante') {
         $allowed = userSeesOnlyInternalChat($pdo, $req, $sector, $userId, $role)
             ? array_values(array_intersect($allowed, RequestForwardService::userAreaIds($pdo, $userId)))
