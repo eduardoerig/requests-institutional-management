@@ -29,7 +29,7 @@
     --laranja-borda: #FED7AA;
     --anel: 0 0 0 3px rgb(240 138 44 / .4);
     --anel-dentro: inset 0 0 0 3px rgb(240 138 44 / .4);
-    --anel-campo: 0 0 0 3px rgb(194 65 12 / .1); /* foco de campo: só um halo leve junto da borda */
+    --anel-campo: 0 0 0 3px rgb(24 24 27 / .06); /* foco de campo: borda grafite + halo cinza leve (o laranja fica para ações) */
 
     /* Semânticas */
     --ok: #15803D;
@@ -610,7 +610,7 @@ input[type="date"], input[type="email"], input[type="tel"], select, textarea {
 }
 textarea { min-height: 120px; resize: vertical; }
 input::placeholder, textarea::placeholder { color: var(--texto-3); }
-input:focus, select:focus, textarea:focus { border-color: var(--laranja); outline: none; box-shadow: var(--anel-campo); }
+input:focus, select:focus, textarea:focus { border-color: var(--grafite); outline: none; box-shadow: var(--anel-campo); }
 
 /* Select nativo: seta própria em todos os navegadores (cor = --texto-2) */
 select {
@@ -1676,6 +1676,12 @@ a.bar-list__row:hover { background: var(--fundo); }
 .bulk-bar__actions { display: flex; gap: 8px; flex-wrap: wrap; margin-left: auto; }
 .bulk-bar .btn--ghost { color: var(--texto-2); border-color: transparent; background: transparent; }
 .bulk-bar .btn--ghost:hover { color: var(--texto); background: var(--fundo); }
+/* No computador a barra é discreta: botões no tamanho pequeno (no celular ficam grandes para o dedo) */
+@media (min-width: 900px) {
+    .bulk-bar { padding: 6px 6px 6px 16px; }
+    .bulk-bar .btn { min-height: var(--h-sm); padding: 0 12px; gap: 6px; font-size: var(--t-sm); }
+    .bulk-bar .btn i { font-size: 12px; }
+}
 @media (max-width: 899.98px) {
     .bulk-bar {
         position: fixed;
