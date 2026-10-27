@@ -45,7 +45,7 @@
     font-size: var(--t-sm);
 }
 .approve-pickall label { display: inline-flex; align-items: center; gap: 10px; min-height: var(--h-md); font-weight: 600; cursor: pointer; }
-.approve-pickall input { width: 20px; height: 20px; margin: 0; accent-color: var(--grafite); }
+.approve-pickall input { width: 20px; height: 20px; margin: 0; }
 .approve-pickall__hint { color: var(--texto-2); }
 
 /* ---------- Cartão ---------- */
@@ -61,7 +61,9 @@
 }
 .approve-card[hidden] { display: none; }
 .approve-card.is-urgent { border-color: #FECACA; }
-.approve-card:has(input[data-pick]:checked) { border-color: var(--laranja-borda); background: var(--laranja-claro); }
+.approve-card:has(input[data-pick]:checked) { border-color: var(--laranja); }
+/* Com pedidos marcados, decide-se pela barra de baixo: os botões de cada cartão saem */
+body.has-bulk .approve-card__actions { display: none; }
 
 .approve-card__head { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 8px; }
 .approve-card__check {
@@ -73,7 +75,7 @@
     margin: -12px 0 -12px -12px;
     cursor: pointer;
 }
-.approve-card__check input { width: 20px; height: 20px; margin: 0; accent-color: var(--grafite); cursor: pointer; }
+.approve-card__check input { width: 20px; height: 20px; margin: 0; cursor: pointer; }
 .approve-card__meta { font-size: var(--t-xs); color: var(--texto-2); }
 
 .approve-card__title {
