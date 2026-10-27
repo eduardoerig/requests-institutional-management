@@ -174,16 +174,34 @@
     // ---------------------------------------------------------------
     // Escolha do setor
     // ---------------------------------------------------------------
+    // Uma busca por setor, guardada como promessa (pré-carga e clique reaproveitam a mesma); falhou, tenta de novo no próximo clique
+    function fetchForm(id) {
+        if (!cache[id]) {
+            const formData = new FormData();
+            formData.append('action', 'get');
+            formData.append('id', id);
+            cache[id] = fetchAjax('api/get_form.php', formData, { quiet: true }).then((data) => {
+                if (data && data.success) return data.form;
+                delete cache[id];
+                return null;
+            });
+        }
+        return cache[id];
+    }
+
+    // Sem véu na tela: o formulário atual fica (esmaecido se demorar) e só aparece "Abrindo..." se ainda não havia nenhum
     async function loadForm(card) {
-        let html = cache[card.dataset.id];
-        if (html) return html;
-        holder.innerHTML = '<div class="empty-state"><div class="spinner"></div><p>Abrindo formulário...</p></div>';
-        const formData = new FormData();
-        formData.append('action', 'get');
-        formData.append('id', card.dataset.id);
-        const data = await fetchAjax('api/get_form.php', formData);
-        if (!data || !data.success) return null;
-        return (cache[card.dataset.id] = data.form);
+        const job = fetchForm(card.dataset.id);
+        holder.setAttribute('aria-busy', 'true');
+        const slow = setTimeout(() => {
+            if (chosen === card && !currentForm()) {
+                holder.innerHTML = '<div class="empty-state"><div class="spinner"></div><p>Abrindo formulário...</p></div>';
+            }
+        }, 250);
+        const html = await job;
+        clearTimeout(slow);
+        if (chosen === card) holder.removeAttribute('aria-busy');
+        return html;
     }
 
     async function choose(card) {
@@ -258,6 +276,10 @@
     }
 
     cards.forEach(card => card.addEventListener('click', () => choose(card)));
+
+    // Pré-carrega os formulários com a página parada: a troca de setor fica instantânea
+    const idle = window.requestIdleCallback || ((fn) => setTimeout(fn, 300));
+    idle(() => cards.forEach(card => fetchForm(card.dataset.id)));
 
     // Ao passar para o computador no meio do caminho, nada fica escondido (o CSS mostra tudo)
     setStep(1, { focus: false });

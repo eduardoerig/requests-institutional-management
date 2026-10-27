@@ -28,8 +28,10 @@ function requestErrorMessage(err) {
         : 'Sem conexão. Verifique a internet e tente de novo.';
 }
 
-async function fetchAjax(path, formData) {
-    const overlay = document.querySelector('.loading-overlay');
+// opts.quiet: sem véu de carregamento e sem aviso de erro (quem chama mostra o próprio estado)
+async function fetchAjax(path, formData, opts = {}) {
+    const quiet = !!opts.quiet;
+    const overlay = quiet ? null : document.querySelector('.loading-overlay');
     if (overlay) overlay.style.display = "flex";
     let data;
     try {
@@ -41,6 +43,7 @@ async function fetchAjax(path, formData) {
     } catch (e) {
         // Esconde o carregamento antes do alerta para não prender a tela atrás dele
         if (overlay) overlay.style.display = "none";
+        if (quiet) return false;
         if (typeof showAlert === 'function') {
             await showAlert({ title: 'Não foi possível concluir', message: requestErrorMessage(e), type: 'error' });
         } else {
@@ -58,6 +61,7 @@ async function fetchAjax(path, formData) {
     if (data.success) {
         return data;
     }
+    if (quiet) return false;
     // Se showToast for preferido globalmente ou showAlert não existir
     if (typeof showAlert === 'function') {
         await showAlert({ title: 'Atenção', message: data.message || 'Não foi possível concluir a operação.', type: 'warning' });

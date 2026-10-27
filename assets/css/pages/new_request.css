@@ -208,3 +208,7 @@
     .nr-form .form-submit-bar { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; }
     .nr-form .form-submit-bar .btn { min-height: 46px; }
 }
+
+/* Troca de setor: se o formulário novo demorar, o atual esmaece (o atraso evita piscar quando é rápido) */
+#dynamicForm { transition: opacity .15s; }
+#dynamicForm[aria-busy="true"] { opacity: .5; transition-delay: .2s; pointer-events: none; }
