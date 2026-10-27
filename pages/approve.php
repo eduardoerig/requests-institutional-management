@@ -2,9 +2,10 @@
 /**
  * Aprovar pedidos (UI 2.0).
  * Celular: um pedido por vez em cartão grande (urgentes primeiro), progresso "X de Y decididos"
- * e Recusar/Aprovar fixos acima da barra inferior. Computador (≥900px): grade de cartões com resumo,
- * motivo da urgência em destaque e Aprovar/Recusar no cartão.
- * A decisão espera ~5 s com "Desfazer" antes de ir para api/approve_request.php (assets/js/pages/approve.js).
+ * e Recusar/Aprovar fixos acima da barra inferior. Computador (≥900px): grade de 3 colunas, faixa
+ * vermelha com prioridade e motivo nos urgentes e Recusar | Aprovar no rodapé do cartão.
+ * A decisão espera ~5 s com "Desfazer" antes de ir para api/approve_request.php (assets/js/pages/approve.js):
+ * no próprio cartão (computador e lista) ou no aviso fixo (celular, um por vez).
  * A aprovação em lote (caixas de seleção + barra de lote do script.js) continua igual.
  */
 require_once __DIR__ . '/../classes/RequestInbox.php';
@@ -37,17 +38,16 @@ asort($sectors);
 $listParams = array_filter(['setor' => $sector !== '' ? $sector : null, 'q' => $q !== '' ? $q : null]);
 $rowLink = fn(array $row) => 'request_detail?' . http_build_query(['id' => (int)$row['id'], 'table' => $row['table'], 'from' => 'approve'] + $listParams);
 
-$subtitle = $total === 0
-    ? 'Nada pendente agora.'
-    : ($total === 1 ? '1 pedido esperando sua decisão.' : $total . ' pedidos esperando sua decisão.')
-        . ($urgentCount > 0 ? ' Os urgentes aparecem primeiro.' : '');
 ?>
 <div class="page-head page-head--hide-mobile">
     <h1>Aprovar pedidos</h1>
 </div>
 
 <div class="toolbar approve-toolbar" data-sync="approve-sub"<?= $total === 0 ? ' hidden' : '' ?>>
-    <p class="toolbar__text"><?= e($subtitle) ?></p>
+    <?php // "N aguardando decisão · X enviando · urgentes primeiro"; approve.js atualiza N e X enquanto há decisões esperando o Desfazer ?>
+    <p class="toolbar__text approve-summary" data-approve-summary data-total="<?= $total ?>" aria-live="polite">
+        <strong data-summary-waiting><?= $total ?> aguardando decisão</strong><span class="approve-summary__sending" data-summary-sending hidden></span><?php if ($urgentCount > 0): ?><span> · urgentes primeiro</span><?php endif; ?>
+    </p>
     <?php if ($total > 0): ?>
     <form method="get" action="approve" class="toolbar__filters" role="search">
         <?php if (count($sectors) > 1): ?>

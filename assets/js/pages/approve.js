@@ -5,8 +5,11 @@
  * e a barra fixa Recusar/Aprovar. "Ver todos" troca para a lista (onde fica o lote).
  * Computador: grade; cada cartão tem seus botões.
  *
- * Desfazer: a decisão NÃO vai na hora. O cartão some, aparece "Pedido nº X aprovado · Desfazer"
- * e só depois de UNDO_MS a decisão é enviada para api/approve_request.php (postForm do script.js).
+ * Desfazer: a decisão NÃO vai na hora; só depois de UNDO_MS ela é enviada para
+ * api/approve_request.php (postForm do script.js). Enquanto isso, no computador (e na lista do
+ * celular) o próprio cartão fica apagado com o selo "Aprovado"/"Recusado", a contagem
+ * "Enviando para ... em N s" e o botão Desfazer; no celular, um por vez, o cartão sai e aparece
+ * o aviso fixo "Pedido nº X aprovado · Desfazer". A linha do topo conta quantos estão enviando.
  * Se a pessoa sair da página antes (troca de página, fecha a aba, o celular põe o navegador em
  * segundo plano), as decisões pendentes são enviadas na hora com navigator.sendBeacon — feito para
  * sobreviver ao fechamento da página — no 'pagehide' e no 'visibilitychange' (hidden), que é o
@@ -23,12 +26,13 @@
     const LIST_KEY = 'sisreq-approve-list';
     const mq = window.matchMedia('(max-width: 899.98px)');
 
-    const pending = new Map();   // "tabela:id" -> { fields, kind, id, timer }
+    const pending = new Map();   // "tabela:id" -> { fields, kind, id, timer, until }
     const sent = new Set();      // já enviados (some da lista mesmo antes da lista recarregar)
     let decided = 0;             // decisões tomadas nesta visita (inclui as pendentes)
     let lastKey = null;
     let undoTimer = null;
     let flushedWhileHidden = false;
+    let ticker = null;
 
     let listMode = false;
     try { listMode = localStorage.getItem(LIST_KEY) === '1'; } catch (e) { /* sem armazenamento */ }
@@ -46,12 +50,27 @@
         const d = deck();
         if (!d) return;
         const all = cards();
-        all.forEach(c => { c.hidden = pending.has(keyOf(c)) || sent.has(keyOf(c)); });
-        const open = openCards();
         const deckOn = isDeck();
+        // Um por vez (celular): o decidido sai e o Desfazer vai no aviso fixo; senão fica no próprio cartão
+        all.forEach(c => {
+            const p = pending.get(keyOf(c));
+            c.hidden = sent.has(keyOf(c)) || (!!p && deckOn);
+            paintPending(c, deckOn ? null : p);
+        });
+        const open = openCards();
         d.classList.toggle('is-deck', deckOn);
         const cur = deckOn ? open[0] : null;
         all.forEach(c => c.classList.toggle('is-current', c === cur));
+
+        // Linha do topo: "N aguardando decisão · X enviando"
+        const summary = $('[data-approve-summary]');
+        if (summary) {
+            const waiting = Math.max(0, (parseInt(summary.dataset.total, 10) || 0) - (all.length - open.length));
+            const w = $('[data-summary-waiting]', summary);
+            if (w) w.textContent = `${waiting} aguardando decisão`;
+            const s = $('[data-summary-sending]', summary);
+            if (s) { s.hidden = !pending.size; s.textContent = pending.size ? ` · ${pending.size} enviando` : ''; }
+        }
 
         // Progresso
         const total = decided + open.length;
@@ -90,7 +109,42 @@
             }
         }
         const toast = $('[data-undo-toast]');
-        if (toast) toast.classList.toggle('is-low', !cur);
+        if (toast) {
+            toast.classList.toggle('is-low', !cur);
+            if (!deckOn) hideUndo();
+        }
+    }
+
+    const secsLeft = (p) => Math.max(1, Math.ceil((p.until - Date.now()) / 1000));
+
+    // Cartão decidido, esperando o Desfazer: apagado, selo, contagem e botão (p = null volta ao normal)
+    function paintPending(card, p) {
+        const box = $('[data-card-undo]', card);
+        const was = card.classList.contains('is-pending');
+        card.classList.toggle('is-pending', !!p);
+        card.classList.toggle('is-pending--refuse', !!p && p.kind === 'refuse');
+        card.querySelectorAll('.approve-card__body, .approve-card__actions, .approve-card__urgent').forEach(el => { el.inert = !!p; });
+        if (!box) return;
+        box.hidden = !p;
+        if (!p) return;
+        const stamp = $('[data-card-stamp]', box);
+        if (stamp) stamp.textContent = p.kind === 'approve' ? 'Aprovado' : 'Recusado';
+        const dest = $('[data-card-dest]', box);
+        if (dest) dest.textContent = p.kind === 'approve' ? `Enviando para ${card.dataset.sectorTo || 'o setor'}` : 'Avisando quem pediu';
+        const secs = $('[data-card-secs]', box);
+        if (secs) secs.textContent = `${secsLeft(p)} s`;
+        if (!was) $('[data-card-undo-btn]', box)?.focus({ preventScroll: true });
+    }
+
+    // Contagem regressiva dos cartões decididos
+    function tick() {
+        if (!pending.size) { clearInterval(ticker); ticker = null; return; }
+        if (isDeck()) return;
+        for (const [key, p] of pending) {
+            const card = cards().find(c => keyOf(c) === key);
+            const secs = card && $('[data-card-secs]', card);
+            if (secs) secs.textContent = `${secsLeft(p)} s`;
+        }
     }
 
     function setRefusing(card, on) {
@@ -138,13 +192,17 @@
         }
 
         const fields = { action: 'post', id: card.dataset.id, table: card.dataset.table, value: kind === 'approve' ? 'Y' : 'N', reason };
-        pending.set(key, { fields, kind, id: card.dataset.id, timer: setTimeout(() => commit(key), UNDO_MS) });
+        pending.set(key, { fields, kind, id: card.dataset.id, timer: setTimeout(() => commit(key), UNDO_MS), until: Date.now() + UNDO_MS });
         decided++;
         lastKey = key;
+        if (pick) pick.disabled = true;
         if (card.classList.contains('is-refusing')) setRefusing(card, false);
+        if (!ticker) ticker = setInterval(tick, 250);
         render();
-        showUndo(card.dataset.id, kind);
-        focusNext();
+        if (isDeck()) {
+            showUndo(card.dataset.id, kind);
+            focusNext();
+        }
     }
 
     async function commit(key) {
@@ -165,17 +223,18 @@
         maybeRefresh();
     }
 
-    function undo() {
-        const key = lastKey;
+    // Sem chave: desfaz a última (aviso fixo do celular)
+    function undo(key = lastKey) {
         const p = key && pending.get(key);
         if (!p) { hideUndo(); return; }
         clearTimeout(p.timer);
         pending.delete(key);
         decided = Math.max(0, decided - 1);
-        lastKey = null;
-        hideUndo();
-        render();
+        if (key === lastKey) { lastKey = null; hideUndo(); }
         const card = cards().find(c => keyOf(c) === key);
+        const pick = card && $('[data-pick]', card);
+        if (pick) pick.disabled = false;
+        render();
         if (card) {
             card.scrollIntoView({ block: 'nearest' });
             $('.approve-card__title', card)?.focus();
@@ -253,6 +312,8 @@
             return;
         }
         if (e.target.closest('[data-undo]')) { undo(); return; }
+        const cardUndo = e.target.closest('[data-card-undo-btn]');
+        if (cardUndo) { undo(keyOf(cardUndo.closest('[data-approve-card]'))); return; }
         if (e.target.closest('[data-deck-toggle]')) {
             listMode = !listMode;
             try { localStorage.setItem(LIST_KEY, listMode ? '1' : '0'); } catch (err) { /* só não lembra */ }
@@ -266,6 +327,17 @@
         const card = input.closest('[data-approve-card]');
         if (e.key === 'Enter') { e.preventDefault(); decide(card, 'refuse'); }
         else if (e.key === 'Escape') { e.preventDefault(); setRefusing(card, false); }
+    });
+
+    // "Selecionar todos" (script.js) não deve marcar os que já foram decididos
+    document.addEventListener('change', (e) => {
+        if (!e.target.matches('[data-pick-all]')) return;
+        let changed = false;
+        cards().forEach(c => {
+            const pick = $('[data-pick]', c);
+            if (pick && pick.checked && (pending.has(keyOf(c)) || sent.has(keyOf(c)))) { pick.checked = false; changed = true; }
+        });
+        if (changed && typeof updateBulkBar === 'function') updateBulkBar();
     });
 
     document.addEventListener('input', (e) => {

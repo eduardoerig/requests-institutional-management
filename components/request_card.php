@@ -216,8 +216,20 @@ if (!function_exists('renderApproveCard')) {
         return mb_strlen($text) > $max ? rtrim(mb_substr($text, 0, $max - 1)) . '…' : $text;
     }
 
+    /** Setor com artigo, para "Enviando para a Manutenção" */
+    function requestSectorTo(string $sector): string
+    {
+        return [
+            'mkt' => 'o Marketing', 'xerox' => 'a Reprografia', 'shop' => 'Compras',
+            'service' => 'a Manutenção', 'ti' => 'a TI',
+        ][$sector] ?? requestSectorName($sector);
+    }
+
     /**
      * UI 2.0 — cartão da tela Aprovar pedidos (um por vez no celular, grade no computador).
+     * Urgente: faixa vermelha no topo com prioridade e motivo; senão, etiqueta da prioridade na linha do nº.
+     * Ações coladas no rodapé (Recusar | Aprovar). Depois de decidir, o próprio cartão mostra
+     * "Enviando para ... em N s" com Desfazer (data-card-undo, preenchido por assets/js/pages/approve.js).
      * $opt: href (link do pedido), check (true mostra a caixa de seleção do lote)
      */
     function renderApproveCard(array $row, array $opt = []): string
@@ -226,44 +238,56 @@ if (!function_exists('renderApproveCard')) {
         $sector = str_replace(['ctd_', '_frm'], '', strtolower(trim((string)($row['table'] ?? ''))));
         $href = (string)($opt['href'] ?? ('request_detail?id=' . $id . '&table=' . urlencode($sector)));
         $urgent = !empty($row['is_urgent']);
+        $priority = (int)($row['priority'] ?? 2);
+        $prioLabel = [1 => 'Baixa', 2 => 'Normal', 3 => 'Alta', 4 => 'Crítica'][$priority] ?? 'Normal';
+        if ($urgent && $priority < 3) {
+            $prioLabel = 'Urgente';
+        }
         $reason = trim((string)($row['urgent_reason'] ?? ''));
         $who = trim((string)($row['solicitor_name_formatted'] ?? $row['solicitor_name'] ?? ''));
         $who = $who === '—' ? '' : $who;
         $sub = trim((string)($row['subdivision_name'] ?? ''));
-        [$age] = ($row['context'] ?? []) + [''];
         [$due, $dueKind] = deadlineLabel((string)($row['date'] ?? ''));
         $summary = requestSummary($row);
         $uid = $sector . '-' . $id;
         $title = (string)($row['title'] ?? 'Sem título');
 
-        $html = '<li class="approve-card' . ($urgent ? ' is-urgent' : '') . '" data-approve-card data-key="' . e($sector) . ':' . $id . '"'
-            . ' data-id="' . $id . '" data-table="' . e($sector) . '" aria-labelledby="ac-' . e($uid) . '">'
+        $html = '<li class="approve-card' . ($urgent ? ' is-urgent' . ($priority >= 4 ? ' is-critical' : '') : '') . '" data-approve-card data-key="' . e($sector) . ':' . $id . '"'
+            . ' data-id="' . $id . '" data-table="' . e($sector) . '" data-sector-to="' . e(requestSectorTo($sector)) . '" aria-labelledby="ac-' . e($uid) . '">';
+        if ($urgent) {
+            $html .= '<p class="approve-card__urgent"><strong>' . e($prioLabel) . '</strong> · ' . e($reason !== '' ? $reason : 'motivo não informado') . '</p>';
+        }
+        $html .= '<div class="approve-card__body">'
             . '<div class="approve-card__head">';
         if (!empty($opt['check'])) {
             $html .= '<label class="approve-card__check"><input type="checkbox" data-pick data-group="approve" value="' . e($sector) . ':' . $id . '" aria-label="Selecionar pedido nº ' . $id . '"></label>';
         }
-        $html .= '<span class="approve-card__meta">Nº ' . $id . ' · ' . e(requestSectorName($sector)) . ($age !== '' ? ' · ' . e(mb_strtolower($age)) : '') . '</span>'
-            . ($urgent ? '<span class="badge-urgent">Urgente</span>' : '')
+        $html .= '<span class="approve-card__ref">#' . $id . ' · ' . e(requestSectorName($sector)) . '</span>'
+            . (!$urgent ? '<span class="approve-card__prio approve-card__prio--' . $priority . '">' . e($prioLabel) . '</span>' : '')
             . '</div>'
             . '<a class="approve-card__title" id="ac-' . e($uid) . '" href="' . e($href) . '">' . e($title) . '</a>';
         if ($summary !== '') {
             $html .= '<p class="approve-card__desc">' . e($summary) . '</p>';
         }
-        if ($urgent) {
-            $html .= '<p class="approve-card__reason"><strong>Motivo da urgência:</strong> ' . e($reason !== '' ? $reason : 'não informado') . '</p>';
-        }
-        $html .= '<dl class="approve-card__facts">'
-            . '<div><dt>Pediu</dt><dd>' . e(implode(' · ', array_filter([$who, $sub])) ?: '—') . '</dd></div>'
-            . '<div><dt>Prazo</dt><dd class="approve-card__due' . ($dueKind !== '' ? ' approve-card__due--' . e($dueKind) : '') . '">' . e($due) . '</dd></div>'
-            . '</dl>'
+        $html .= '<p class="approve-card__by">'
+            . ($who !== '' ? '<strong>' . e($who) . '</strong>' : '<strong>—</strong>')
+            . ($sub !== '' ? ' · ' . e($sub) : '')
+            . ' · <span class="approve-card__due' . ($dueKind !== '' ? ' approve-card__due--' . e($dueKind) : '') . '" title="Prazo">' . e(mb_strtolower($due)) . '</span>'
+            . '</p>'
             . '<div class="approve-card__refuse" data-refuse-box hidden>'
             .   '<label for="rr-' . e($uid) . '">Motivo da recusa <span class="req">*</span> <small>(quem pediu vai ler)</small></label>'
             .   '<input type="text" id="rr-' . e($uid) . '" maxlength="1000" data-refuse-reason autocomplete="off" placeholder="Ex.: já temos esse material no almoxarifado">'
             .   '<p class="field-error" data-refuse-error hidden>Escreva o motivo da recusa.</p>'
             . '</div>'
+            . '</div>'
             . '<div class="approve-card__actions">'
-            .   '<button type="button" class="btn btn--primary" data-decide="approve" aria-label="Aprovar pedido nº ' . $id . '">Aprovar</button>'
-            .   '<button type="button" class="btn" data-decide="refuse" aria-label="Recusar pedido nº ' . $id . '">Recusar</button>'
+            .   '<button type="button" class="approve-card__btn approve-card__btn--refuse" data-decide="refuse" aria-label="Recusar pedido nº ' . $id . '">Recusar</button>'
+            .   '<button type="button" class="approve-card__btn approve-card__btn--approve" data-decide="approve" aria-label="Aprovar pedido nº ' . $id . '">Aprovar</button>'
+            . '</div>'
+            . '<div class="approve-card__undo" data-card-undo role="status" aria-live="polite" hidden>'
+            .   '<span class="approve-card__stamp" data-card-stamp></span>'
+            .   '<span class="approve-card__sending"><span data-card-dest>Enviando para ' . e(requestSectorTo($sector)) . '</span> em <strong data-card-secs>5 s</strong></span>'
+            .   '<button type="button" class="btn approve-card__undo-btn" data-card-undo-btn aria-label="Desfazer decisão do pedido nº ' . $id . '">Desfazer</button>'
             . '</div>'
             . '</li>';
         return $html;
