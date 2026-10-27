@@ -179,6 +179,16 @@ check('solicitante NÃO vira admin pelo modo self', $row['role'] === 'solicitant
 $res = $sol->post('api/update_user_admin.php', ['id' => $solId, 'role' => 'admin']);
 check('solicitante não acessa edição de usuários', ($res['json']['success'] ?? true) === false);
 
+// Senha própria: as regras da janela (8+, maiúscula, número, símbolo, diferente da atual)
+$hashBefore = (string)$pdo->query("SELECT password FROM ctd_users WHERE id = $solId")->fetchColumn();
+$res = $sol->post('api/update_user_admin.php?self=1', ['currentPass' => $password, 'password' => 'semregras1']);
+check('senha própria fraca é recusada', ($res['json']['success'] ?? true) === false && str_contains($res['json']['message'] ?? '', 'maiúscula'), snippet($res));
+$res = $sol->post('api/update_user_admin.php?self=1', ['currentPass' => $password, 'password' => $password]);
+check('senha própria igual à atual é recusada', ($res['json']['success'] ?? true) === false && str_contains($res['json']['message'] ?? '', 'diferente'), snippet($res));
+$res = $sol->post('api/update_user_admin.php?self=1', ['currentPass' => 'errada-123', 'password' => 'Nova@Senha99']);
+check('senha atual errada é recusada', ($res['json']['success'] ?? true) === false, snippet($res));
+check('senha não muda quando recusada', (string)$pdo->query("SELECT password FROM ctd_users WHERE id = $solId")->fetchColumn() === $hashBefore);
+
 $res = $sol->post('api/create_user.php', ['new_name' => 'X', 'new_login' => 'x_hack', 'new_password' => '12345678']);
 check('solicitante não cria usuários', ($res['json']['success'] ?? true) === false);
 

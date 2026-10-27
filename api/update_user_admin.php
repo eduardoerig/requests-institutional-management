@@ -270,7 +270,14 @@ try {
             $userRow = $checkPass->fetch();
 
             if (!$userRow || !password_verify($currentPass, $userRow['password'])) {
-                echo json_encode(['success' => false, 'message' => 'Senha atual incorreta.']);
+                $isTemp = (int)($_SESSION['force_reset'] ?? 0) === 1;
+                echo json_encode(['success' => false, 'message' => $isTemp ? 'A senha temporária não confere. Use a que a administração passou.' : 'Senha atual incorreta.']);
+                exit;
+            }
+            // A senha da própria pessoa segue as regras da janela de Minha conta
+            $problems = passwordProblems(trim((string)$_POST['password']), $currentPass);
+            if ($problems) {
+                echo json_encode(['success' => false, 'message' => 'A nova senha precisa de: ' . implode(', ', $problems) . '.']);
                 exit;
             }
         }

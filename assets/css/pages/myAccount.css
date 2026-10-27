@@ -1,0 +1,53 @@
+/* =====================================================================
+   Minha conta — janela de criar/trocar senha (carregado só na rota myAccount)
+   Com senha temporária: faixa amarela no topo e só Sair / Salvar senha e entrar.
+   ===================================================================== */
+.pw__card { max-width: 500px; padding: 0; overflow: hidden; display: flex; flex-direction: column; }
+.pw__card form { display: flex; flex-direction: column; min-height: 0; }
+
+.pw__banner {
+    display: flex; gap: 12px; align-items: flex-start;
+    padding: 18px 20px;
+    background: var(--aviso-claro); color: var(--aviso);
+}
+.pw__banner > i { margin-top: 3px; font-size: var(--t-lg); }
+.pw__banner h3 { margin: 0 0 2px; font-size: var(--t-md); font-weight: 700; color: var(--aviso); }
+.pw__banner p { margin: 0; font-size: var(--t-sm); font-weight: 600; line-height: 1.45; }
+
+.pw__head { display: flex; justify-content: space-between; align-items: center; gap: 12px; padding: 18px 20px 0; }
+.pw__head h3 { margin: 0; font-size: var(--t-lg); font-weight: 700; }
+.pw__close { flex: 0 0 var(--h-md); height: var(--h-md); border: 0; border-radius: var(--r-2); background: none; color: var(--texto-2); font-size: var(--t-md); cursor: pointer; }
+.pw__close:hover { background: var(--fundo); }
+
+.pw__body { display: grid; gap: 14px; padding: 20px; }
+.pw__body .field { margin: 0; }
+.pw__show { min-height: 0; font-size: var(--t-sm); }
+
+/* Medidor de força: 4 barras que enchem conforme as regras de formato */
+.pw__meter { display: grid; grid-template-columns: repeat(4, 1fr); gap: 4px; margin-top: 2px; }
+.pw__meter span { height: 6px; border-radius: var(--r-pill); background: var(--linha); transition: background var(--dur-2) var(--ease-out); }
+.pw__meter[data-level="1"] span:nth-child(-n+1) { background: var(--perigo); }
+.pw__meter[data-level="2"] span:nth-child(-n+2) { background: var(--aviso); }
+.pw__meter[data-level="3"] span:nth-child(-n+3) { background: #65A30D; }
+.pw__meter[data-level="4"] span { background: var(--ok); }
+.pw__strength { margin: -6px 0 0; font-size: var(--t-sm); font-weight: 700; color: var(--texto-2); }
+.pw__strength[data-level="1"] { color: var(--perigo); }
+.pw__strength[data-level="2"] { color: var(--aviso); }
+.pw__strength[data-level="3"] { color: #4D7C0F; }
+.pw__strength[data-level="4"] { color: var(--ok); }
+
+/* Regras: cinza com • enquanto faltam, verdes com ✓ quando cumpridas */
+.pw__rules { list-style: none; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 6px 16px; margin: 0; padding: 0; font-size: var(--t-sm); color: var(--texto-2); }
+.pw__rules li { display: flex; gap: 6px; align-items: baseline; }
+.pw__rules li::before { content: "•"; flex: 0 0 12px; text-align: center; color: var(--texto-3); }
+.pw__rules li.is-ok { color: var(--ok); }
+.pw__rules li.is-ok::before { content: "✓"; color: var(--ok); font-weight: 700; }
+@media (max-width: 419.98px) { .pw__rules { grid-template-columns: 1fr; } }
+
+.pw__actions { display: flex; justify-content: space-between; gap: 8px; padding: 14px 20px; border-top: 1px solid var(--linha); }
+.pw__actions .btn--primary:disabled { opacity: 1; border-color: var(--fundo-2); background: var(--fundo-2); color: var(--texto-3); }
+@media (max-width: 599.98px) {
+    .pw__card { padding-bottom: env(safe-area-inset-bottom); }
+    .pw__actions .btn--primary { flex: 1; }
+}
+@media (prefers-reduced-motion: reduce) { .pw__meter span { transition: none; } }

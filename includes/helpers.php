@@ -185,6 +185,21 @@ function generateTempPassword(int $length = 12): string
 }
 
 /**
+ * Senha que a própria pessoa cria: o que falta, em frases curtas ([] = pode usar).
+ * As mesmas regras da janela de Minha conta (pages/myAccount.php).
+ */
+function passwordProblems(string $new, string $current = ''): array
+{
+    $problems = [];
+    if (mb_strlen($new) < 8) $problems[] = 'pelo menos 8 caracteres';
+    if (!preg_match('/\p{Lu}/u', $new)) $problems[] = 'uma letra maiúscula';
+    if (!preg_match('/\d/', $new)) $problems[] = 'um número';
+    if (!preg_match('/[^\p{L}\p{N}\s]/u', $new)) $problems[] = 'um símbolo, como ! ou #';
+    if ($current !== '' && $new === $current) $problems[] = 'ser diferente da senha atual';
+    return $problems;
+}
+
+/**
  * Formato aceito para o usuário de entrada (login): letras, números, ponto, hífen e sublinhado.
  */
 function isValidLoginFormat(string $login): bool

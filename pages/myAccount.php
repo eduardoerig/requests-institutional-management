@@ -54,37 +54,63 @@ $role_labels = [
     </section>
 </div>
 
-<!-- Trocar senha -->
-<div class="modal-overlay" id="modalChangePass">
-    <div class="modal-card" role="dialog" aria-modal="true" aria-labelledby="changePassTitle">
-        <div class="modal-header">
-            <h3 id="changePassTitle" class="modal-title">Criar nova senha</h3>
-            <button type="button" class="modal-close" id="btnCloseModal" aria-label="Fechar"><i class="fa-solid fa-xmark" aria-hidden="true"></i></button>
-        </div>
-
-        <form id="formChangePass">
-            <p class="modal-message">Use pelo menos 8 caracteres. Dica: junte duas palavras e um número (ex.: <strong>Cafe-Azul-27</strong>).</p>
-
-            <div class="field">
-                <label for="currentPass">Senha atual</label>
-                <input id="currentPass" name="currentPass" type="password" required autocomplete="current-password" placeholder="A senha que você usou para entrar">
+<!-- Trocar senha. Com senha temporária (force_reset) não fecha: só Sair ou salvar a senha nova -->
+<div class="modal-overlay pw" id="modalChangePass">
+    <div class="modal-card pw__card" role="dialog" aria-modal="true" aria-labelledby="changePassTitle"<?= $force_reset == 1 ? ' aria-describedby="changePassLead"' : '' ?>>
+        <?php if ($force_reset == 1): ?>
+            <div class="pw__banner">
+                <i class="fa-solid fa-lock" aria-hidden="true"></i>
+                <div>
+                    <h3 id="changePassTitle">Crie sua senha para continuar</h3>
+                    <p id="changePassLead">Você entrou com uma senha temporária. Troque por uma senha só sua para liberar o sistema.</p>
+                </div>
             </div>
-            <div class="field">
-                <label for="password">Nova senha</label>
-                <input id="password" name="password" type="password" required minlength="8" autocomplete="new-password" placeholder="Mínimo 8 caracteres">
+        <?php else: ?>
+            <div class="pw__head">
+                <h3 id="changePassTitle">Trocar minha senha</h3>
+                <button type="button" class="pw__close" data-pw-close aria-label="Fechar"><i class="fa-solid fa-xmark" aria-hidden="true"></i></button>
             </div>
-            <div class="field">
-                <label for="passwordConfirm">Repita a nova senha</label>
-                <input id="passwordConfirm" type="password" required minlength="8" autocomplete="new-password" placeholder="Digite a mesma senha">
-            </div>
-            <label class="check-line">
-                <input type="checkbox" id="showPasswords"> Mostrar senhas
-            </label>
-            <p id="passError" class="field-error" role="alert" hidden></p>
+        <?php endif; ?>
 
-            <div class="modal-actions">
-                <button type="submit" class="btn-modal btn-modal-confirm">Salvar nova senha</button>
-                <button type="button" class="btn-modal btn-modal-cancel" id="btnCloseModal2">Voltar</button>
+        <form id="formChangePass" novalidate>
+            <div class="pw__body">
+                <div class="field">
+                    <label for="currentPass"><?= $force_reset == 1 ? 'Senha temporária' : 'Senha atual' ?></label>
+                    <input id="currentPass" name="currentPass" type="password" required autocomplete="current-password">
+                </div>
+                <div class="field">
+                    <label for="password">Nova senha</label>
+                    <input id="password" name="password" type="password" required minlength="8" autocomplete="new-password" aria-describedby="pwStrength pwRules">
+                </div>
+                <div class="field">
+                    <label for="passwordConfirm">Confirmar nova senha</label>
+                    <input id="passwordConfirm" type="password" required minlength="8" autocomplete="new-password">
+                </div>
+                <label class="check-line pw__show">
+                    <input type="checkbox" id="showPasswords"> Mostrar senhas
+                </label>
+
+                <div class="pw__meter" data-level="0" aria-hidden="true"><span></span><span></span><span></span><span></span></div>
+                <p class="pw__strength" id="pwStrength" data-level="0" aria-live="polite">Força: digite a nova senha</p>
+                <ul class="pw__rules" id="pwRules">
+                    <li data-rule="length">Pelo menos 8 caracteres</li>
+                    <li data-rule="upper">Uma letra maiúscula</li>
+                    <li data-rule="number">Um número</li>
+                    <li data-rule="symbol">Um símbolo, como ! ou #</li>
+                    <li data-rule="different">Diferente da <?= $force_reset == 1 ? 'temporária' : 'atual' ?></li>
+                    <li data-rule="match">As duas senhas iguais</li>
+                </ul>
+                <p id="passError" class="field-error" role="alert" hidden></p>
+            </div>
+
+            <div class="pw__actions">
+                <?php if ($force_reset == 1): ?>
+                    <button type="button" class="btn" data-logout>Sair</button>
+                    <button type="submit" class="btn btn--primary" id="pwSubmit" disabled>Salvar senha e entrar</button>
+                <?php else: ?>
+                    <button type="button" class="btn" data-pw-close>Voltar</button>
+                    <button type="submit" class="btn btn--primary" id="pwSubmit" disabled>Salvar nova senha</button>
+                <?php endif; ?>
             </div>
         </form>
     </div>
@@ -101,56 +127,89 @@ $role_labels = [
     (function () {
         const mustReset = <?= (int)$force_reset ?> === 1;
         const modal = document.getElementById('modalChangePass');
+        const form = document.getElementById('formChangePass');
+        const current = document.getElementById('currentPass');
+        const pass = document.getElementById('password');
+        const confirmPass = document.getElementById('passwordConfirm');
+        const submit = document.getElementById('pwSubmit');
+        const meter = modal.querySelector('.pw__meter');
+        const strength = document.getElementById('pwStrength');
         const passError = document.getElementById('passError');
 
-        document.getElementById('btnOpenChangePass').addEventListener('click', () => {
-            modal.classList.add('active');
-            setTimeout(() => document.getElementById('currentPass').focus(), 50);
-        });
-
-        const close = () => {
-            if (mustReset) {
-                showAlert({ title: 'Falta pouco', message: 'Crie sua senha pessoal para continuar usando o sistema.', type: 'warning' });
-                return;
-            }
-            modal.classList.remove('active');
+        // As mesmas regras de passwordProblems() em includes/helpers.php
+        const rules = {
+            length: v => v.length >= 8,
+            upper: v => /\p{Lu}/u.test(v),
+            number: v => /\d/.test(v),
+            symbol: v => /[^\p{L}\p{N}\s]/u.test(v),
+            different: v => v !== '' && v !== current.value,
+            match: v => v !== '' && v === confirmPass.value,
         };
-        document.getElementById('btnCloseModal').addEventListener('click', close);
-        document.getElementById('btnCloseModal2').addEventListener('click', close);
-        modal.addEventListener('click', (e) => { if (e.target === modal && !mustReset) modal.classList.remove('active'); });
 
-        if (mustReset) setTimeout(() => modal.classList.add('active'), 300);
-
-        document.getElementById('showPasswords').addEventListener('change', function () {
-            ['currentPass', 'password', 'passwordConfirm'].forEach(id => {
-                document.getElementById(id).type = this.checked ? 'text' : 'password';
+        // Marca cada regra e enche o medidor (as 4 primeiras regras dizem a força)
+        function check() {
+            const v = pass.value;
+            let ok = 0;
+            let all = true;
+            Object.entries(rules).forEach(([name, test]) => {
+                const passed = test(v);
+                modal.querySelector(`[data-rule="${name}"]`).classList.toggle('is-ok', passed);
+                if (passed && ['length', 'upper', 'number', 'symbol'].includes(name)) ok++;
+                all = all && passed;
             });
-        });
+            const level = v === '' ? 0 : Math.max(1, ok);
+            meter.dataset.level = level;
+            strength.dataset.level = level;
+            strength.textContent = v === '' ? 'Força: digite a nova senha'
+                : 'Força: ' + ['fraca', 'fraca', 'média', 'boa', 'forte'][level] + (all ? ' · todas as regras cumpridas' : '');
+            submit.disabled = !all || current.value === '';
+            return all && current.value !== '';
+        }
 
         const showError = (text) => { passError.textContent = text; passError.hidden = !text; };
-
-        document.getElementById('formChangePass').addEventListener('submit', async function (e) {
-            e.preventDefault();
-            const newPass = document.getElementById('password').value;
-            const confirmPass = document.getElementById('passwordConfirm').value;
-            if (!document.getElementById('currentPass').value) return showError('Digite sua senha atual.');
-            if (newPass.length < 8) return showError('A nova senha precisa ter pelo menos 8 caracteres.');
-            if (newPass !== confirmPass) return showError('As duas senhas novas não são iguais. Digite de novo.');
+        const open = () => {
+            modal.classList.add('active');
+            setTimeout(() => current.focus(), 50);
+        };
+        const close = () => {
+            if (mustReset) return; // senha temporária: só Sair ou salvar
+            modal.classList.remove('active');
+            form.reset();
             showError('');
+            check();
+        };
+        document.getElementById('btnOpenChangePass').addEventListener('click', open);
+        modal.querySelectorAll('[data-pw-close]').forEach(b => b.addEventListener('click', close));
+        modal.addEventListener('click', (e) => { if (e.target === modal) close(); });
+        document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && modal.classList.contains('active')) close(); });
+        if (mustReset) setTimeout(open, 300);
 
+        document.getElementById('showPasswords').addEventListener('change', function () {
+            [current, pass, confirmPass].forEach(i => { i.type = this.checked ? 'text' : 'password'; });
+        });
+
+        form.addEventListener('input', () => { showError(''); check(); });
+
+        form.addEventListener('submit', async function (e) {
+            e.preventDefault();
+            if (!check()) return;
+            submit.disabled = true;
+            submit.setAttribute('aria-busy', 'true');
             try {
                 const response = await fetch('api/update_user_admin.php?self=1', { method: 'POST', body: withCsrf(new FormData(this)) });
-                const data = await response.json();
+                const data = await readJson(response);
                 if (data.success) {
                     modal.classList.remove('active');
-                    await showAlert({ title: 'Senha alterada', message: 'Pronto! Use a nova senha nos próximos acessos.', type: 'success' });
+                    if (!mustReset) await showAlert({ title: 'Senha alterada', message: 'Pronto! Use a nova senha nos próximos acessos.', type: 'success' });
                     location.href = 'home';
-                } else {
-                    showError(data.message);
+                    return;
                 }
+                showError(data.message);
             } catch (err) {
-                showError('Sem conexão. Tente de novo.');
+                showError(requestErrorMessage(err));
             }
+            submit.removeAttribute('aria-busy');
+            check();
         });
     })();
 </script>
