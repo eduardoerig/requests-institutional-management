@@ -72,7 +72,7 @@ $present = function (array $row) use ($tab, $cut): array {
 
     if ($rowTab === 'historico') {
         $out['meta'] = $context;
-        $out['action'] = ['Ver resumo', '', 0, false];
+        $out['action'] = ['Ver pedido', '', 0, false];
         return $out;
     }
     if ($rowTab === 'esperando') {
@@ -101,15 +101,18 @@ $present = function (array $row) use ($tab, $cut): array {
     }
     $out['meta'] = implode(' · ', array_filter([$people, $reason !== '' ? '“' . $cut($reason, 90) . '”' : '']));
     $out['note'] = [$context, $kind];
-    $out['action'] = $group === 'novos' ? ['Começar', 'start', 0, true] : ['Concluir', 'finish', 0, false];
+    $out['action'] = $group === 'novos' ? ['Começar atendimento', 'start', 0, true] : ['Concluir', 'finish', 0, false];
     return $out;
 };
 
-$rowOpt = function (array $row) use ($rowLink, $showSector, $canBulk, $tab, $searching, $present): array {
+// O mesmo número existe em cada setor: o nome aparece sempre que o pedido não nasceu no seu setor
+$isOwnSector = fn(string $table) => in_array((int)RequestForwardService::originAreaId($pdo, $table), $areaIds, true);
+
+$rowOpt = function (array $row) use ($rowLink, $showSector, $isOwnSector, $canBulk, $tab, $searching, $present): array {
     $p = $present($row);
     return [
         'href' => $rowLink($row),
-        'sector' => $showSector ? requestSectorName((string)$row['table']) : '',
+        'sector' => $showSector || !$isOwnSector((string)$row['table']) ? requestSectorName((string)$row['table']) : '',
         'check' => $canBulk ? (in_array($row['group'] ?? '', ['novos', 'andamento'], true) ? $row['group'] : 'none') : '',
         'due' => ($row['tab'] ?? $tab) !== 'historico',
         'tab' => $searching ? RequestInbox::TABS[$row['tab']] : '',
@@ -140,11 +143,10 @@ $emptyText = [
     'historico' => 'Nada por aqui ainda. Os pedidos que vocês concluírem ou transferirem ficam guardados nesta aba.',
 ][$tab];
 
+// "Para fazer" e "Esperando" já mostram o número nas abas logo abaixo
 $stats = [
-    ['Para fazer', $summary['fazer'], '', 'fazer'],
     ['Urgentes', $summary['urgentes'], 'bad', 'fazer'],
     ['Atrasados', $summary['atrasados'], '', 'fazer'],
-    ['Esperando outro setor', $summary['esperando'], '', 'esperando'],
 ];
 ?>
 <div class="page-head page-head--hide-mobile inbox-head">
@@ -153,7 +155,6 @@ $stats = [
         <h1><?= $isGlobalAdmin ? 'Caixa dos setores' : 'Caixa do setor' ?></h1>
     </div>
 </div>
-<?php if (!$isGlobalAdmin): ?><?= renderWelcomeCard($role, (int)$_SESSION['id']) ?><?php endif; ?>
 
 <div class="inbox-stats" data-sync="inbox-stats" aria-label="Resumo da Caixa">
     <?php foreach ($stats as [$label, $value, $kind, $target]): ?>
@@ -193,7 +194,7 @@ $stats = [
 
 <section class="queue queue--cards<?= $showSector ? ' queue--sector' : '' ?>" data-queue data-url="<?= e('inbox?' . http_build_query($listParams)) ?>" aria-label="Pedidos">
     <?php if ($searching): ?>
-        <p class="queue__note"><?= count($rows) === 1 ? '1 pedido encontrado' : count($rows) . ' pedidos encontrados' ?> para "<?= e($q) ?>" nas três abas. <a href="<?= e($tabLink($tab)) ?>">Limpar busca</a></p>
+        <p class="queue__note"><?= match (count($rows)) { 0 => 'Nenhum pedido encontrado', 1 => '1 pedido encontrado', default => count($rows) . ' pedidos encontrados' } ?> para "<?= e($q) ?>" nas três abas. <a href="<?= e($tabLink($tab)) ?>">Limpar busca</a></p>
     <?php endif; ?>
 
     <?php if ($groups): ?>
@@ -218,9 +219,12 @@ $stats = [
                 </ul>
             </section>
         <?php endforeach; ?>
-    <?php else: ?>
-        <div class="empty-state"><i class="fa-regular fa-circle-check" aria-hidden="true"></i><p><?= e($searching ? 'Nada encontrado para "' . $q . '".' : $emptyText) ?></p></div>
+    <?php elseif (!$searching): ?>
+        <div class="empty-state"><i class="fa-regular fa-circle-check" aria-hidden="true"></i><p><?= e($emptyText) ?></p></div>
     <?php endif; ?>
 
     <?php if ($bulk && $rows): ?><?= renderBulkBar($bulk) ?><?php endif; ?>
 </section>
+
+<?php // Boas-vindas depois da lista: o trabalho aparece primeiro, principalmente no celular ?>
+<?php if (!$isGlobalAdmin): ?><?= renderWelcomeCard($role, (int)$_SESSION['id']) ?><?php endif; ?>

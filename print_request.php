@@ -31,12 +31,12 @@ $stmt = $pdo->prepare("
 $stmt->execute([$req_id]);
 $req = $stmt->fetch();
 
-if (!$req) die('Requisição não encontrada.');
+if (!$req) die('Pedido não encontrado.');
 
 // Mesma regra da tela de detalhes: solicitante dono, admin, admin da subdivisão ou gestor do setor/repasse
 if (!userCanViewRequest($pdo, $req, $req_table, (int)$_SESSION['id'], $role)) {
     http_response_code(403);
-    die('Você não tem permissão para ver esta requisição.');
+    die('Você não tem permissão para ver este pedido.');
 }
 
 $stmt_his = $pdo->prepare("SELECT user_name, action, created_at FROM request_history WHERE request_id = ? AND request_table = ? ORDER BY created_at ASC, id ASC");
@@ -78,7 +78,7 @@ $dotColor = ['P' => '#B45309', 'W' => '#2563EB', 'C' => '#15803D', 'N' => '#B91C
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Requisição Nº <?= $number ?> | SisReq</title>
+    <title>Pedido Nº <?= $number ?> | SisReq</title>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Atkinson+Hyperlegible+Mono:wght@500;700&family=Atkinson+Hyperlegible+Next:wght@400;600;700;800&display=swap">
@@ -202,7 +202,7 @@ $dotColor = ['P' => '#B45309', 'W' => '#2563EB', 'C' => '#15803D', 'N' => '#B91C
             <span>SisReq, pedidos internos</span>
         </div>
         <div class="sheet-head__num">
-            <strong>Requisição Nº <span><?= e($number) ?></span></strong>
+            <strong>Pedido Nº <span><?= e($number) ?></span></strong>
             <small>Impressa em <?= e(date('d/m/Y \à\s H:i')) ?></small>
         </div>
     </header>
@@ -246,7 +246,7 @@ $dotColor = ['P' => '#B45309', 'W' => '#2563EB', 'C' => '#15803D', 'N' => '#B91C
         <div><strong>Recebido por</strong><span>Nome e data ____/____/________</span></div>
     </section>
 
-    <footer class="sheet-foot">SisReq<?= orgSetting('org_name') !== 'SisReq' ? ', ' . e(orgSetting('org_name')) : '' ?>. Requisição Nº <?= e($number) ?>.</footer>
+    <footer class="sheet-foot">SisReq<?= orgSetting('org_name') !== 'SisReq' ? ', ' . e(orgSetting('org_name')) : '' ?>. Pedido Nº <?= e($number) ?>.</footer>
 </main>
 
 <?php if ($embed): ?>

@@ -36,7 +36,7 @@ $types = [
 
 $typeKey = (string)($_POST['type'] ?? '');
 if (!isset($types[$typeKey])) {
-    fail('Tipo de requisição inválido. Volte e escolha o setor novamente.');
+    fail('Tipo de pedido inválido. Volte e escolha o setor novamente.');
 }
 $sector = $types[$typeKey]['table'];
 $sectorLabel = $types[$typeKey]['label'];
@@ -50,7 +50,7 @@ $priority = 2;
 $urgentReason = '';
 
 if ($title === '') {
-    fail('Escreva um título curto para a sua requisição.');
+    fail('Escreva um título curto para o seu pedido.');
 }
 // "É urgente" vira prioridade alta; o motivo vai no começo das observações
 if (!empty($_POST['urgent'])) {
@@ -125,7 +125,7 @@ switch ($sector) {
         break;
 
     default:
-        fail('Tipo de requisição inválido.');
+        fail('Tipo de pedido inválido.');
 }
 
 try {
@@ -168,7 +168,7 @@ try {
 
 jsonResponse([
     'success' => true,
-    'message' => "Requisição #$newId enviada! Agora ela aguarda aprovação.",
+    'message' => "Pedido nº $newId enviado! Agora ele aguarda aprovação.",
     'id' => $newId,
     'table' => $sector,
     'link' => $link,

@@ -7,7 +7,7 @@ requirePostJson();
 
 $id = (int)($_POST['id'] ?? 0);
 if (($_POST['action'] ?? '') !== 'get' || $id <= 0) {
-    jsonResponse(['success' => false, 'message' => 'Escolha um tipo de requisição.']);
+    jsonResponse(['success' => false, 'message' => 'Escolha um tipo de pedido.']);
 }
 
 $qr = $pdo->prepare('SELECT form_name FROM ctd_requests_models WHERE id = ? AND `status` = ?');
@@ -16,7 +16,7 @@ $formName = basename((string)$qr->fetchColumn());
 $formFile = dirname(__DIR__) . '/components/forms/' . $formName;
 
 if ($formName === '' || !preg_match('/^form_[a-z_]+\.php$/', $formName) || !is_file($formFile)) {
-    jsonResponse(['success' => false, 'message' => 'Este tipo de requisição não está disponível.']);
+    jsonResponse(['success' => false, 'message' => 'Este tipo de pedido não está disponível.']);
 }
 
 $formHtml = file_get_contents($formFile);

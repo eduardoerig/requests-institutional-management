@@ -29,8 +29,10 @@ if ($canManage) {
 ?>
 <?php
 // Item de menu: ícone + texto simples + contador opcional
-$menuItem = function (string $href, string $icon, string $label, int $badge = 0, string $badgeClass = '', bool $active = false) {
-    $badgeHtml = $badge > 0 ? '<span class="sidebar-badge ' . e($badgeClass) . '" aria-label="' . $badge . ' itens">' . $badge . '</span>' : '';
+// O número diz o que conta: na Caixa, os que chegaram e ninguém começou; em Aprovar, os que esperam decisão
+$badgeHint = fn(string $href, int $n) => $href === 'approve' ? "$n para aprovar" : ($n === 1 ? '1 novo para atender' : "$n novos para atender");
+$menuItem = function (string $href, string $icon, string $label, int $badge = 0, string $badgeClass = '', bool $active = false) use ($badgeHint) {
+    $badgeHtml = $badge > 0 ? '<span class="sidebar-badge ' . e($badgeClass) . '" title="' . e($badgeHint($href, $badge)) . '" aria-label="' . e($badgeHint($href, $badge)) . '">' . $badge . '</span>' : '';
     return '<a href="' . e($href) . '" class="menu-link' . ($active ? ' is-active' : '') . '"' . ($active ? ' aria-current="page"' : '') . '>'
         . '<i class="fa-solid ' . e($icon) . '" aria-hidden="true"></i><span>' . e($label) . '</span>' . $badgeHtml . '</a>';
 };
@@ -42,8 +44,8 @@ $menuItem = function (string $href, string $icon, string $label, int $badge = 0,
         <span>SisReq</span>
     </a>
     <nav aria-label="Menu principal" data-sync="menu">
-        <a href="new_request" class="menu-link menu-link--new<?= $currentPage === 'new_request' ? ' is-active' : '' ?>"><i class="fa-solid fa-plus" aria-hidden="true"></i><span>Nova requisição</span></a>
-        <?= $menuItem('myRequests', 'fa-folder-open', 'Minhas requisições', 0, '', $currentPage === 'myRequests') ?>
+        <a href="new_request" class="menu-link menu-link--new<?= $currentPage === 'new_request' ? ' is-active' : '' ?>"><i class="fa-solid fa-plus" aria-hidden="true"></i><span>Novo pedido</span></a>
+        <?= $menuItem('myRequests', 'fa-folder-open', 'Meus pedidos', 0, '', $currentPage === 'myRequests') ?>
 
         <?php if ($canApprove || $canManage): ?>
             <p class="menu-section">Trabalho</p>

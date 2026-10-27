@@ -252,10 +252,11 @@ class RequestInbox
             };
         }
 
-        // Ordem: faixas na ordem do trabalho e prazo mais próximo primeiro; histórico do mais recente
+        // Ordem: faixas na ordem do trabalho e prazo mais próximo primeiro (esperando: urgentes no topo);
+        // histórico do mais recente
         $laneOrder = array_flip(array_keys(self::LANES));
         usort($tabs['fazer'], fn($a, $b) => ($laneOrder[$a['lane']] <=> $laneOrder[$b['lane']]) ?: self::byDeadline($a, $b));
-        usort($tabs['esperando'], [self::class, 'byDeadline']);
+        usort($tabs['esperando'], fn($a, $b) => ($b['is_urgent'] <=> $a['is_urgent']) ?: self::byDeadline($a, $b));
         usort($tabs['historico'], fn($a, $b) => strcmp((string)$b['closed_at'], (string)$a['closed_at']));
         $tabs['historico'] = array_slice($tabs['historico'], 0, self::HISTORY_LIMIT);
 

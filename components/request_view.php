@@ -180,7 +180,7 @@ if (!function_exists('renderRequestView')) {
             }
             $threads[] = ['key' => 'main', 'label' => 'Com ' . $who, 'events' => true,
                 'sources' => array_merge([['public', 0, '', false]], $helperSources),
-                'target' => $target('public', 0, "$who vê esta conversa.", 'Mensagem para ' . $who),
+                'target' => $target('public', 0, "$who (quem pediu) vê esta conversa. Dúvidas sobre o pedido, pergunte aqui.", 'Mensagem para ' . $who . ' (quem pediu)'),
                 'empty' => 'Ninguém escreveu ainda. Use o campo abaixo para falar sobre o pedido.', 'readHint' => ''];
             if ($helpers) {
                 $with = count($helpers) === 1 ? reset($helpers) : 'os setores';
@@ -376,7 +376,9 @@ if (!function_exists('renderRequestView')) {
             return 'Leia o pedido e decida. ' . $b('Aprovar') . ' envia para ' . e($sectorName) . '; ' . $b('Recusar') . ' pede um motivo para quem pediu.';
         }
         if ($canWork && $status === 'Y') {
-            return 'Toque em ' . $b('Começar atendimento') . ' quando iniciar.' . ($canForward ? ' Se for de outro setor, use ' . $b('Encaminhar') . '.' : '');
+            return 'Toque em ' . $b('Começar atendimento') . ' quando iniciar.'
+                . ($canForward ? ' Se for de outro setor ou precisar de compra, use ' . $b('Encaminhar') . '.' : '')
+                . ' Dúvida? Pergunte a quem pediu na Conversa.';
         }
         if ($canWork && $status === 'W') {
             return 'Quando terminar, toque em ' . $b('Concluir') . '. Quem pediu é avisado na hora.';
@@ -662,7 +664,7 @@ if (!function_exists('renderRequestView')) {
             foreach (priorityLabels() as $v => $l) {
                 $options .= '<option value="' . $v . '"' . ($priority === $v ? ' selected' : '') . '>' . e($l) . '</option>';
             }
-            $props['Urgência'] = '<select class="rv-props__select" aria-label="Urgência" onchange="requestAct(\'set_priority\', ' . $reqId . ', \'' . e($fullTable) . '\', this.value)">' . $options . '</select>';
+            $props['Urgência'] = '<select class="rv-props__select" aria-label="Urgência" data-current="' . $priority . '" onchange="changePriority(this, ' . $reqId . ', \'' . e($fullTable) . '\')">' . $options . '</select>';
         } else {
             $props['Urgência'] = '<span class="' . ($priority >= 3 ? 'prio-tag prio-tag--' . $priority : '') . '">' . e(priorityLabel($priority)) . '</span>';
         }
@@ -737,7 +739,8 @@ if (!function_exists('renderRequestView')) {
                     <?php if ($refuseReason !== ''): ?><blockquote class="rv-status__note"><?= nl2br(e($refuseReason)) ?></blockquote><?php endif; ?>
                 </div>
             <?php endif; ?>
-            <h2 class="rv-title"><?= e($req['title'] ?? 'Sem título') ?></h2>
+            <?php $titleTag = $context === 'page' ? 'h1' : 'h2'; // na página do pedido, o título é o h1 ?>
+            <<?= $titleTag ?> class="rv-title"><?= e($req['title'] ?? 'Sem título') ?></<?= $titleTag ?>>
             <?php if ($ask !== ''): ?>
                 <div class="rv-ask" data-rv-ask>
                     <p class="rv-ask__who"><?= e(explode(' ', trim((string)($req['creator_name'] ?? '')))[0] ?: 'Quem pediu') ?> pediu:</p>

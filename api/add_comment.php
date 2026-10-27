@@ -15,7 +15,7 @@ $sector = normalizeRequestTable((string)($_POST['table'] ?? ''));
 $text = trim((string)($_POST['comment'] ?? ''));
 
 if ($reqId <= 0 || $sector === null) {
-    jsonResponse(['success' => false, 'message' => 'Requisição inválida.']);
+    jsonResponse(['success' => false, 'message' => 'Pedido inválido.']);
 }
 if ($text === '') {
     jsonResponse(['success' => false, 'message' => 'Escreva uma mensagem antes de enviar.']);
@@ -28,7 +28,7 @@ $req = getRequestRow($pdo, $sector, $reqId);
 $userId = (int)$_SESSION['id'];
 $role = $_SESSION['role'] ?? 'solicitante';
 if (!$req || !userCanViewRequest($pdo, $req, $sector, $userId, $role)) {
-    jsonResponse(['success' => false, 'message' => 'Você não tem acesso a esta requisição.'], 403);
+    jsonResponse(['success' => false, 'message' => 'Você não tem acesso a este pedido.'], 403);
 }
 
 // Canais: public (quem pediu × responsável), internal (responsável × quem ajuda) e

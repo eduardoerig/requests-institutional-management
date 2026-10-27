@@ -156,7 +156,7 @@ small { font-size: 0.875em; }
     padding: 0 12px 0 16px;
     background: var(--superficie);
     border-bottom: 1px solid var(--linha);
-    z-index: 40;
+    z-index: 50; /* acima das barras fixas de baixo (44/45): a lista de avisos mora aqui dentro */
 }
 @media (min-width: 900px) {
     .topbar { left: var(--sidebar-w); padding: 0 24px 0 32px; }
@@ -376,7 +376,7 @@ small { font-size: 0.875em; }
 @media (max-width: 899.98px) {
     .notif-dropdown {
         position: fixed;
-        inset: var(--topbar-h) 0 0 0;
+        inset: var(--topbar-h) 0 calc(var(--bottomnav-h) + env(safe-area-inset-bottom)) 0;
         width: auto;
         max-height: none;
         border-radius: 0;
@@ -1014,6 +1014,10 @@ a.bar-list__row:hover { background: var(--fundo); }
 .queue-nav .back-link { margin-bottom: 0; }
 .queue-nav__pager { display: flex; align-items: center; gap: 4px; }
 .queue-nav__pos { padding: 0 8px; font-size: var(--t-sm); color: var(--texto-2); white-space: nowrap; }
+/* Toque: abas e Anterior/Próximo com 44px no celular */
+@media (max-width: 899.98px) {
+    .tab, .queue-nav__pager .btn--sm { min-height: var(--h-md); }
+}
 
 
 /* Conversa */

@@ -61,7 +61,7 @@ if (!$searching && $tab === 'andamento') {
 
 $tabLink = fn(string $t) => 'myRequests?tab=' . $t;
 $emptyText = $tab === 'andamento'
-    ? 'Nenhum pedido em andamento. Precisa de algo? Toque em Nova requisição.'
+    ? 'Nenhum pedido em andamento. Precisa de algo? Toque em Novo pedido.'
     : 'Nenhum pedido concluído ainda. Quando o setor terminar um pedido seu, ele vem para cá.';
 $firstName = explode(' ', trim((string)($_SESSION['name'] ?? '')))[0];
 ?>
@@ -69,9 +69,9 @@ $firstName = explode(' ', trim((string)($_SESSION['name'] ?? '')))[0];
     <header class="mr-head">
         <div class="mr-head__text">
             <?php if ($firstName !== ''): ?><span class="mr-head__hello">Olá, <?= e($firstName) ?></span><?php endif; ?>
-            <h1>Minhas requisições</h1>
+            <h1>Meus pedidos</h1>
         </div>
-        <a href="new_request" class="btn btn--primary mr-head__new"><i class="fa-solid fa-plus" aria-hidden="true"></i> Nova requisição</a>
+        <a href="new_request" class="btn btn--primary mr-head__new"><i class="fa-solid fa-plus" aria-hidden="true"></i> Novo pedido</a>
     </header>
     <?= renderWelcomeCard((string)($_SESSION['role'] ?? ''), $userId) ?>
 
@@ -84,7 +84,7 @@ $firstName = explode(' ', trim((string)($_SESSION['name'] ?? '')))[0];
     </div>
 <?php else: ?>
     <div class="mr-bar">
-        <nav class="tabs mr-tabs" aria-label="Minhas requisições">
+        <nav class="tabs mr-tabs" aria-label="Meus pedidos">
             <?php foreach ($tabs as $key => $label):
                 $on = $tab === $key && !$searching;
             ?>

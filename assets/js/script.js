@@ -695,11 +695,11 @@ function customConfirm(message, title = 'Confirmação') {
 async function globalRequestAction(action, id, table, value = '') {
     // Configurações de mensagens de confirmação
     const confirmations = {
-        'reset_status': 'Reabrir esta requisição? Ela volta para "Em atendimento".',
-        'finish': 'Marcar como concluída? O solicitante será avisado que o pedido foi atendido.',
-        'approve': 'Deseja APROVAR esta requisição?',
-        'reject': 'Deseja RECUSAR esta requisição?',
-        'delete': 'Deseja cancelar esta requisição? Ela será apagada e não poderá ser recuperada.'
+        'reset_status': 'Reabrir este pedido? Ele volta para "Em atendimento".',
+        'finish': 'Marcar como concluído? Quem pediu será avisado que o pedido foi atendido.',
+        'approve': 'Aprovar este pedido?',
+        'reject': 'Recusar este pedido?',
+        'delete': 'Cancelar este pedido? Ele será apagado e não poderá ser recuperado.'
     };
 
     // Se houver uma mensagem definida para a ação, pede confirmação via Custom Modal
@@ -709,7 +709,7 @@ async function globalRequestAction(action, id, table, value = '') {
     }
 
     if (!id || !table) {
-        showToast("Dados da requisição não encontrados.", "error");
+        showToast("Dados do pedido não encontrados.", "error");
         return;
     }
 
@@ -779,7 +779,7 @@ if (formCard) {
         const table = formCard.querySelector(".Rtype")?.value;
 
         if (!id || !table) {
-            showToast("Selecione uma requisição primeiro.", "info");
+            showToast("Selecione um pedido primeiro.", "info");
             return;
         }
 
@@ -791,8 +791,8 @@ if (formCard) {
             let reason = '';
             if (val === 'N') {
                 reason = await showConfirm({
-                    title: 'Recusar requisição',
-                    message: 'O solicitante vai receber o motivo abaixo.',
+                    title: 'Recusar pedido',
+                    message: 'Quem pediu vai receber o motivo abaixo.',
                     type: 'error',
                     confirmLabel: 'Recusar',
                     isDanger: true,
@@ -801,8 +801,8 @@ if (formCard) {
                 if (reason === false) return;
             } else {
                 const ok = await showConfirm({
-                    title: 'Aprovar requisição',
-                    message: 'A requisição será enviada ao setor responsável para atendimento.',
+                    title: 'Aprovar pedido',
+                    message: 'O pedido será enviado ao setor responsável para atendimento.',
                     type: 'success',
                     confirmLabel: 'Aprovar'
                 });
@@ -979,6 +979,24 @@ function requestAct(action, id, table, value = '') {
     return globalRequestAction(action, id, table, value);
 }
 
+// Urgência na página do pedido: confirma antes de gravar; cancelar volta a opção anterior
+async function changePriority(select, id, table) {
+    const before = select.querySelector(`option[value="${select.dataset.current}"]`);
+    const after = select.selectedOptions[0];
+    const ok = await showConfirm({
+        title: 'Mudar a urgência?',
+        message: `De "${before ? before.textContent : '—'}" para "${after.textContent}". Quem atende vê a nova urgência na Caixa.`,
+        type: 'warning',
+        confirmLabel: 'Mudar urgência'
+    });
+    if (!ok) {
+        select.value = select.dataset.current;
+        return;
+    }
+    select.dataset.current = select.value;
+    return globalRequestAction('set_priority', id, table, select.value);
+}
+
 // Imprimir sem sair da tela: carrega a folha num iframe oculto e abre o diálogo de impressão
 function printRequest(event, url) {
     if (event.ctrlKey || event.metaKey || event.shiftKey || event.button === 1) return true; // nova aba, se a pessoa quiser
@@ -999,7 +1017,7 @@ async function decideRequest(value, id, table) {
     if (value === 'N') {
         reason = await showConfirm({
             title: 'Recusar pedido',
-            message: 'O solicitante vai receber o motivo abaixo.',
+            message: 'Quem pediu vai receber o motivo abaixo.',
             type: 'error', confirmLabel: 'Recusar', isDanger: true,
             input: { label: 'Motivo da recusa *', placeholder: 'Ex.: falta informar a quantidade', required: true }
         });
@@ -1164,7 +1182,7 @@ function updateBulkBar() {
     const picks = document.querySelectorAll('[data-queue] [data-pick]');
     const n = bulkPicked().length;
     bar.hidden = n === 0;
-    bar.querySelector('[data-bulk-count]').textContent = n === 1 ? '1 selecionado' : `${n} selecionados`;
+    bar.querySelector('[data-bulk-count]').textContent = n === 1 ? '1 pedido selecionado' : `${n} pedidos selecionados`;
     // Botões por grupo: "Começar atendimento (2)" só aparece quando há novos marcados
     bar.querySelectorAll('[data-bulk-group]').forEach(btn => {
         const k = bulkPicked(btn.dataset.bulkGroup).length;
@@ -1206,7 +1224,7 @@ document.addEventListener('click', async (e) => {
     if (action === 'refuse') {
         reason = await showConfirm({
             title: `Recusar ${n === 1 ? '1 pedido' : n + ' pedidos'}`,
-            message: 'Cada solicitante recebe o motivo abaixo.',
+            message: 'Cada pessoa que pediu recebe o motivo abaixo.',
             type: 'error', confirmLabel: 'Recusar', isDanger: true,
             input: { label: 'Motivo da recusa *', placeholder: 'Ex.: pedido repetido, já foi atendido', required: true }
         });
@@ -1214,8 +1232,8 @@ document.addEventListener('click', async (e) => {
     } else {
         const texts = {
             approve: [`Aprovar ${plural}?`, 'Cada pedido vai para o setor responsável.', 'Aprovar', 'success'],
-            start: [`Começar ${plural}?`, 'Os solicitantes são avisados que o atendimento começou.', 'Começar', 'info'],
-            finish: [`Concluir ${plural}?`, 'Os solicitantes são avisados que o pedido foi atendido.', 'Concluir', 'success'],
+            start: [`Começar ${plural}?`, 'Quem pediu é avisado que o atendimento começou.', 'Começar', 'info'],
+            finish: [`Concluir ${plural}?`, 'Quem pediu é avisado que o pedido foi atendido.', 'Concluir', 'success'],
         }[action];
         if (n > 1 || action === 'finish') {
             const ok = await showConfirm({ title: texts[0], message: texts[1], confirmLabel: texts[2], type: texts[3] });

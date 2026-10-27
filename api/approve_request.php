@@ -8,11 +8,11 @@ require_once __DIR__ . '/../classes/RequestManager.php';
 // Aprovação: administradores globais e administradores de subdivisão (na própria subdivisão)
 $role = $_SESSION['role'] ?? 'solicitante';
 if (!isAdminRole($role)) {
-    jsonResponse(['success' => false, 'message' => 'Você não tem permissão para aprovar requisições.'], 403);
+    jsonResponse(['success' => false, 'message' => 'Você não tem permissão para aprovar pedidos.'], 403);
 }
 
 if (($_POST['action'] ?? '') !== 'post') {
-    jsonResponse(['success' => false, 'message' => 'Requisição inválida.']);
+    jsonResponse(['success' => false, 'message' => 'Pedido inválido.']);
 }
 
 requirePostJson();
@@ -23,15 +23,16 @@ $value = (string)($_POST['value'] ?? '');
 $reason = trim((string)($_POST['reason'] ?? ''));
 
 if ($id <= 0 || $table === null || !in_array($value, ['Y', 'N'], true)) {
-    jsonResponse(['success' => false, 'message' => 'Dados da requisição inválidos.']);
+    jsonResponse(['success' => false, 'message' => 'Dados do pedido inválidos.']);
 }
 if ($value === 'N' && $reason === '') {
-    jsonResponse(['success' => false, 'message' => 'Escreva o motivo da recusa para o solicitante entender.']);
+    jsonResponse(['success' => false, 'message' => 'Escreva o motivo da recusa para quem pediu entender.']);
 }
 $reason = mb_substr($reason, 0, 1000);
 
 $fullTable = 'ctd_' . $table . '_frm';
 $response = $value === 'Y' ? 'Aprovada' : 'Recusada';
+$done = $value === 'Y' ? 'aprovado' : 'recusado'; // "o pedido foi …" (o $response acima vai para o histórico)
 $user_id = (int)$_SESSION['id'];
 $user_name = $_SESSION['name'] ?? 'Usuário';
 
@@ -46,11 +47,11 @@ $sectorLabel = $sectorLabels[$table] ?? strtoupper($table);
 
 $reqData = getRequestRow($pdo, $table, $id);
 if (!$reqData) {
-    jsonResponse(['success' => false, 'message' => 'Requisição não encontrada.']);
+    jsonResponse(['success' => false, 'message' => 'Pedido não encontrado.']);
 }
 
 if (!userCanManageOriginalRequest($pdo, $reqData, $table, $user_id, $role)) {
-    jsonResponse(['success' => false, 'message' => 'Você não tem permissão para aprovar requisições desta subdivisão.'], 403);
+    jsonResponse(['success' => false, 'message' => 'Você não tem permissão para aprovar pedidos desta subdivisão.'], 403);
 }
 
 try {
@@ -60,7 +61,7 @@ try {
     $stmt->execute([$value, $id]);
     if ($stmt->rowCount() === 0) {
         $pdo->rollBack();
-        jsonResponse(['success' => false, 'message' => 'Esta requisição já foi analisada por outra pessoa. Atualize a página.']);
+        jsonResponse(['success' => false, 'message' => 'Este pedido já foi analisado por outra pessoa. Atualize a página.']);
     }
 
     RequestManager::addHistory(
@@ -103,7 +104,7 @@ if ($createdBy) {
     RequestManager::notify(
         $pdo, $createdBy,
         $value === 'Y' ? "Pedido nº $id aprovado" : "Pedido nº $id recusado",
-        "Seu pedido \"$reqTitle\" ($sectorLabel) foi " . mb_strtolower($response) . " por $user_name." . ($reason !== '' ? " Motivo: $reason" : ''),
+        "Seu pedido \"$reqTitle\" ($sectorLabel) foi " . $done . " por $user_name." . ($reason !== '' ? " Motivo: $reason" : ''),
         $link
     );
 }
@@ -137,11 +138,11 @@ foreach ($admins as $admin) {
     if (!$alreadyNotified) {
         RequestManager::notify(
             $pdo, $admin['id'],
-            "Pedido nº $id " . mb_strtolower($response),
-            "O pedido nº $id ($sectorLabel) foi " . mb_strtolower($response) . " por $user_name.",
+            "Pedido nº $id " . $done,
+            "O pedido nº $id ($sectorLabel) foi " . $done . " por $user_name.",
             $link
         );
     }
 }
 
-jsonResponse(['success' => true, 'message' => 'Requisição ' . mb_strtolower($response) . ' com sucesso.']);
+jsonResponse(['success' => true, 'message' => 'Pedido ' . $done . ' com sucesso.']);

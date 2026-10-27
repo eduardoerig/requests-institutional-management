@@ -9,14 +9,14 @@
 /* ---------- Cabeçalho e números do topo ---------- */
 .inbox-head__area { margin: 0 0 4px; font-size: var(--t-sm); color: var(--texto-2); }
 
-.page-inbox .welcome { margin-bottom: 16px; }
-@media (min-width: 900px) { .page-inbox .welcome { margin-bottom: 20px; } }
+.page-inbox .welcome { margin-top: 16px; }
+@media (min-width: 900px) { .page-inbox .welcome { margin-top: 20px; } }
 
 .inbox-stats { display: none; }
 @media (min-width: 900px) {
     .inbox-stats {
         display: grid;
-        grid-template-columns: repeat(4, minmax(0, 1fr));
+        grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
         gap: 12px;
         margin-bottom: 20px;
     }
@@ -41,7 +41,7 @@
 
 /* ---------- Abas: alvos maiores no celular ---------- */
 @media (max-width: 899.98px) {
-    .inbox-toolbar .tab { min-height: 40px; }
+    .inbox-toolbar .tab { min-height: var(--h-md); }
 }
 
 /* ---------- Contêiner: sem painel no celular (cartões soltos) ---------- */

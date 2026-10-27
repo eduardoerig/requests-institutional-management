@@ -22,7 +22,7 @@ if (!function_exists('renderWelcomeCard')) {
             ];
         } else {
             $steps = [
-                'Toque em ' . $b('Nova requisição') . ' e escolha o setor pelo exemplo.',
+                'Toque em ' . $b('Novo pedido') . ' e escolha o setor pelo exemplo.',
                 'A coordenação aprova e o setor atende. Você recebe um aviso a cada etapa.',
                 'Dúvidas? Escreva na conversa do pedido. Quem está resolvendo responde ali.',
             ];

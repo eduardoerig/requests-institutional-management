@@ -63,13 +63,13 @@ $currentStatusParam = $_GET['status'] ?? '';
 $isGestorShell = isGestorRole($role);
 $pageTitles = [
     'home' => $currentStatusParam === 'C' ? 'Concluídas' : 'Painel',
-    'new_request' => 'Nova requisição',
-    'myRequests' => 'Minhas requisições',
+    'new_request' => 'Novo pedido',
+    'myRequests' => 'Meus pedidos',
     'approve' => 'Aprovar pedidos',
     'inbox' => isGlobalAdminRole($role) ? 'Caixa dos setores' : 'Caixa do setor',
     'myAccount' => 'Minha conta',
     'accounts' => 'Usuários e setores',
-    'request_detail' => 'Requisição',
+    'request_detail' => 'Pedido',
     'ajuda' => 'Como usar',
 ];
 $pageTitle = $pageTitles[$page] ?? 'SisReq';
@@ -321,8 +321,8 @@ $useCombo = in_array($assetPage, $comboPages, true);
                 <a href="<?= e($href) ?>" class="bottom-nav__item<?= $isNew ? ' bottom-nav__new' : '' ?><?= $active ? ' is-active' : '' ?>"<?= $active ? ' aria-current="page"' : '' ?>>
                     <i class="fa-solid <?= e($icon) ?>" aria-hidden="true"></i>
                     <span><?= e($label) ?></span>
-                    <?php if ($href === 'approve' && !empty($badge_pendentes)): ?><span class="sidebar-badge"><?= (int)$badge_pendentes ?></span><?php endif; ?>
-                    <?php if ($href === 'inbox' && !empty($badge_inbox)): ?><span class="sidebar-badge"><?= (int)$badge_inbox ?></span><?php endif; ?>
+                    <?php if ($href === 'approve' && !empty($badge_pendentes)): ?><span class="sidebar-badge" aria-label="<?= e($badgeHint('approve', (int)$badge_pendentes)) ?>"><?= (int)$badge_pendentes ?></span><?php endif; ?>
+                    <?php if ($href === 'inbox' && !empty($badge_inbox)): ?><span class="sidebar-badge" aria-label="<?= e($badgeHint('inbox', (int)$badge_inbox)) ?>"><?= (int)$badge_inbox ?></span><?php endif; ?>
                 </a>
             <?php endforeach; ?>
             <button type="button" class="bottom-nav__item" id="mobile-menu-btn" aria-label="Mais opções">
@@ -362,11 +362,11 @@ $useCombo = in_array($assetPage, $comboPages, true);
                 <div class="fw__choices">
                     <label class="fw__choice">
                         <input type="radio" name="mode" value="transfer" required>
-                        <span><strong><i class="fa-solid fa-right-left" aria-hidden="true"></i> Transferir</strong>O outro setor passa a cuidar do pedido.</span>
+                        <span><strong><i class="fa-solid fa-right-left" aria-hidden="true"></i> Transferir</strong>O outro setor passa a cuidar do pedido. Ex.: não é da sua área.</span>
                     </label>
                     <label class="fw__choice">
                         <input type="radio" name="mode" value="help" required>
-                        <span><strong><i class="fa-solid fa-handshake-angle" aria-hidden="true"></i> Pedir ajuda</strong>O outro setor faz uma parte e devolve para você.</span>
+                        <span><strong><i class="fa-solid fa-handshake-angle" aria-hidden="true"></i> Pedir ajuda</strong>O outro setor faz uma parte e devolve; o pedido continua com você. Ex.: Compras compra a peça.</span>
                     </label>
                 </div>
             </fieldset>
@@ -378,13 +378,13 @@ $useCombo = in_array($assetPage, $comboPages, true);
 
             <div class="fw__step" data-fw-step="message" hidden>
                 <label for="fwMessage" class="fw__legend">O que eles precisam saber?</label>
-                <textarea id="fwMessage" name="message" rows="3" maxlength="1000" required placeholder="Ex.: o projetor da sala 12 não liga, já trocamos o cabo."></textarea>
+                <textarea id="fwMessage" name="message" rows="3" maxlength="1000" required aria-describedby="fwCount" placeholder="Ex.: o projetor da sala 12 não liga, já trocamos o cabo."></textarea>
                 <p class="fw__hint" id="fwCount" aria-live="polite" hidden></p>
             </div>
 
             <div class="fw__actions">
                 <button type="button" class="btn btn--ghost" data-fw-close>Cancelar</button>
-                <button type="submit" class="btn btn--primary" id="fwSubmit" disabled><i class="fa-solid fa-paper-plane" aria-hidden="true"></i> Encaminhar</button>
+                <button type="submit" class="btn btn--primary" id="fwSubmit" disabled><i class="fa-solid fa-paper-plane" aria-hidden="true"></i> Enviar</button>
             </div>
         </form>
     </div>
@@ -425,17 +425,20 @@ $useCombo = in_array($assetPage, $comboPages, true);
             count.textContent = 'Escreva mais ' + (10 - len) + (10 - len === 1 ? ' letra.' : ' letras.');
             submit.innerHTML = sendIcon + (mode && area
                 ? (mode === 'help' ? 'Pedir ajuda a ' : 'Transferir para ') + escapeHtml(area.dataset.label)
-                : 'Encaminhar');
+                : 'Enviar');
             submit.disabled = !(mode && area && len >= 10);
         }
 
+        let opener = null; // ao fechar, o foco volta para o botão que abriu
         function close() {
             wiz.classList.remove('show');
             wiz.hidden = true;
             current = null;
+            if (opener && opener.isConnected) opener.focus();
         }
 
         window.openForwardWizard = async function (id, table) {
+            opener = document.activeElement;
             current = { id: id, table: table };
             form.reset();
             const view = document.querySelector('.request-view[data-id="' + id + '"][data-table="' + table + '"]');

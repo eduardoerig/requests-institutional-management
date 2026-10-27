@@ -118,7 +118,7 @@ if (!function_exists('renderQueueRow')) {
                 . ($group !== '' ? ' <span data-bulk-n></span>' : '') . '</button>';
         }
         return '<div class="bulk-bar" data-bulk hidden role="region" aria-label="Pedidos selecionados">'
-            . '<span class="bulk-bar__count" data-bulk-count>0 selecionados</span>'
+            . '<span class="bulk-bar__count" data-bulk-count aria-live="polite">0 pedidos selecionados</span>'
             . '<div class="bulk-bar__actions">' . $buttons
             . '<button type="button" class="btn btn--ghost" data-bulk-clear>Limpar</button></div>'
             . '</div>';
