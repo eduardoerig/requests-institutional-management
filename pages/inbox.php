@@ -68,14 +68,20 @@ $present = function (array $row) use ($tab, $cut): array {
     $who = trim((string)($row['solicitor_name_formatted'] ?? ''));
     $people = implode(' · ', array_filter([$who !== '—' ? $who : '', trim((string)($row['subdivision_name'] ?? ''))]));
     $reason = trim((string)($row['urgent_reason'] ?? ''));
-    $out = ['badge' => '', 'meta' => '', 'note' => ['', ''], 'action' => null];
+    $out = ['status' => ['', ''], 'badge' => '', 'meta' => '', 'note' => ['', ''], 'action' => null];
 
     if ($rowTab === 'historico') {
+        $out['status'] = str_starts_with($context, 'Transferido') ? ['transferido', 'Transferido'] : ['concluido', 'Concluído'];
         $out['meta'] = $context;
         $out['action'] = ['Ver pedido', '', 0, false];
         return $out;
     }
     if ($rowTab === 'esperando') {
+        $out['status'] = match (true) {
+            $fwd && $fwd['mode'] === 'help' && $fwd['status'] === 'accepted' => ['ajuda', 'Com ajuda'],
+            $fwd && $fwd['mode'] === 'transfer' => ['aguardando', 'Aguardando aceite'],
+            default => ['aguardando', 'Aguardando resposta'],
+        };
         $out['badge'] = $fwd ? 'Com ' . $fwd['to_label'] : '';
         $out['meta'] = $people;
         $out['note'] = [$context, $kind];
@@ -87,6 +93,7 @@ $present = function (array $row) use ($tab, $cut): array {
     if ($group === 'chegaram' && $fwd) {
         $isHelp = $fwd['mode'] === 'help';
         $msg = trim((string)($fwd['observation'] ?? ''));
+        $out['status'] = ['chegou', 'Chegou agora'];
         $out['badge'] = ($isHelp ? 'Ajuda para ' : 'Transferência de ') . $fwd['from_label'];
         $out['meta'] = $fwd['from_label'] . ($isHelp ? ' pede' : ' quer transferir') . ($msg !== '' ? ': “' . $cut($msg) . '”' : '');
         $out['action'] = [$isHelp ? 'Aceitar ajuda' : 'Aceitar e assumir', $isHelp ? 'accept' : 'assume', (int)$fwd['id'], true];
@@ -94,11 +101,13 @@ $present = function (array $row) use ($tab, $cut): array {
     }
     if ($group === 'ajudando' && $fwd) {
         $msg = trim((string)($fwd['observation'] ?? ''));
+        $out['status'] = ['ajuda', 'Ajudando'];
         $out['badge'] = 'Ajudando ' . $fwd['from_label'];
         $out['meta'] = $msg !== '' ? $fwd['from_label'] . ' pediu: “' . $cut($msg) . '”' : $people;
         $out['action'] = ['Devolver ajuda', 'return', (int)$fwd['id'], false];
         return $out;
     }
+    $out['status'] = $group === 'novos' ? ['novo', 'Novo'] : ['andamento', 'Em atendimento'];
     $out['meta'] = implode(' · ', array_filter([$people, $reason !== '' ? '“' . $cut($reason, 90) . '”' : '']));
     $out['note'] = [$context, $kind];
     $out['action'] = $group === 'novos' ? ['Começar atendimento', 'start', 0, true] : ['Concluir', 'finish', 0, false];
@@ -116,6 +125,7 @@ $rowOpt = function (array $row) use ($rowLink, $showSector, $isOwnSector, $canBu
         'check' => $canBulk ? (in_array($row['group'] ?? '', ['novos', 'andamento'], true) ? $row['group'] : 'none') : '',
         'due' => ($row['tab'] ?? $tab) !== 'historico',
         'tab' => $searching ? RequestInbox::TABS[$row['tab']] : '',
+        'status' => $p['status'],
         'badge' => $p['badge'],
         'meta' => $p['meta'],
         'note' => $p['note'],
@@ -198,6 +208,29 @@ $stats = [
     <?php endif; ?>
 
     <?php if ($groups): ?>
+        <?php
+        // Legenda das cores: só as situações que aparecem nesta lista, na ordem do trabalho
+        $legendOrder = ['chegou', 'novo', 'andamento', 'ajuda', 'aguardando', 'concluido', 'transferido'];
+        $legendNames = ['chegou' => 'Chegou de outro setor', 'novo' => 'Novo', 'andamento' => 'Em atendimento', 'ajuda' => 'Ajuda entre setores',
+            'aguardando' => 'Aguardando outro setor', 'concluido' => 'Concluído', 'transferido' => 'Transferido'];
+        $legendSeen = [];
+        foreach ($groups as $groupRows) {
+            foreach ($groupRows as $row) {
+                $legendSeen[$present($row)['status'][0]] = true;
+            }
+        }
+        $legend = array_values(array_filter($legendOrder, fn($k) => isset($legendSeen[$k])));
+        ?>
+        <?php if (count($legend) > 1): ?>
+            <ul class="status-legend" aria-label="O que cada cor quer dizer">
+                <?php foreach ($legend as $k): ?>
+                    <li><span class="status-legend__dot status-legend__dot--<?= e($k) ?>" aria-hidden="true"></span><?= e($legendNames[$k]) ?></li>
+                <?php endforeach; ?>
+                <?php if (array_filter(array_merge(...array_values($groups)), fn($r) => !empty($r['is_urgent']))): ?>
+                    <li><span class="status-legend__dot status-legend__dot--urgente" aria-hidden="true"></span>Urgente (faixa vermelha)</li>
+                <?php endif; ?>
+            </ul>
+        <?php endif; ?>
         <?php if ($canBulk): ?>
             <div class="work-pickall">
                 <label><input type="checkbox" data-pick-all> Selecionar todos</label>

@@ -121,8 +121,46 @@
     background: var(--superficie);
     box-shadow: inset 4px 0 0 var(--faixa, transparent);
 }
+/* Cor da situação: faixa à esquerda + selo. Urgente vence a faixa (fica vermelha) */
+.work-row.st-novo { --faixa: var(--info); }
+.work-row.st-andamento { --faixa: var(--laranja); }
+.work-row.st-chegou, .work-row.st-ajuda { --faixa: #9333EA; }
+.work-row.st-aguardando { --faixa: #D97706; }
+.work-row.st-concluido { --faixa: var(--ok); }
+.work-row.st-transferido { --faixa: #A1A1AA; }
+.work-row.is-other:not([class*=" st-"]) { --faixa: #9333EA; }
 .work-row.is-urgent { --faixa: #DC2626; border-color: #FECACA; }
-.work-row.is-other { --faixa: #9333EA; }
+
+.status-chip {
+    --chip: var(--texto-2); --chip-bg: var(--fundo-2);
+    order: 2;
+    display: inline-flex; align-items: center; gap: 5px;
+    min-height: 20px; padding: 0 8px;
+    border-radius: var(--r-pill);
+    background: var(--chip-bg); color: var(--chip);
+    font-size: 11px; font-weight: 700; white-space: nowrap;
+}
+.status-chip::before { content: ""; width: 6px; height: 6px; border-radius: 50%; background: currentColor; }
+.status-chip--novo { --chip: #1D4ED8; --chip-bg: var(--info-claro); }
+.status-chip--andamento { --chip: var(--laranja-escuro); --chip-bg: var(--laranja-claro); }
+.status-chip--chegou { --chip: var(--texto-inv); --chip-bg: #9333EA; }
+.status-chip--chegou::before { background: var(--texto-inv); }
+.status-chip--ajuda { --chip: var(--roxo); --chip-bg: var(--roxo-claro); }
+.status-chip--aguardando { --chip: var(--aviso); --chip-bg: var(--aviso-claro); }
+.status-chip--concluido { --chip: var(--ok); --chip-bg: var(--ok-claro); }
+.status-chip--transferido { --chip: var(--texto-2); --chip-bg: var(--fundo-2); }
+
+/* Legenda das cores, acima da lista */
+.status-legend { list-style: none; display: flex; flex-wrap: wrap; align-items: center; gap: 6px 18px; margin: 0 0 10px; padding: 0 2px; font-size: var(--t-xs); line-height: 1.4; color: var(--texto-2); }
+.status-legend li { display: inline-flex; align-items: center; gap: 7px; white-space: nowrap; }
+.status-legend__dot { flex: none; width: 8px; height: 8px; border-radius: 50%; background: var(--linha-forte); }
+.status-legend__dot--novo { background: var(--info); }
+.status-legend__dot--andamento { background: var(--laranja); }
+.status-legend__dot--chegou, .status-legend__dot--ajuda { background: #9333EA; }
+.status-legend__dot--aguardando { background: #D97706; }
+.status-legend__dot--concluido { background: var(--ok); }
+.status-legend__dot--transferido { background: #A1A1AA; }
+.status-legend__dot--urgente { background: #DC2626; }
 .work-row:has(input[data-pick]:checked) { border-color: var(--laranja); }
 
 .work-row__bar { display: none; }
@@ -225,6 +263,7 @@
     .queue--cards > .queue__note { margin: 0; border: 0; border-bottom: 1px solid var(--linha); border-radius: 0; }
 
     .work-pickall { margin: 0; padding: 4px 20px; border-bottom: 1px solid var(--linha); }
+    .status-legend { margin: 0; padding: 10px 20px; border-bottom: 1px solid var(--linha); background: var(--fundo); }
 
     .lane + .lane { margin-top: 0; }
     .lane__title {
@@ -268,7 +307,7 @@
     /* Nº, título e selos na mesma linha */
     .work-row__head { gap: 6px 8px; }
     .work-row__num, .work-row__title, .work-row__head .badge-urgent, .work-row__head .badge-sector,
-    .work-row__sector, .work-row__tab { order: 0; }
+    .work-row__sector, .work-row__tab, .work-row__head .status-chip { order: 0; }
     .work-row__num { font-size: var(--t-xs); }
     .work-row__title { flex: 0 1 auto; font-size: 0.9375rem; }
     .work-row__due--top { display: none; }

@@ -133,6 +133,8 @@ if (!function_exists('renderWorkRow')) {
      *   href    link do pedido
      *   check   '' sem seleção | 'none' espaço vazio | grupo do lote ('novos', 'andamento')
      *   sector  nome do setor dono (Caixa com vários setores) ou ''
+     *   status  [chave, rótulo] da situação: selo colorido + cor da faixa à esquerda
+     *           (novo, andamento, chegou, ajuda, aguardando, concluido, transferido)
      *   badge   selo de outro setor (ex.: "Ajuda para Manutenção") ou ''
      *   meta    linha de apoio: quem pediu · área · motivo
      *   note    [texto, tipo] situação curta ('in', 'bad', 'ok' ou '')
@@ -158,7 +160,9 @@ if (!function_exists('renderWorkRow')) {
         }
         $dueClass = 'work-row__due' . ($dueKind !== '' ? ' work-row__due--' . e($dueKind) : '');
 
-        $classes = 'work-row' . ($urgent ? ' is-urgent' : ($badge !== '' ? ' is-other' : '')) . ($check !== '' ? ' has-check' : '');
+        [$stKey, $stLabel] = ($opt['status'] ?? []) + ['', ''];
+        $classes = 'work-row' . ($urgent ? ' is-urgent' : ($badge !== '' ? ' is-other' : ''))
+            . ($stKey !== '' ? ' st-' . e($stKey) : '') . ($check !== '' ? ' has-check' : '');
         $html = '<li class="' . $classes . '" data-key="' . e($sector) . ':' . $id . '">';
         $html .= '<span class="work-row__bar" aria-hidden="true"></span>';
         if ($check === 'none') {
@@ -170,6 +174,7 @@ if (!function_exists('renderWorkRow')) {
         $html .= '<a class="work-row__link" href="' . e($href) . '">'
             . '<span class="work-row__head">'
             .   '<span class="work-row__num">Nº ' . $id . '</span>'
+            .   ($stLabel !== '' ? '<span class="status-chip status-chip--' . e($stKey) . '">' . e($stLabel) . '</span>' : '')
             .   '<span class="work-row__title">' . e($row['title'] ?? 'Sem título') . '</span>'
             .   ($urgent ? '<span class="badge-urgent">Urgente</span>' : '')
             .   ($badge !== '' ? '<span class="badge-sector">' . e($badge) . '</span>' : '')
