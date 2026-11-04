@@ -24,7 +24,7 @@ if ($canApprove) {
 if ($canManage) {
     require_once __DIR__ . '/../classes/RequestInbox.php';
     $inboxCounts = RequestInbox::build($pdo, RequestInbox::areasForUser($pdo, (int)$sidebar_user_id, $role))['counts'];
-    $badge_inbox = $inboxCounts['novos'] + $inboxCounts['chegaram'];
+    $badge_inbox = $inboxCounts['aceitar'] + $inboxCounts['comecar'];
 }
 ?>
 <?php

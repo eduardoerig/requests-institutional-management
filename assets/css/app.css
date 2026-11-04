@@ -1663,7 +1663,7 @@ a.bar-list__row:hover { background: var(--fundo); }
 
 /* ---------- 24. Seleção de vários pedidos ---------- */
 /* Caixa de marcar: leve quando vazia; laranja com ✓ quando marcada (− com parte marcada) */
-:is(.queue-row__check, .approve-card__check, .work-row__check, .approve-pickall, .work-pickall) input[type="checkbox"] {
+:is(.queue-row__check, .approve-card__check, .inbox-row__check, .approve-pickall, .inbox-pickall) input[type="checkbox"] {
     appearance: none;
     flex: none;
     border: 1.5px solid var(--linha-forte);
@@ -1672,13 +1672,13 @@ a.bar-list__row:hover { background: var(--fundo); }
     cursor: pointer;
     transition: background-color var(--dur-1), border-color var(--dur-1);
 }
-:is(.queue-row__check, .approve-card__check, .work-row__check, .approve-pickall, .work-pickall) input[type="checkbox"]:hover { border-color: var(--texto-3); }
-:is(.queue-row__check, .approve-card__check, .work-row__check, .approve-pickall, .work-pickall) input[type="checkbox"]:checked {
+:is(.queue-row__check, .approve-card__check, .inbox-row__check, .approve-pickall, .inbox-pickall) input[type="checkbox"]:hover { border-color: var(--texto-3); }
+:is(.queue-row__check, .approve-card__check, .inbox-row__check, .approve-pickall, .inbox-pickall) input[type="checkbox"]:checked {
     border-color: var(--laranja);
     background-color: var(--laranja);
     background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 14 14'%3E%3Cpath d='M3.5 7.2l2.4 2.4 4.6-5' fill='none' stroke='white' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
 }
-:is(.queue-row__check, .approve-card__check, .work-row__check, .approve-pickall, .work-pickall) input[type="checkbox"]:indeterminate {
+:is(.queue-row__check, .approve-card__check, .inbox-row__check, .approve-pickall, .inbox-pickall) input[type="checkbox"]:indeterminate {
     border-color: var(--laranja);
     background-color: var(--laranja);
     background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 14 14'%3E%3Cpath d='M4 7h6' stroke='white' stroke-width='2' stroke-linecap='round'/%3E%3C/svg%3E");

@@ -36,12 +36,21 @@ $queue = null;
 $backLabel = 'Voltar';
 $listParams = [];
 if ($from === 'inbox' && (isGestorRole($role) || isGlobalAdminRole($role))) {
-    $tab = (string)($_GET['tab'] ?? 'fazer');
-    $tab = isset(RequestInbox::TABS[$tab]) ? $tab : 'fazer';
     $areaFilter = (int)($_GET['setor'] ?? 0);
     $q = mb_substr(trim((string)($_GET['q'] ?? '')), 0, 100);
-    $listParams = array_filter(['tab' => $tab, 'setor' => $areaFilter ?: null, 'q' => $q !== '' ? $q : null]);
-    $queue = RequestInbox::rowsFor(RequestInbox::build($pdo, RequestInbox::areasFor($pdo, $userId, $role, $areaFilter)), $tab, $q);
+    $inboxAreas = RequestInbox::areasFor($pdo, $userId, $role, $areaFilter);
+    if (!in_array($areaFilter, $inboxAreas, true) || count($inboxAreas) > 1) {
+        $areaFilter = 0; // mesma regra da Caixa: setor que não vale some do link de volta
+    }
+    $inboxData = RequestInbox::build($pdo, $inboxAreas);
+    $filter = (string)($_GET['filtro'] ?? '');
+    $filter = isset(RequestInbox::FILTERS[$filter]) && $q === '' ? $filter : '';
+    $tab = RequestInbox::normalizeTab((string)($_GET['tab'] ?? '')) ?: RequestInbox::defaultTab($inboxData, $filter);
+    if (!in_array($tab, RequestInbox::ACTION_TABS, true)) {
+        $filter = '';
+    }
+    $listParams = array_filter(['tab' => $tab, 'setor' => $areaFilter ?: null, 'filtro' => $filter ?: null, 'q' => $q !== '' ? $q : null]);
+    $queue = RequestInbox::rowsFor($inboxData, $tab, $q, $filter);
     $backHref = 'inbox?' . http_build_query($listParams);
     $backLabel = $q !== '' ? 'Caixa, busca' : 'Caixa, ' . RequestInbox::TABS[$tab];
 } elseif ($from === 'approve' && (isGlobalAdminRole($role) || $role === 'adm_sub')) {

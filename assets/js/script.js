@@ -353,9 +353,14 @@ function openNotification(id, link) {
 function refreshForNotifications(fresh) {
     const links = fresh.map(n => String(n.link || ''));
     if (document.querySelector('[data-queue]') && typeof refreshAfterChange === 'function') {
-        // Com pedidos marcados para resolver de uma vez, não redesenha a fila (perderia a seleção);
-        // o sino já mostra o aviso e a fila atualiza depois da ação em lote
-        if (!document.body.classList.contains('has-bulk')) refreshAfterChange();
+        // Com pedidos marcados para resolver de uma vez, não redesenha a fila (perderia a seleção):
+        // os avisos ficam em espera e entram quando a seleção esvazia (updateBulkBar) ou depois da ação em lote
+        if (document.body.classList.contains('has-bulk')) {
+            queuePending += fresh.length || 1;
+            showQueuePending();
+        } else {
+            refreshAfterChange();
+        }
         return;
     }
     document.querySelectorAll('.request-view').forEach(view => {
@@ -935,6 +940,7 @@ async function refreshAfterChange(opts = {}) {
         const doc = new DOMParser().parseFromString(html, 'text/html');
         const fresh = doc.querySelector('[data-queue]');
         if (fresh) queue.replaceWith(fresh);
+        queuePending = 0; // a lista nova já traz o que estava em espera
         document.querySelectorAll('[data-sync]').forEach(el => {
             const twin = doc.querySelector(`[data-sync="${el.dataset.sync}"]`);
             if (twin) el.replaceWith(twin);
@@ -1189,6 +1195,15 @@ setInterval(() => document.querySelectorAll('.request-view').forEach(reloadChat)
 // ---------------------------------------------------------------------
 // Escolher vários pedidos e resolver de uma vez (Aprovar, Começar, Concluir)
 // ---------------------------------------------------------------------
+// Avisos que chegaram com pedidos marcados: a fila só redesenha quando a seleção esvaziar
+var queuePending = 0; // var: usada também por funções declaradas antes daqui
+function showQueuePending() {
+    const el = document.querySelector('[data-queue] [data-bulk-pending]');
+    if (!el) return;
+    el.hidden = queuePending === 0;
+    el.textContent = queuePending === 1 ? ' · 1 atualização em espera' : ` · ${queuePending} atualizações em espera`;
+}
+
 function bulkPicked(group = '') {
     return [...document.querySelectorAll('[data-queue] [data-pick]:checked')]
         .filter(i => !group || i.dataset.group === group)
@@ -1205,20 +1220,23 @@ function updateBulkBar() {
     const n = bulkPicked().length;
     bar.hidden = n === 0;
     bar.querySelector('[data-bulk-count]').textContent = n === 1 ? '1 pedido selecionado' : `${n} pedidos selecionados`;
-    // Botões por grupo: "Começar atendimento (2)" só aparece quando há novos marcados
+    // Botões por grupo: "Começar atendimento (2)" age só nos novos marcados; sem nenhum, fica desativado
     bar.querySelectorAll('[data-bulk-group]').forEach(btn => {
         const k = bulkPicked(btn.dataset.bulkGroup).length;
-        btn.hidden = k === 0;
+        btn.disabled = k === 0;
         const label = btn.querySelector('[data-bulk-n]');
         if (label) label.textContent = `(${k})`;
     });
-    picks.forEach(i => i.closest('.queue-row')?.classList.toggle('picked', i.checked));
+    picks.forEach(i => i.closest('.queue-row, .inbox-row')?.classList.toggle('picked', i.checked));
     const all = document.querySelector('[data-queue] [data-pick-all]');
     if (all) {
         all.checked = n > 0 && n === picks.length;
         all.indeterminate = n > 0 && n < picks.length;
     }
     document.body.classList.toggle('has-bulk', n > 0);
+    showQueuePending();
+    // Seleção esvaziou com avisos em espera: agora a fila pode redesenhar
+    if (n === 0 && queuePending > 0) refreshAfterChange();
 }
 
 document.addEventListener('change', (e) => {

@@ -422,6 +422,9 @@ $res = $sol->post('api/add_request.php', ['title' => 'Teste ajuda'] + $base);
 $helpReqId = (int)($res['json']['id'] ?? 0);
 $createdIds[] = ['ti', $helpReqId];
 $apr->post('api/approve_request.php', ['action' => 'post', 'id' => $helpReqId, 'table' => 'ti', 'value' => 'Y']);
+RequestInbox::clearCache();
+$fresh = array_values(array_filter(RequestInbox::build($pdo, [$tiAreaId])['tabs']['comecar'], fn($r) => $r['table'] === 'ti' && (int)$r['id'] === $helpReqId));
+check('aprovado agora: em Começar como "Chegou agora"', $fresh && !empty($fresh[0]['is_fresh']), json_encode($fresh[0]['is_fresh'] ?? null));
 $ti->post('api/request_actions.php', ['id' => $helpReqId, 'table' => 'ctd_ti_frm', 'action' => 'start_progress']);
 // Conversa antiga: quem pediu fala com a TI antes de pedirem ajuda (quem ajuda nunca vê)
 $sol->post('api/add_comment.php', ['id' => $helpReqId, 'table' => 'ti', 'comment' => 'Recado publico do solicitante 7731']);
@@ -433,7 +436,7 @@ check('pedir ajuda não muda a situação', $helpStatus() === 'W', $helpStatus()
 $place = $inboxPlace($tiAreaId, $helpReqId);
 check('na TI, o pedido vai para Esperando', $place[0] === 'esperando' && str_contains((string)$place[2], 'Compras'), json_encode($place, JSON_UNESCAPED_UNICODE));
 $place = $inboxPlace($shopAreaId, $helpReqId);
-check('em Compras, chega em Para fazer', $place[0] === 'fazer' && $place[1] === 'chegaram', json_encode($place, JSON_UNESCAPED_UNICODE));
+check('em Compras, chega em Aceitar', $place[0] === 'aceitar' && $place[1] === 'chegaram', json_encode($place, JSON_UNESCAPED_UNICODE));
 $res = $ti->post('api/request_actions.php', ['id' => $helpReqId, 'table' => 'ctd_ti_frm', 'action' => 'finish']);
 check('não conclui com ajuda em aberto', ($res['json']['success'] ?? true) === false);
 $res = $shop->post('api/request_forwards.php', ['action' => 'accept', 'forward_id' => $helpFwd]);
@@ -508,7 +511,7 @@ check('ajuda devolvida: quem ajudou não escreve mais para quem pediu', ($res['j
 $res = $sol->get("request_detail?id=$helpReqId&table=ti");
 check('ajuda devolvida: quem pediu ainda lê a conversa com quem ajudou', str_contains($res['body'], '7735') && str_contains($res['body'], 'TI recebe sua mensagem'));
 $place = $inboxPlace($tiAreaId, $helpReqId);
-check('ajuda devolvida: volta para Para fazer da TI com o recado', $place[0] === 'fazer' && $place[1] === 'andamento' && str_contains((string)$place[2], 'devolveu'), json_encode($place, JSON_UNESCAPED_UNICODE));
+check('ajuda devolvida: volta para Em andamento da TI com o recado', $place[0] === 'andamento' && $place[1] === 'andamento' && str_contains((string)$place[2], 'devolveu'), json_encode($place, JSON_UNESCAPED_UNICODE));
 $res = $ti->post('api/request_actions.php', ['id' => $helpReqId, 'table' => 'ctd_ti_frm', 'action' => 'finish']);
 check('TI conclui depois do retorno', ($res['json']['success'] ?? false) === true, snippet($res));
 
@@ -527,9 +530,38 @@ check('Histórico mostra a transferência da TI', $res['status'] === 200 && str_
 $res = $ti->get('inbox?tab=enviados');
 check('aba antiga (Enviados) abre a aba nova', $res['status'] === 200 && str_contains($res['body'], 'aria-current="page"'), 'HTTP ' . $res['status']);
 $res = $ti->get('inbox?q=' . urlencode('Teste repasse'));
-check('busca procura nas três abas', $res['status'] === 200 && str_contains($res['body'], 'Teste repasse'), 'HTTP ' . $res['status']);
+check('busca procura em todas as abas', $res['status'] === 200 && str_contains($res['body'], 'Teste repasse'), 'HTTP ' . $res['status']);
 $res = $ti->get("request_detail?id=$fwdReqId&table=ti&from=inbox&tab=historico");
 check('pedido aberto da Caixa mostra a fila (Anterior/Próximo)', $res['status'] === 200 && str_contains($res['body'], 'queue-nav__pager') && str_contains($res['body'], 'data-back='), 'HTTP ' . $res['status']);
+$res = $ti->get('inbox?tab=recebidos');
+check('aba antiga (Recebidos) abre Começar', $res['status'] === 200 && preg_match('/class="tab is-active[^"]*"[^>]*>\s*Começar/u', $res['body']) === 1, 'HTTP ' . $res['status']);
+$res = $ti->get('inbox?tab=transferidos');
+check('aba antiga (Transferidos) abre Histórico', $res['status'] === 200 && preg_match('/class="tab is-active[^"]*"[^>]*>\s*Histórico/u', $res['body']) === 1, 'HTTP ' . $res['status']);
+$res = $ti->get('inbox?tab=esperando&filtro=urgentes');
+check('filtro de urgentes não vale em Esperando', $res['status'] === 200 && !str_contains($res['body'], 'Mostrando só'), 'HTTP ' . $res['status']);
+$res = $ti->get('inbox?tab=comecar&filtro=atrasados');
+check('filtro de atrasados em Começar mostra a frase', $res['status'] === 200 && str_contains($res['body'], 'Mostrando só atrasados'), 'HTTP ' . $res['status']);
+// Ordem da lista: grupo de prazo, urgentes primeiro, prazo mais próximo
+$day = fn(int $d) => date('Y-m-d', strtotime("$d days"));
+$sample = [
+    ['id' => 1, 'date' => '', 'created_at' => '2026-01-01', 'priority' => 2],
+    ['id' => 2, 'date' => $day(10), 'created_at' => '2026-01-01', 'priority' => 2],
+    ['id' => 3, 'date' => $day(3), 'created_at' => '2026-01-01', 'priority' => 2],
+    ['id' => 4, 'date' => $day(4), 'created_at' => '2026-01-01', 'priority' => 2, 'is_urgent' => true],
+    ['id' => 5, 'date' => $day(0), 'created_at' => '2026-01-01', 'priority' => 2],
+    ['id' => 6, 'date' => $day(-2), 'created_at' => '2026-01-01', 'priority' => 2],
+    ['id' => 7, 'date' => $day(1), 'created_at' => '2026-01-01', 'priority' => 2],
+];
+usort($sample, [RequestInbox::class, 'byListOrder']);
+check('lista: atrasados, hoje, amanhã, semana (urgente antes), adiante, sem prazo', implode(',', array_column($sample, 'id')) === '6,5,7,4,3,2,1', implode(',', array_column($sample, 'id')));
+$found = RequestInbox::rowsFor($inbox, 'comecar', 'Teste');
+$seenHistory = false;
+$historyLast = true;
+foreach ($found as $r) {
+    if ($r['tab'] === 'historico') $seenHistory = true;
+    elseif ($seenHistory) $historyLast = false;
+}
+check('busca põe o histórico no fim', $historyLast);
 $res = $ti->get('approved');
 check('rota antiga leva para a Caixa', $res['status'] === 302 && str_contains($res['headers'] ?? '', 'inbox'), 'HTTP ' . $res['status']);
 

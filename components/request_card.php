@@ -104,7 +104,8 @@ if (!function_exists('renderQueueRow')) {
 
     /**
      * Barra que aparece quando há pedidos marcados.
-     * $actions: [ação => [rótulo, classe do botão, ícone, grupo?]]; com grupo, o botão age só nos marcados daquele grupo.
+     * $actions: [ação => [rótulo, classe do botão, ícone, grupo?]]; com grupo, o botão age só nos marcados daquele grupo
+     * e fica desativado quando nenhum desse grupo está marcado. [data-bulk-pending] mostra os avisos em espera.
      */
     function renderBulkBar(array $actions): string
     {
@@ -113,100 +114,16 @@ if (!function_exists('renderQueueRow')) {
             [$label, $class, $icon] = $a;
             $group = (string)($a[3] ?? '');
             $buttons .= '<button type="button" class="btn ' . e($class) . '" data-bulk-action="' . e($action) . '"'
-                . ($group !== '' ? ' data-bulk-group="' . e($group) . '" hidden' : '') . '>'
+                . ($group !== '' ? ' data-bulk-group="' . e($group) . '" disabled' : '') . '>'
                 . '<i class="fa-solid ' . e($icon) . '" aria-hidden="true"></i> ' . e($label)
                 . ($group !== '' ? ' <span data-bulk-n></span>' : '') . '</button>';
         }
         return '<div class="bulk-bar" data-bulk hidden role="region" aria-label="Pedidos selecionados">'
-            . '<span class="bulk-bar__count" data-bulk-count aria-live="polite">0 pedidos selecionados</span>'
+            . '<span class="bulk-bar__count"><span data-bulk-count aria-live="polite">0 pedidos selecionados</span>'
+            . '<span class="bulk-bar__pending" data-bulk-pending hidden></span></span>'
             . '<div class="bulk-bar__actions">' . $buttons
             . '<button type="button" class="btn btn--ghost" data-bulk-clear>Limpar</button></div>'
             . '</div>';
-    }
-}
-
-if (!function_exists('renderWorkRow')) {
-    /**
-     * UI 2.0 — pedido da Caixa do setor: cartão no celular, linha tipo tabela no computador.
-     * Função nova (não muda renderQueueRow). Estilos em assets/css/pages/inbox.css.
-     * $opt:
-     *   href    link do pedido
-     *   check   '' sem seleção | 'none' espaço vazio | grupo do lote ('novos', 'andamento')
-     *   sector  nome do setor dono (Caixa com vários setores) ou ''
-     *   status  [chave, rótulo] da situação: selo colorido + cor da faixa à esquerda
-     *           (novo, andamento, chegou, ajuda, aguardando, concluido, transferido)
-     *   badge   selo de outro setor (ex.: "Ajuda para Manutenção") ou ''
-     *   meta    linha de apoio: quem pediu · área · motivo
-     *   note    [texto, tipo] situação curta ('in', 'bad', 'ok' ou '')
-     *   due     false para não mostrar o prazo (histórico)
-     *   tab     nome da aba (resultados de busca)
-     *   action  null | [label, quick ('start'|'finish'|'accept'|'assume'|'return'|''), forward id, primário?]
-     *           quick '' vira link para o pedido
-     */
-    function renderWorkRow(array $row, array $opt = []): string
-    {
-        $id = (int)($row['id'] ?? 0);
-        $sector = str_replace(['ctd_', '_frm'], '', strtolower(trim((string)($row['table'] ?? ''))));
-        $href = (string)($opt['href'] ?? ('request_detail?id=' . $id . '&table=' . urlencode($sector)));
-        $check = (string)($opt['check'] ?? '');
-        $urgent = !empty($row['is_urgent']);
-        $badge = trim((string)($opt['badge'] ?? ''));
-        [$note, $noteKind] = ($opt['note'] ?? []) + ['', ''];
-
-        $due = '';
-        $dueKind = '';
-        if (($opt['due'] ?? true) !== false) {
-            [$due, $dueKind] = deadlineLabel((string)($row['date'] ?? ''));
-        }
-        $dueClass = 'work-row__due' . ($dueKind !== '' ? ' work-row__due--' . e($dueKind) : '');
-
-        [$stKey, $stLabel] = ($opt['status'] ?? []) + ['', ''];
-        $classes = 'work-row' . ($urgent ? ' is-urgent' : ($badge !== '' ? ' is-other' : ''))
-            . ($stKey !== '' ? ' st-' . e($stKey) : '') . ($check !== '' ? ' has-check' : '');
-        $html = '<li class="' . $classes . '" data-key="' . e($sector) . ':' . $id . '">';
-        $html .= '<span class="work-row__bar" aria-hidden="true"></span>';
-        if ($check === 'none') {
-            $html .= '<span class="work-row__check"></span>';
-        } elseif ($check !== '') {
-            $html .= '<label class="work-row__check"><input type="checkbox" data-pick data-group="' . e($check) . '" value="' . e($sector) . ':' . $id . '" aria-label="Selecionar pedido nº ' . $id . '"></label>';
-        }
-
-        $html .= '<a class="work-row__link" href="' . e($href) . '">'
-            . '<span class="work-row__head">'
-            .   '<span class="work-row__num">Nº ' . $id . '</span>'
-            .   ($stLabel !== '' ? '<span class="status-chip status-chip--' . e($stKey) . '">' . e($stLabel) . '</span>' : '')
-            .   '<span class="work-row__title">' . e($row['title'] ?? 'Sem título') . '</span>'
-            .   ($urgent ? '<span class="badge-urgent">Urgente</span>' : '')
-            .   ($badge !== '' ? '<span class="badge-sector">' . e($badge) . '</span>' : '')
-            .   (!empty($opt['sector']) ? '<span class="work-row__sector">' . e($opt['sector']) . '</span>' : '')
-            .   (!empty($opt['tab']) ? '<span class="work-row__tab">' . e($opt['tab']) . '</span>' : '')
-            .   ($due !== '' ? '<span class="' . $dueClass . ' work-row__due--top">' . e($due) . '</span>' : '')
-            . '</span>';
-        if (trim((string)($opt['meta'] ?? '')) !== '') {
-            $html .= '<span class="work-row__meta">' . e($opt['meta']) . '</span>';
-        }
-        if ($note !== '') {
-            $html .= '<span class="work-row__note' . ($noteKind !== '' ? ' work-row__note--' . e($noteKind) : '') . '">' . e($note) . '</span>';
-        }
-        $html .= '</a>';
-
-        // Prazo em coluna própria (computador); no celular ele vai na primeira linha do cartão
-        $html .= '<span class="' . $dueClass . ' work-row__due--col" aria-hidden="true">' . e($due) . '</span>';
-
-        $action = $opt['action'] ?? null;
-        if (is_array($action)) {
-            [$label, $quick, $forwardId, $primary] = $action + ['', '', 0, false];
-            $btnClass = 'btn work-row__act' . ($primary ? ' work-row__act--go' : '');
-            if ($quick === '') {
-                $html .= '<a class="' . $btnClass . '" href="' . e($href) . '">' . e($label) . '</a>';
-            } else {
-                $html .= '<button type="button" class="' . $btnClass . '" data-quick="' . e($quick) . '"'
-                    . ' data-id="' . $id . '" data-table="' . e($sector) . '"'
-                    . ((int)$forwardId > 0 ? ' data-forward="' . (int)$forwardId . '"' : '')
-                    . ' aria-label="' . e($label . ': pedido nº ' . $id) . '">' . e($label) . '</button>';
-            }
-        }
-        return $html . '</li>';
     }
 }
 

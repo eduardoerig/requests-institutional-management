@@ -25,7 +25,7 @@ if ($logged && $requestedPage === 'login' && $force_reset !== 1) {
     exit;
 }
 // Filas antigas viraram abas da Caixa do setor
-$legacyQueues = ['approved' => 'fazer', 'inWork' => 'fazer'];
+$legacyQueues = ['approved' => 'comecar', 'inWork' => 'andamento'];
 if ($logged && isset($legacyQueues[$requestedPage]) && $force_reset !== 1) {
     header('Location: inbox?tab=' . $legacyQueues[$requestedPage]);
     exit;

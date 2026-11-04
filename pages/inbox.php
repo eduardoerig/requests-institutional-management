@@ -1,13 +1,15 @@
 <?php
 /**
- * Caixa do setor (UI 2.0): o que o setor precisa fazer, o que espera de outros setores e o que já saiu.
- * Celular: cartões empilhados com botão de ação rápida. Computador (≥900px): linhas tipo tabela
- * e quatro números no topo. Cada pedido abre na própria página, com Anterior/Próximo
- * (mesma ordem desta lista: RequestInbox::rowsFor).
- * Estilos: assets/css/pages/inbox.css · ações rápidas: assets/js/pages/inbox.js
+ * Caixa do setor (tela 2b): cada aba diz o que o setor faz com o pedido
+ * (Aceitar, Começar, Em andamento, Esperando, Histórico). Topo com Urgentes/Atrasados (viram filtro),
+ * abas e busca; corpo em duas colunas: lista agrupada por prazo e painel do pedido selecionado.
+ * No celular o painel vira tela cheia. A ordem da lista é a de RequestInbox::rowsFor, a mesma do
+ * Anterior/Próximo da página do pedido.
+ * Peças: components/inbox_item.php · estilos: assets/css/pages/inbox.css · seleção e ações: assets/js/pages/inbox.js
+ * A lista ([data-queue]) e os [data-sync] (abas, números, lista) são redesenhados no lugar por refreshAfterChange().
  */
 require_once __DIR__ . '/../classes/RequestInbox.php';
-require_once __DIR__ . '/../components/request_card.php';
+require_once __DIR__ . '/../components/inbox_item.php';
 require_once __DIR__ . '/../components/welcome_card.php';
 
 $role = $_SESSION['role'] ?? 'solicitante';
@@ -15,7 +17,7 @@ $userId = (int)$_SESSION['id'];
 $isGlobalAdmin = isGlobalAdminRole($role);
 
 if (!$isGlobalAdmin && !isGestorRole($role)) {
-    echo '<div class="panel"><div class="empty-big"><i class="fa-solid fa-lock"></i><h2>Sem acesso</h2><p>A Caixa é dos setores que atendem os pedidos.</p><a class="btn" href="myRequests">Ir para meus pedidos</a></div></div>';
+    echo '<div class="panel"><div class="empty-big"><i class="fa-solid fa-lock"></i><h2>Sem acesso</h2><p>A Caixa é dos setores que atendem os pedidos.</p><a class="btn" href="myRequests">Meus pedidos</a></div></div>';
     return;
 }
 
@@ -31,157 +33,197 @@ $inbox = RequestInbox::build($pdo, $areaIds);
 $counts = $inbox['counts'];
 $summary = RequestInbox::summary($inbox);
 
-$tab = (string)($_GET['tab'] ?? 'fazer');
-$tab = RequestInbox::LEGACY_TABS[$tab] ?? $tab;
-if (!isset(RequestInbox::TABS[$tab])) {
-    $tab = 'fazer';
-}
 $q = mb_substr(trim((string)($_GET['q'] ?? '')), 0, 100);
 $searching = $q !== '';
-$rows = RequestInbox::rowsFor($inbox, $tab, $q);
+$filter = (string)($_GET['filtro'] ?? '');
+$filter = isset(RequestInbox::FILTERS[$filter]) && !$searching ? $filter : '';
+$tab = RequestInbox::normalizeTab((string)($_GET['tab'] ?? ''));
+if ($tab === '') {
+    $tab = RequestInbox::defaultTab($inbox, $filter);
+}
+if (!in_array($tab, RequestInbox::ACTION_TABS, true)) {
+    $filter = ''; // o filtro vale só nas três etapas de ação
+}
+$rows = RequestInbox::rowsFor($inbox, $tab, $q, $filter);
 
-$listParams = array_filter(['tab' => $tab, 'setor' => $areaFilter ?: null, 'q' => $searching ? $q : null]);
-$tabLink = fn(string $t) => 'inbox?' . http_build_query(array_filter(['tab' => $t, 'setor' => $areaFilter ?: null]));
+$setorParam = $areaFilter ?: null;
+$listParams = array_filter(['tab' => $tab, 'setor' => $setorParam, 'filtro' => $filter ?: null, 'q' => $searching ? $q : null]);
+// Trocar de aba limpa a busca; o filtro segue só entre as abas de ação
+$tabLink = fn(string $t) => 'inbox?' . http_build_query(array_filter([
+    'tab' => $t, 'setor' => $setorParam,
+    'filtro' => $filter !== '' && in_array($t, RequestInbox::ACTION_TABS, true) ? $filter : null,
+]));
 $rowLink = fn(array $row) => 'request_detail?' . http_build_query(['id' => (int)$row['id'], 'table' => $row['table'], 'from' => 'inbox'] + $listParams);
 
-// Começar e concluir em lote: só o setor, só em "Para fazer"
-$canBulk = isGestorRole($role) && $tab === 'fazer' && !$searching;
-$bulk = $canBulk ? [
-    'start' => ['Começar atendimento', 'btn--primary', 'fa-play', 'novos'],
-    'finish' => ['Concluir', 'btn--primary', 'fa-check-double', 'andamento'],
-] : [];
 $showSector = count($areaIds) > 1;
-
 $areaName = $showSector ? '' : (string)($areaIds ? RequestForwardService::areaLabel($pdo, (int)$areaIds[0]) : '');
 
-$cut = fn(string $s, int $max = 120) => mb_strlen($s) > $max ? rtrim(mb_substr($s, 0, $max - 1)) . '…' : $s;
+// Lote: só o gestor, só em Começar e Em andamento, sem busca
+$canBulk = isGestorRole($role) && in_array($tab, ['comecar', 'andamento'], true) && !$searching;
+
+$cut = fn(string $s, int $max = 140) => mb_strlen($s) > $max ? rtrim(mb_substr($s, 0, $max - 1)) . '…' : $s;
+$fmtDay = fn(string $when) => $when !== '' ? date('d/m', strtotime($when)) : '';
 
 /**
- * Como cada pedido aparece: selo de outro setor, linha de apoio, situação curta e ação rápida.
+ * Como cada pedido aparece: próximo passo (linha), selos, notas, situação e ação (painel).
  * As ações usam os mesmos endpoints da página do pedido (inbox.js chama requestAct/forwardAct do script.js).
  */
-$present = function (array $row) use ($tab, $cut): array {
-    $rowTab = (string)($row['tab'] ?? $tab);
+$present = function (array $row) use ($cut, $fmtDay, $canBulk): array {
+    $rowTab = (string)$row['tab'];
     $group = (string)($row['group'] ?? '');
     $fwd = $row['open_forward'] ?? null;
     [$context, $kind] = ($row['context'] ?? []) + ['', ''];
-    $who = trim((string)($row['solicitor_name_formatted'] ?? ''));
-    $people = implode(' · ', array_filter([$who !== '—' ? $who : '', trim((string)($row['subdivision_name'] ?? ''))]));
     $reason = trim((string)($row['urgent_reason'] ?? ''));
-    $out = ['status' => ['', ''], 'badge' => '', 'meta' => '', 'note' => ['', ''], 'action' => null];
-
-    if ($rowTab === 'historico') {
-        $out['status'] = str_starts_with($context, 'Transferido') ? ['transferido', 'Transferido'] : ['concluido', 'Concluído'];
-        $out['meta'] = $context;
-        $out['action'] = ['Ver pedido', '', 0, false];
-        return $out;
-    }
-    if ($rowTab === 'esperando') {
-        $out['status'] = match (true) {
-            $fwd && $fwd['mode'] === 'help' && $fwd['status'] === 'accepted' => ['ajuda', 'Com ajuda'],
-            $fwd && $fwd['mode'] === 'transfer' => ['aguardando', 'Aguardando aceite'],
-            default => ['aguardando', 'Aguardando resposta'],
-        };
-        $out['badge'] = $fwd ? 'Com ' . $fwd['to_label'] : '';
-        $out['meta'] = $people;
-        $out['note'] = [$context, $kind];
-        $out['action'] = ['Ver pedido', '', 0, false];
-        return $out;
+    $msg = $fwd ? trim((string)($fwd['observation'] ?? '')) : '';
+    $out = [
+        'next' => ['', ''], 'status' => ['', ''], 'badge' => '', 'notes' => [],
+        'situation' => [$context, $kind], 'action' => null, 'check' => '', 'due' => true,
+    ];
+    if ($reason !== '') {
+        $out['notes'][] = 'Motivo da urgência: ' . $cut($reason);
     }
 
-    // Para fazer
-    if ($group === 'chegaram' && $fwd) {
-        $isHelp = $fwd['mode'] === 'help';
-        $msg = trim((string)($fwd['observation'] ?? ''));
-        $out['status'] = ['chegou', 'Chegou agora'];
-        $out['badge'] = ($isHelp ? 'Ajuda para ' : 'Transferência de ') . $fwd['from_label'];
-        $out['meta'] = $fwd['from_label'] . ($isHelp ? ' pede' : ' quer transferir') . ($msg !== '' ? ': “' . $cut($msg) . '”' : '');
-        $out['action'] = [$isHelp ? 'Aceitar ajuda' : 'Aceitar e assumir', $isHelp ? 'accept' : 'assume', (int)$fwd['id'], true];
-        return $out;
+    switch ($rowTab) {
+        case 'aceitar':
+            $isHelp = $fwd && $fwd['mode'] === 'help';
+            $from = $fwd['from_label'] ?? '';
+            $out['next'] = [$isHelp ? 'Aceitar ajuda' : 'Aceitar e assumir', 'go'];
+            $out['status'] = ['aguardando', 'Aguardando aceite'];
+            $out['badge'] = ($isHelp ? 'Ajuda para ' : 'Transferência de ') . $from;
+            if ($msg !== '') {
+                array_unshift($out['notes'], $from . ' pede: “' . $cut($msg) . '”');
+            }
+            if ($fwd) {
+                $out['action'] = [$isHelp ? 'Aceitar ajuda' : 'Aceitar e assumir', $isHelp ? 'accept' : 'assume', (int)$fwd['id'], true];
+            }
+            break;
+        case 'comecar':
+            $out['next'] = ['Começar', 'go'];
+            $out['status'] = !empty($row['is_fresh']) ? ['chegou', 'Chegou agora'] : ['novo', 'Novo'];
+            if ($context === '') {
+                $day = $fmtDay((string)($row['approved_at'] ?? ''));
+                $out['situation'] = ['Aprovado pela coordenação' . ($day !== '' ? ' em ' . $day : ''), ''];
+            }
+            $out['action'] = ['Começar atendimento', 'start', 0, true];
+            $out['check'] = $canBulk ? 'novos' : '';
+            break;
+        case 'andamento':
+            if ($group === 'ajudando') {
+                $from = $fwd['from_label'] ?? '';
+                $out['next'] = ['Ajudando · devolver', 'go'];
+                $out['status'] = ['ajuda', 'Ajudando'];
+                $out['badge'] = 'Ajuda para ' . $from;
+                if ($msg !== '') {
+                    array_unshift($out['notes'], $from . ' pede: “' . $cut($msg) . '”');
+                }
+                if ($fwd) {
+                    $out['action'] = ['Devolver ajuda', 'return', (int)$fwd['id'], false];
+                }
+                $out['check'] = $canBulk ? 'none' : '';
+            } else {
+                $out['next'] = ['Concluir', 'go'];
+                $out['status'] = ['andamento', 'Em atendimento'];
+                $out['action'] = ['Concluir', 'finish', 0, false];
+                $out['check'] = $canBulk ? 'andamento' : '';
+            }
+            break;
+        case 'esperando':
+            $to = $fwd['to_label'] ?? '';
+            $out['next'] = ['Aguardar ' . $to, 'wait'];
+            $out['status'] = match (true) {
+                $fwd && $fwd['mode'] === 'help' && $fwd['status'] === 'accepted' => ['ajuda', 'Com ajuda'],
+                $fwd && $fwd['mode'] === 'transfer' => ['aguardando', 'Aguardando aceite'],
+                default => ['aguardando', 'Aguardando resposta'],
+            };
+            $out['badge'] = $to !== '' ? 'Com ' . $to : '';
+            break;
+        default: // historico
+            $out['next'] = [$context, 'done'];
+            $out['status'] = str_starts_with($context, 'Transferido') ? ['transferido', 'Transferido'] : ['concluido', 'Concluído'];
+            $out['due'] = false;
     }
-    if ($group === 'ajudando' && $fwd) {
-        $msg = trim((string)($fwd['observation'] ?? ''));
-        $out['status'] = ['ajuda', 'Ajudando'];
-        $out['badge'] = 'Ajudando ' . $fwd['from_label'];
-        $out['meta'] = $msg !== '' ? $fwd['from_label'] . ' pediu: “' . $cut($msg) . '”' : $people;
-        $out['action'] = ['Devolver ajuda', 'return', (int)$fwd['id'], false];
-        return $out;
-    }
-    $out['status'] = $group === 'novos' ? ['novo', 'Novo'] : ['andamento', 'Em atendimento'];
-    $out['meta'] = implode(' · ', array_filter([$people, $reason !== '' ? '“' . $cut($reason, 90) . '”' : '']));
-    $out['note'] = [$context, $kind];
-    $out['action'] = $group === 'novos' ? ['Começar atendimento', 'start', 0, true] : ['Concluir', 'finish', 0, false];
     return $out;
 };
 
-// O mesmo número existe em cada setor: o nome aparece sempre que o pedido não nasceu no seu setor
-$isOwnSector = fn(string $table) => in_array((int)RequestForwardService::originAreaId($pdo, $table), $areaIds, true);
-
-$rowOpt = function (array $row) use ($rowLink, $showSector, $isOwnSector, $canBulk, $tab, $searching, $present): array {
-    $p = $present($row);
-    return [
+$ownerLabel = fn(array $row) => RequestForwardService::areaLabel($pdo, (int)$row['owner_area_id']);
+$item = function (array $row) use ($present, $rowLink, $ownerLabel, $areaIds, $showSector, $searching): array {
+    return $present($row) + [
+        'key' => $row['table'] . ':' . (int)$row['id'],
         'href' => $rowLink($row),
-        'sector' => $showSector || !$isOwnSector((string)$row['table']) ? requestSectorName((string)$row['table']) : '',
-        'check' => $canBulk ? (in_array($row['group'] ?? '', ['novos', 'andamento'], true) ? $row['group'] : 'none') : '',
-        'due' => ($row['tab'] ?? $tab) !== 'historico',
-        'tab' => $searching ? RequestInbox::TABS[$row['tab']] : '',
-        'status' => $p['status'],
-        'badge' => $p['badge'],
-        'meta' => $p['meta'],
-        'note' => $p['note'],
-        'action' => $p['action'],
+        'owner' => $ownerLabel($row),
+        // O mesmo número existe em cada setor: o dono aparece quando não é o seu setor ou há vários na tela
+        'showOwner' => $showSector || !in_array((int)$row['owner_area_id'], $areaIds, true),
+        'tabLabel' => $searching ? RequestInbox::TABS[$row['tab']] : '',
     ];
 };
 
-// Faixas: só "Para fazer" (sem busca) é dividido — Urgentes, Outros setores, Chegaram, Em andamento
-$groups = [];
-if ($tab === 'fazer' && !$searching) {
-    foreach (array_keys(RequestInbox::LANES) as $lane) {
-        $groups[$lane] = [];
-    }
-    foreach ($rows as $row) {
-        $groups[$row['lane'] ?? 'andamento'][] = $row;
-    }
-    $groups = array_filter($groups);
-} elseif ($rows) {
-    $groups[''] = $rows;
+// Montado uma vez por pedido: a linha e o painel usam o mesmo
+$items = [];
+foreach ($rows as $row) {
+    $items[$row['table'] . ':' . (int)$row['id']] = $item($row);
 }
 
-$emptyText = [
-    'fazer' => 'Nada para fazer agora. Quando a coordenação aprovar um pedido do seu setor, ele aparece aqui.',
-    'esperando' => 'Nenhum pedido esperando outro setor. Quando vocês encaminharem um pedido, ele fica aqui até a resposta.',
-    'historico' => 'Nada por aqui ainda. Os pedidos que vocês concluírem ou transferirem ficam guardados nesta aba.',
-][$tab];
+// Grupos da lista: por prazo (vazios somem); histórico num grupo só; na busca, o histórico vem no fim
+$groups = [];
+foreach ($rows as $row) {
+    $g = $row['tab'] === 'historico' ? 'historico' : $row['due_group'];
+    $groups[$g][] = $row;
+}
+$groupTitles = RequestInbox::DUE_GROUPS + ['historico' => $searching ? 'No histórico' : 'Mais recentes'];
+$groups = array_filter(array_replace(array_fill_keys(array_keys($groupTitles), []), $groups));
 
-// "Para fazer" e "Esperando" já mostram o número nas abas logo abaixo
-$stats = [
-    ['Urgentes', $summary['urgentes'], 'bad', 'fazer'],
-    ['Atrasados', $summary['atrasados'], '', 'fazer'],
-];
+$emptyText = match (true) {
+    $searching => 'Nada com “' . $q . '” em nenhuma aba.',
+    $filter !== '' => 'Nenhum pedido desta etapa se encaixa aqui. Veja as outras abas.',
+    default => [
+        'aceitar' => 'Pedidos de ajuda e transferências de outros setores aparecem aqui.',
+        'comecar' => 'Quando a coordenação aprovar um pedido do seu setor, ele aparece aqui.',
+        'andamento' => 'Nada em atendimento agora.',
+        'esperando' => 'Quando vocês pedirem ajuda ou encaminharem um pedido, ele fica aqui até o outro setor responder.',
+        'historico' => 'Pedidos concluídos e transferidos para outros setores ficam guardados aqui.',
+    ][$tab],
+};
+
+// Números do topo: clicar liga o filtro e leva à primeira etapa que tem pedidos desse tipo; clicar de novo desliga
+$statLink = function (string $f) use ($filter, $tab, $inbox, $setorParam): string {
+    if ($filter === $f) {
+        return 'inbox?' . http_build_query(array_filter(['tab' => $tab, 'setor' => $setorParam]));
+    }
+    return 'inbox?' . http_build_query(array_filter(['tab' => RequestInbox::defaultTab($inbox, $f), 'setor' => $setorParam, 'filtro' => $f]));
+};
+$tabCount = fn(string $t) => $filter !== '' && isset($summary['byTab'][$t]) ? $summary['byTab'][$t][$filter] : (int)$counts[$t];
 ?>
+<div class="inbox-top">
 <div class="page-head page-head--hide-mobile inbox-head">
     <div>
-        <?php if ($areaName !== ''): ?><p class="inbox-head__area">Setor: <?= e($areaName) ?></p><?php endif; ?>
+        <?php if ($areaName !== ''): ?><p class="inbox-head__area"><?= e($areaName) ?></p><?php endif; ?>
         <h1><?= $isGlobalAdmin ? 'Caixa dos setores' : 'Caixa do setor' ?></h1>
     </div>
 </div>
-
-<div class="inbox-stats" data-sync="inbox-stats" aria-label="Resumo da Caixa">
-    <?php foreach ($stats as [$label, $value, $kind, $target]): ?>
-        <a class="inbox-stat<?= $kind === 'bad' && $value > 0 ? ' inbox-stat--bad' : '' ?>" href="<?= e($tabLink($target)) ?>">
-            <span class="inbox-stat__label"><?= e($label) ?></span>
-            <span class="inbox-stat__value"><?= (int)$value ?></span>
-        </a>
-    <?php endforeach; ?>
+    <div class="inbox-stats" data-sync="inbox-stats" aria-label="Pedidos que pedem atenção">
+        <?php foreach (['urgentes' => 'Urgentes', 'atrasados' => 'Atrasados'] as $f => $label):
+            $n = (int)$summary[$f];
+            $on = $filter === $f;
+        ?>
+            <a class="inbox-stat inbox-stat--<?= e($f) ?><?= $n > 0 ? ' has-items' : '' ?><?= $on ? ' is-on' : '' ?>" href="<?= e($statLink($f)) ?>"
+               aria-pressed="<?= $on ? 'true' : 'false' ?>">
+                <span class="inbox-stat__value"><?= $n ?></span>
+                <span class="inbox-stat__label"><?= e($label) ?></span>
+                <span class="visually-hidden"><?= $on ? '(mostrar tudo)' : '(mostrar só estes)' ?></span>
+            </a>
+        <?php endforeach; ?>
+    </div>
 </div>
 
 <div class="toolbar inbox-toolbar">
-    <nav class="tabs" aria-label="Caixa" data-sync="inbox-tabs">
+    <nav class="tabs inbox-tabs" aria-label="Etapas da Caixa" data-sync="inbox-tabs">
         <?php foreach (RequestInbox::TABS as $key => $label):
             $on = $tab === $key && !$searching;
+            $n = $tabCount($key);
+            $hot = in_array($key, RequestInbox::ACTION_TABS, true) && $n > 0;
         ?>
-            <a class="tab<?= $on ? ' is-active' : '' ?><?= $key === 'fazer' && $counts['fazer'] > 0 ? ' tab--hot' : '' ?>" href="<?= e($tabLink($key)) ?>"<?= $on ? ' aria-current="page"' : '' ?>>
-                <?= e($label) ?><?php if ($key !== 'historico'): ?> <span><?= (int)$counts[$key] ?></span><?php endif; ?>
+            <a class="tab<?= $on ? ' is-active' : '' ?><?= $hot ? ' tab--hot' : '' ?>" href="<?= e($tabLink($key)) ?>"<?= $on ? ' aria-current="page"' : '' ?>>
+                <?= e($label) ?><?php if ($key !== 'historico'): ?> <span><?= $n ?></span><?php endif; ?>
             </a>
         <?php endforeach; ?>
     </nav>
@@ -197,66 +239,54 @@ $stats = [
         <?php endif; ?>
         <div class="search-box">
             <i class="fas fa-search" aria-hidden="true"></i>
-            <input type="search" name="q" value="<?= e($q) ?>" placeholder="Buscar por número, título ou nome" aria-label="Buscar em todos os pedidos">
+            <input type="search" name="q" value="<?= e($q) ?>" placeholder="Buscar por número, título ou nome" aria-label="Buscar em todas as abas">
         </div>
     </form>
 </div>
 
-<section class="queue queue--cards<?= $showSector ? ' queue--sector' : '' ?>" data-queue data-url="<?= e('inbox?' . http_build_query($listParams)) ?>" aria-label="Pedidos">
+<section class="inbox-body<?= $rows ? '' : ' is-empty' ?>" data-queue data-tab="<?= e($searching ? '' : $tab) ?>" data-sync="inbox-list"
+         data-url="<?= e('inbox?' . http_build_query($listParams)) ?>" aria-label="Pedidos">
     <?php if ($searching): ?>
-        <p class="queue__note"><?= match (count($rows)) { 0 => 'Nenhum pedido encontrado', 1 => '1 pedido encontrado', default => count($rows) . ' pedidos encontrados' } ?> para "<?= e($q) ?>" nas três abas. <a href="<?= e($tabLink($tab)) ?>">Limpar busca</a></p>
+        <p class="inbox-note"><?= count($rows) === 1 ? '1 pedido encontrado' : count($rows) . ' pedidos encontrados' ?> em todas as abas. <a href="<?= e($tabLink($tab)) ?>">Limpar busca</a></p>
+    <?php elseif ($filter !== ''): ?>
+        <p class="inbox-note">Mostrando só <?= e($filter) ?>. <a href="<?= e('inbox?' . http_build_query(array_filter(['tab' => $tab, 'setor' => $setorParam]))) ?>">Ver tudo</a></p>
     <?php endif; ?>
 
-    <?php if ($groups): ?>
-        <?php
-        // Legenda das cores: só as situações que aparecem nesta lista, na ordem do trabalho
-        $legendOrder = ['chegou', 'novo', 'andamento', 'ajuda', 'aguardando', 'concluido', 'transferido'];
-        $legendNames = ['chegou' => 'Chegou de outro setor', 'novo' => 'Novo', 'andamento' => 'Em atendimento', 'ajuda' => 'Ajuda entre setores',
-            'aguardando' => 'Aguardando outro setor', 'concluido' => 'Concluído', 'transferido' => 'Transferido'];
-        $legendSeen = [];
-        foreach ($groups as $groupRows) {
-            foreach ($groupRows as $row) {
-                $legendSeen[$present($row)['status'][0]] = true;
-            }
-        }
-        $legend = array_values(array_filter($legendOrder, fn($k) => isset($legendSeen[$k])));
-        ?>
-        <?php if (count($legend) > 1): ?>
-            <ul class="status-legend" aria-label="O que cada cor quer dizer">
-                <?php foreach ($legend as $k): ?>
-                    <li><span class="status-legend__dot status-legend__dot--<?= e($k) ?>" aria-hidden="true"></span><?= e($legendNames[$k]) ?></li>
+    <?php if ($rows): ?>
+        <div class="inbox-cols">
+            <div class="inbox-list" data-list>
+                <?php if ($canBulk && array_filter($rows, fn($r) => $r['group'] !== 'ajudando')): ?>
+                    <label class="inbox-pickall"><input type="checkbox" data-pick-all> Selecionar todos</label>
+                <?php endif; ?>
+                <?php foreach ($groups as $g => $groupRows): ?>
+                    <section class="inbox-group inbox-group--<?= e($g) ?>" aria-labelledby="g-<?= e($g) ?>">
+                        <h2 class="inbox-group__title" id="g-<?= e($g) ?>"><?= e($groupTitles[$g]) ?> <span><?= count($groupRows) ?></span></h2>
+                        <ul class="inbox-rows">
+                            <?php foreach ($groupRows as $row): ?>
+                                <?= renderInboxRow($row, $items[$row['table'] . ':' . (int)$row['id']]) ?>
+                            <?php endforeach; ?>
+                        </ul>
+                    </section>
                 <?php endforeach; ?>
-                <?php if (array_filter(array_merge(...array_values($groups)), fn($r) => !empty($r['is_urgent']))): ?>
-                    <li><span class="status-legend__dot status-legend__dot--urgente" aria-hidden="true"></span>Urgente (faixa vermelha)</li>
-                <?php endif; ?>
-            </ul>
-        <?php endif; ?>
-        <?php if ($canBulk): ?>
-            <div class="work-pickall">
-                <label><input type="checkbox" data-pick-all> Selecionar todos</label>
-                <span class="work-pickall__hint">para começar ou concluir vários de uma vez</span>
             </div>
-        <?php endif; ?>
-        <?php foreach ($groups as $group => $groupRows): ?>
-            <section class="lane<?= $group !== '' ? ' lane--' . e($group) : '' ?>" <?= $group !== '' ? 'aria-labelledby="g-' . e($group) . '"' : '' ?>>
-                <?php if ($group !== ''): [$laneTitle, $laneHint] = RequestInbox::LANES[$group]; ?>
-                    <h2 class="lane__title" id="g-<?= e($group) ?>">
-                        <?= e($laneTitle) ?> <span class="lane__count"><?= count($groupRows) ?></span>
-                        <span class="lane__hint">· <?= e($laneHint) ?></span>
-                    </h2>
-                <?php endif; ?>
-                <ul class="work-list">
+            <div class="inbox-panel" data-panel aria-live="polite">
+                <?php foreach ($groups as $groupRows): ?>
                     <?php foreach ($groupRows as $row): ?>
-                        <?= renderWorkRow($row, $rowOpt($row)) ?>
+                        <?= renderInboxDetail($row, $items[$row['table'] . ':' . (int)$row['id']]) ?>
                     <?php endforeach; ?>
-                </ul>
-            </section>
-        <?php endforeach; ?>
-    <?php elseif (!$searching): ?>
+                <?php endforeach; ?>
+            </div>
+        </div>
+    <?php else: ?>
         <div class="empty-state"><i class="fa-regular fa-circle-check" aria-hidden="true"></i><p><?= e($emptyText) ?></p></div>
     <?php endif; ?>
 
-    <?php if ($bulk && $rows): ?><?= renderBulkBar($bulk) ?><?php endif; ?>
+    <?php if ($canBulk && $rows): ?>
+        <?= renderBulkBar([
+            'start' => ['Começar atendimento', 'btn--primary', 'fa-play', 'novos'],
+            'finish' => ['Concluir', 'btn--primary', 'fa-check-double', 'andamento'],
+        ]) ?>
+    <?php endif; ?>
 </section>
 
 <?php // Boas-vindas depois da lista: o trabalho aparece primeiro, principalmente no celular ?>

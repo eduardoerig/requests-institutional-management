@@ -1,13 +1,15 @@
 <?php
 /**
- * Filas de trabalho, no modelo dos sistemas de chamados: cada aba diz de quem é a vez.
+ * Filas de trabalho, no modelo dos sistemas de chamados: cada aba diz o que o setor faz com o pedido.
  *
- *  fazer      o setor precisa agir (grupos: chegaram, novos, andamento, ajudando)
+ *  aceitar    pedidos de ajuda e transferências de outros setores, esperando o aceite (grupo chegaram)
+ *  comecar    aprovados pela coordenação, ainda sem atendimento (grupo novos; "Chegou agora" = aprovado há < 24h)
+ *  andamento  em atendimento e ajudando outro setor (grupos andamento, ajudando)
  *  esperando  pedidos do setor parados à espera de outro setor (transferência ou ajuda em aberto)
  *  historico  concluídos pelo setor e pedidos transferidos para outro setor (os 100 mais recentes)
  *
  * Também monta a fila da tela Aprovar pedidos (approvals). As telas de lista e o
- * Anterior/Próximo da página do pedido usam estas mesmas funções, na mesma ordem.
+ * Anterior/Próximo da página do pedido usam estas mesmas funções, na mesma ordem (rowsFor).
  */
 
 require_once __DIR__ . '/RequestForwardService.php';
@@ -16,12 +18,20 @@ require_once __DIR__ . '/../config/security.php';
 class RequestInbox
 {
     public const TABS = [
-        'fazer' => 'Para fazer',
+        'aceitar' => 'Aceitar',
+        'comecar' => 'Começar',
+        'andamento' => 'Em andamento',
         'esperando' => 'Esperando',
         'historico' => 'Histórico',
     ];
 
-    /** Grupos de "Para fazer", na ordem do trabalho */
+    /** Abas em que o setor precisa agir: contam nos números do topo e aceitam o filtro urgentes/atrasados */
+    public const ACTION_TABS = ['aceitar', 'comecar', 'andamento'];
+
+    /** Filtros dos números do topo */
+    public const FILTERS = ['urgentes' => 'urgentes', 'atrasados' => 'atrasados'];
+
+    /** Grupos do fluxo (o menu usa novos + chegaram) */
     public const GROUPS = [
         'chegaram' => 'Chegaram de outros setores',
         'novos' => 'Novos',
@@ -29,35 +39,35 @@ class RequestInbox
         'ajudando' => 'Ajudando outro setor',
     ];
 
-    /**
-     * Faixas de "Para fazer" na tela (UI 2.0), na ordem do trabalho. São só de exibição:
-     * 'group' continua sendo o grupo do fluxo (chegaram, novos, andamento, ajudando).
-     *   urgentes  prioridade alta/crítica ou marcado como urgente, de qualquer grupo
-     *   outros    outros setores pedindo ajuda ou transferindo (chegaram + ajudando)
-     *   novos     aprovados pela coordenação, ainda sem atendimento
-     *   andamento já começaram
-     */
-    public const LANES = [
-        'urgentes' => ['Urgentes', 'resolva primeiro'],
-        'outros' => ['Vindos de outros setores', 'pedidos de ajuda e transferências esperando vocês aceitarem'],
-        'novos' => ['Chegaram', 'aprovados pela coordenação'],
-        'andamento' => ['Em andamento', 'já começaram'],
+    /** Grupos de prazo da lista, nesta ordem (o histórico não é agrupado) */
+    public const DUE_GROUPS = [
+        'atrasados' => 'Atrasados',
+        'hoje' => 'Hoje',
+        'amanha' => 'Amanhã',
+        'semana' => 'Esta semana',
+        'adiante' => 'Mais adiante',
+        'sem' => 'Sem prazo',
     ];
 
-    /** Abas antigas (links salvos e avisos antigos) */
+    /** Abas antigas (links salvos e avisos antigos); 'fazer' cai na aba padrão (defaultTab) */
     public const LEGACY_TABS = [
-        'novos' => 'fazer',
-        'andamento' => 'fazer',
-        'chegaram' => 'fazer',
-        'ajudando' => 'fazer',
+        'novos' => 'comecar',
+        'recebidos' => 'comecar',
+        'chegaram' => 'aceitar',
+        'ajudando' => 'andamento',
         'enviados' => 'esperando',
+        'aguardando' => 'esperando',
         'concluidos' => 'historico',
+        'transferidos' => 'historico',
     ];
 
     private const HISTORY_LIMIT = 100;
 
     /** Recusa ou devolução de ajuda continua aparecendo na linha do pedido por estes dias */
     private const RECENT_REPLY_DAYS = 14;
+
+    /** Aprovado há menos que isto aparece como "Chegou agora" */
+    private const FRESH_HOURS = 24;
 
     /** Caixas já montadas nesta requisição (o menu e a página usam a mesma) */
     private static array $built = [];
@@ -176,11 +186,12 @@ class RequestInbox
             }
         }
 
-        // 4) Quem começou o atendimento e quem concluiu (do histórico)
+        // 4) Quem começou o atendimento, quem concluiu e quando foi aprovado (do histórico)
         $people = self::statusPeople($pdo, array_keys($requests));
 
         // 5) Cada pedido vai para uma aba só: a de quem precisa agir agora
         $recent = date('Y-m-d H:i:s', strtotime('-' . self::RECENT_REPLY_DAYS . ' days'));
+        $fresh = date('Y-m-d H:i:s', strtotime('-' . self::FRESH_HOURS . ' hours'));
         foreach ($requests as $key => $row) {
             $isMine = in_array((int)$row['owner_area_id'], $areaIds, true);
             $fwd = $open[$key] ?? null;
@@ -196,11 +207,11 @@ class RequestInbox
             if ($toMe && $fwd['status'] === 'pending') {
                 $row['group'] = 'chegaram';
                 $row['context'] = [$fwd['from_label'] . ($fwd['mode'] === 'help' ? ' pede ajuda' : ' quer transferir'), 'in'];
-                $tabs['fazer'][] = $row;
+                $tabs['aceitar'][] = $row;
             } elseif ($toMe) {
                 $row['group'] = 'ajudando';
                 $row['context'] = ['Ajudando ' . $fwd['from_label'], ''];
-                $tabs['fazer'][] = $row;
+                $tabs['andamento'][] = $row;
             } elseif ($isMine && $fromMe) {
                 $row['group'] = 'esperando';
                 if ($fwd['mode'] === 'transfer') {
@@ -219,7 +230,12 @@ class RequestInbox
                 } elseif ($row['group'] === 'andamento' && $row['worker_name'] !== '') {
                     $row['context'] = ['com ' . self::firstName($row['worker_name']), ''];
                 }
-                $tabs['fazer'][] = $row;
+                if ($row['group'] === 'novos') {
+                    $approvedAt = (string)($people[$key]['approved_at'] ?? '');
+                    $row['approved_at'] = $approvedAt;
+                    $row['is_fresh'] = $approvedAt !== '' && $approvedAt >= $fresh;
+                }
+                $tabs[$row['group'] === 'novos' ? 'comecar' : 'andamento'][] = $row;
             } elseif ($isMine && $row['st_raw'] === 'C') {
                 $closedAt = (string)($people[$key]['closed_at'] ?? '');
                 $closer = (string)($people[$key]['closer'] ?? '');
@@ -238,44 +254,100 @@ class RequestInbox
             }
         }
 
-        // Urgência e faixa da tela (só exibição; 'group' fica como está)
+        // Urgência e grupo de prazo (só exibição; 'group' fica como está)
         foreach ($tabs as $tab => $rows) {
             foreach ($rows as $i => $row) {
                 [$tabs[$tab][$i]['is_urgent'], $tabs[$tab][$i]['urgent_reason']] = self::urgencyOf($row);
-            }
-        }
-        foreach ($tabs['fazer'] as $i => $row) {
-            $tabs['fazer'][$i]['lane'] = $row['is_urgent'] ? 'urgentes' : match ($row['group']) {
-                'chegaram', 'ajudando' => 'outros',
-                'novos' => 'novos',
-                default => 'andamento',
-            };
-        }
-
-        // Ordem: faixas na ordem do trabalho e prazo mais próximo primeiro (esperando: urgentes no topo);
-        // histórico do mais recente
-        $laneOrder = array_flip(array_keys(self::LANES));
-        usort($tabs['fazer'], fn($a, $b) => ($laneOrder[$a['lane']] <=> $laneOrder[$b['lane']]) ?: self::byDeadline($a, $b));
-        usort($tabs['esperando'], fn($a, $b) => ($b['is_urgent'] <=> $a['is_urgent']) ?: self::byDeadline($a, $b));
-        usort($tabs['historico'], fn($a, $b) => strcmp((string)$b['closed_at'], (string)$a['closed_at']));
-        $tabs['historico'] = array_slice($tabs['historico'], 0, self::HISTORY_LIMIT);
-
-        foreach ($tabs as $tab => $rows) {
-            foreach ($rows as $i => $row) {
+                $tabs[$tab][$i]['due_group'] = self::dueGroup($row);
                 $tabs[$tab][$i]['tab'] = $tab;
             }
         }
 
+        // Ordem da tela: grupo de prazo, urgentes primeiro, prazo mais próximo; histórico do mais recente
+        foreach ($tabs as $tab => $rows) {
+            if ($tab !== 'historico') {
+                usort($tabs[$tab], [self::class, 'byListOrder']);
+            }
+        }
+        usort($tabs['historico'], fn($a, $b) => strcmp((string)$b['closed_at'], (string)$a['closed_at']));
+        $tabs['historico'] = array_slice($tabs['historico'], 0, self::HISTORY_LIMIT);
+
         return ['tabs' => $tabs, 'counts' => self::countRows($tabs)];
     }
 
-    /** Linhas da aba, na ordem da tela; com busca, procura nas três abas */
-    public static function rowsFor(array $inbox, string $tab, string $q = ''): array
+    /**
+     * Linhas da aba, na ordem da tela (a página do pedido usa a mesma para o Anterior/Próximo).
+     * $filter ('urgentes'|'atrasados') vale só nas abas de ação. Com busca, procura em todas as abas:
+     * os resultados seguem a ordem da lista e os do histórico vêm por último.
+     */
+    public static function rowsFor(array $inbox, string $tab, string $q = '', string $filter = ''): array
     {
         if (trim($q) !== '') {
-            return self::search(array_merge(...array_values($inbox['tabs'])), $q);
+            $hits = self::search(array_merge(...array_values($inbox['tabs'])), $q);
+            $open = array_values(array_filter($hits, fn($r) => $r['tab'] !== 'historico'));
+            usort($open, [self::class, 'byListOrder']);
+            return array_merge($open, array_values(array_filter($hits, fn($r) => $r['tab'] === 'historico')));
         }
-        return $inbox['tabs'][$tab] ?? [];
+        $rows = $inbox['tabs'][$tab] ?? [];
+        if (isset(self::FILTERS[$filter]) && in_array($tab, self::ACTION_TABS, true)) {
+            $rows = array_values(array_filter($rows, fn($r) => self::matchesFilter($r, $filter)));
+        }
+        return $rows;
+    }
+
+    /** Pedido conta no filtro dos números do topo? */
+    public static function matchesFilter(array $row, string $filter): bool
+    {
+        return match ($filter) {
+            'urgentes' => !empty($row['is_urgent']),
+            'atrasados' => ($row['due_group'] ?? self::dueGroup($row)) === 'atrasados',
+            default => true,
+        };
+    }
+
+    /** Aba que abre sem ?tab= (ou ao ligar um filtro): a primeira de ação com pedidos; senão, Começar */
+    public static function defaultTab(array $inbox, string $filter = ''): string
+    {
+        foreach (self::ACTION_TABS as $tab) {
+            if (self::rowsFor($inbox, $tab, '', $filter)) {
+                return $tab;
+            }
+        }
+        return 'comecar';
+    }
+
+    /** Aba pedida na URL, com os nomes antigos convertidos; '' quando não vale nenhuma */
+    public static function normalizeTab(string $tab): string
+    {
+        $tab = self::LEGACY_TABS[$tab] ?? $tab;
+        return isset(self::TABS[$tab]) ? $tab : '';
+    }
+
+    /** Grupo de prazo: atrasados, hoje, amanha, semana (2 a 6 dias), adiante (7 ou mais) ou sem */
+    public static function dueGroup(array $row): string
+    {
+        $date = substr((string)($row['date'] ?? ''), 0, 10);
+        if ($date === '' || strpos($date, '0000') === 0) {
+            return 'sem';
+        }
+        $days = (int)round((strtotime($date) - strtotime(date('Y-m-d'))) / 86400);
+        return match (true) {
+            $days < 0 => 'atrasados',
+            $days === 0 => 'hoje',
+            $days === 1 => 'amanha',
+            $days <= 6 => 'semana',
+            default => 'adiante',
+        };
+    }
+
+    /** Ordem da lista: grupo de prazo, depois urgentes, depois prazo mais próximo (empate: mais recente) */
+    public static function byListOrder(array $a, array $b): int
+    {
+        static $order = null;
+        $order ??= array_flip(array_keys(self::DUE_GROUPS));
+        return ($order[$a['due_group'] ?? self::dueGroup($a)] <=> $order[$b['due_group'] ?? self::dueGroup($b)])
+            ?: (!empty($b['is_urgent']) <=> !empty($a['is_urgent']))
+            ?: self::byDeadline($a, $b);
     }
 
     /** Busca por título, número ou solicitante */
@@ -473,22 +545,25 @@ class RequestInbox
         return [$urgent, $reason];
     }
 
-    /** Números do topo da Caixa: para fazer, urgentes, atrasados e esperando outro setor */
+    /**
+     * Números do topo da Caixa: urgentes e atrasados das abas de ação (Aceitar, Começar, Em andamento)
+     * e, por aba de ação, quantos entram em cada filtro.
+     */
     public static function summary(array $inbox): array
     {
-        $today = date('Y-m-d');
-        $urgent = $late = 0;
-        foreach ($inbox['tabs']['fazer'] ?? [] as $row) {
-            $urgent += !empty($row['is_urgent']) ? 1 : 0;
-            $date = substr((string)($row['date'] ?? ''), 0, 10);
-            $late += ($date !== '' && strpos($date, '0000') !== 0 && $date < $today) ? 1 : 0;
+        $out = ['urgentes' => 0, 'atrasados' => 0, 'byTab' => []];
+        foreach (self::ACTION_TABS as $tab) {
+            $out['byTab'][$tab] = ['urgentes' => 0, 'atrasados' => 0];
+            foreach ($inbox['tabs'][$tab] ?? [] as $row) {
+                foreach (array_keys(self::FILTERS) as $filter) {
+                    if (self::matchesFilter($row, $filter)) {
+                        $out[$filter]++;
+                        $out['byTab'][$tab][$filter]++;
+                    }
+                }
+            }
         }
-        return [
-            'fazer' => (int)($inbox['counts']['fazer'] ?? 0),
-            'urgentes' => $urgent,
-            'atrasados' => $late,
-            'esperando' => (int)($inbox['counts']['esperando'] ?? 0),
-        ];
+        return $out;
     }
 
     /** Prazo mais próximo primeiro; sem prazo por último; empate: mais recente primeiro */
@@ -504,17 +579,10 @@ class RequestInbox
         return $ha && $da !== $db ? strcmp($da, $db) : strcmp((string)$b['created_at'], (string)$a['created_at']);
     }
 
-    /** Contadores por aba e por grupo de "Para fazer" (o menu usa novos + chegaram) */
+    /** Contadores por aba (o menu usa aceitar + comecar: os que chegaram e ninguém começou) */
     private static function countRows(array $tabs): array
     {
-        $counts = array_map('count', $tabs);
-        foreach (array_keys(self::GROUPS) as $group) {
-            $counts[$group] = 0;
-        }
-        foreach ($tabs['fazer'] as $row) {
-            $counts[$row['group']]++;
-        }
-        return $counts;
+        return array_map('count', $tabs);
     }
 
     /** Resposta recente a um encaminhamento feito pelo setor: o pedido voltou com recado */
@@ -533,7 +601,7 @@ class RequestInbox
     }
 
     /**
-     * Quem começou o atendimento (ou reabriu) e quem concluiu, por pedido.
+     * Quem começou o atendimento (ou reabriu), quem concluiu e quando foi aprovado, por pedido.
      * @param string[] $keys "tabela:id"
      */
     public static function statusPeople(PDO $pdo, array $keys): array
@@ -548,25 +616,27 @@ class RequestInbox
             return $people;
         }
         $conds = [];
-        $params = [statusLabel('W'), statusLabel('W'), statusLabel('C')];
+        $params = [statusLabel('W'), statusLabel('C'), statusLabel('Y')];
         foreach ($bySector as $tbl => $ids) {
             $conds[] = '(request_table = ? AND request_id IN (' . implode(',', array_fill(0, count($ids), '?')) . '))';
             $params = array_merge($params, [$tbl], $ids);
         }
         $stmt = $pdo->prepare('
-            SELECT request_table, request_id, user_name, created_at, (new_value = ?) AS is_start
+            SELECT request_table, request_id, user_name, created_at, new_value
             FROM request_history
-            WHERE new_value IN (?, ?) AND (' . implode(' OR ', $conds) . ')
+            WHERE new_value IN (?, ?, ?) AND (' . implode(' OR ', $conds) . ')
             ORDER BY id ASC
         ');
         $stmt->execute($params);
         foreach ($stmt->fetchAll(PDO::FETCH_ASSOC) as $h) {
             $key = $h['request_table'] . ':' . $h['request_id'];
-            if ((int)$h['is_start'] === 1) {
+            if ($h['new_value'] === statusLabel('W')) {
                 $people[$key]['worker'] = (string)$h['user_name'];
-            } else {
+            } elseif ($h['new_value'] === statusLabel('C')) {
                 $people[$key]['closer'] = (string)$h['user_name'];
                 $people[$key]['closed_at'] = (string)$h['created_at'];
+            } else {
+                $people[$key]['approved_at'] = (string)$h['created_at']; // a última: reaprovado conta como chegou agora
             }
         }
         return $people;

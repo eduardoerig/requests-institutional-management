@@ -1,331 +1,368 @@
 /* =====================================================================
-   Caixa do setor — UI 2.0
-   Celular primeiro: cartões empilhados com faixa lateral (vermelha = urgente,
-   roxa = outro setor) e botão de ação de 46px.
-   ≥900px: linhas tipo tabela dentro de um painel + quatro números no topo.
-   Usa os tokens de app.css; marcação em components/request_card.php (renderWorkRow).
+   Caixa do setor — tela 2b
+   Topo: título, Urgentes/Atrasados (filtro), abas de etapa e busca.
+   ≥900px: duas colunas — lista agrupada por prazo | painel do pedido selecionado (fixo ao rolar).
+   Celular: lista em cartões; o painel vira tela cheia ao tocar num pedido.
+   Marcação: components/inbox_item.php · comportamento: assets/js/pages/inbox.js
    ===================================================================== */
 
-/* ---------- Cabeçalho e números do topo ---------- */
-.inbox-head__area { margin: 0 0 4px; font-size: var(--t-sm); color: var(--texto-2); }
+/* ---------- Topo ---------- */
+.inbox-top { display: flex; align-items: flex-end; justify-content: space-between; gap: 12px 20px; flex-wrap: wrap; margin-bottom: 16px; }
+.inbox-top .page-head { margin-bottom: 0; }
+.inbox-head__area { margin: 0 0 2px; font-size: var(--t-sm); font-weight: 600; color: var(--texto-2); }
 
 .page-inbox .welcome { margin-top: 16px; }
 @media (min-width: 900px) { .page-inbox .welcome { margin-top: 20px; } }
 
-.inbox-stats { display: none; }
-@media (min-width: 900px) {
-    .inbox-stats {
-        display: grid;
-        grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
-        gap: 12px;
-        margin-bottom: 20px;
-    }
-}
+.inbox-stats { display: flex; gap: 8px; }
 .inbox-stat {
-    display: flex;
-    flex-direction: column;
-    gap: 4px;
-    padding: 16px;
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    min-height: var(--h-sm);
+    padding: 0 14px 0 10px;
     border: 1px solid var(--linha);
-    border-radius: var(--r-3);
+    border-radius: var(--r-pill);
     background: var(--superficie);
-    color: var(--texto);
+    color: var(--texto-2);
+    font-size: var(--t-sm);
     text-decoration: none;
+    transition: border-color var(--dur-1), background-color var(--dur-1);
 }
 .inbox-stat:hover { border-color: var(--linha-forte); }
 .inbox-stat:focus-visible { outline: none; box-shadow: var(--anel); }
-.inbox-stat__label { font-size: var(--t-xs); color: var(--texto-2); }
-.inbox-stat__value { font-size: 1.625rem; font-weight: 700; line-height: 1.1; font-variant-numeric: tabular-nums; }
-.inbox-stat--bad { border-color: #FECACA; }
-.inbox-stat--bad .inbox-stat__label, .inbox-stat--bad .inbox-stat__value { color: #991B1B; }
+.inbox-stat__value {
+    min-width: 24px;
+    padding: 0 6px;
+    border-radius: var(--r-pill);
+    background: var(--fundo);
+    color: var(--texto);
+    font-weight: 700;
+    text-align: center;
+    font-variant-numeric: tabular-nums;
+}
+.inbox-stat--urgentes.has-items { border-color: #FECACA; color: #991B1B; }
+.inbox-stat--urgentes.has-items .inbox-stat__value { background: #DC2626; color: var(--texto-inv); }
+.inbox-stat--atrasados.has-items .inbox-stat__value { background: var(--aviso-claro); color: var(--aviso); }
+.inbox-stat.is-on { border-color: var(--grafite); background: var(--grafite); color: var(--texto-inv); }
+.inbox-stat.is-on .inbox-stat__value { background: var(--texto-inv); color: var(--grafite); }
 
-/* ---------- Abas: alvos maiores no celular ---------- */
+/* Abas: rolam de lado no celular, sem quebrar linha */
+.inbox-tabs { flex-wrap: nowrap; }
+.inbox-tabs .tab { white-space: nowrap; }
 @media (max-width: 899.98px) {
+    .inbox-toolbar { flex-direction: column; align-items: stretch; }
+    .inbox-toolbar .toolbar__filters { flex: none; width: 100%; }
+    .inbox-toolbar .search-box { flex: 1 1 100%; width: 100%; }
+    .inbox-row__check:empty { display: none; }
     .inbox-toolbar .tab { min-height: var(--h-md); }
+    /* Largura presa à tela: sem isso as abas esticam a página e o painel em tela cheia fica largo demais */
+    .inbox-tabs { width: calc(100% + 32px); min-width: 0; margin-inline: -16px; padding-inline: 16px; }
 }
 
-/* ---------- Contêiner: sem painel no celular (cartões soltos) ---------- */
-.queue--cards {
-    background: transparent;
-    border: 0;
-    border-radius: 0;
+/* Frase do filtro ou da busca */
+.inbox-note {
+    margin: 0 0 12px;
+    padding: 10px 14px;
+    border: 1px solid var(--linha);
+    border-radius: var(--r-2);
+    background: var(--superficie);
+    font-size: var(--t-sm);
+    color: var(--texto-2);
 }
-.queue--cards > .empty-state {
+.inbox-note a { margin-left: 4px; font-weight: 600; color: var(--laranja); }
+
+.inbox-body > .empty-state {
     padding: 48px 20px;
     border: 1px solid var(--linha);
     border-radius: var(--r-3);
     background: var(--superficie);
 }
-.queue--cards > .queue__note {
-    margin-bottom: 12px;
-    padding: 12px 14px;
-    border: 1px solid var(--linha);
-    border-radius: var(--r-2);
-    background: var(--superficie);
+
+/* ---------- Duas colunas ---------- */
+.inbox-cols { display: block; }
+@media (min-width: 900px) {
+    .inbox-cols {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) minmax(340px, 420px);
+        gap: 16px;
+        align-items: start;
+    }
 }
 
-/* Selecionar todos (lote) */
-.work-pickall {
-    display: flex;
-    flex-wrap: wrap;
-    align-items: center;
-    gap: 4px 10px;
-    margin-bottom: 8px;
-    font-size: var(--t-sm);
-}
-.work-pickall label {
+/* ---------- Lista (esquerda) ---------- */
+.inbox-list { min-width: 0; }
+.inbox-pickall {
     display: inline-flex;
     align-items: center;
     gap: 10px;
-    min-height: var(--h-md);
+    margin: 0 0 10px;
+    padding: 0 4px;
+    font-size: var(--t-sm);
     font-weight: 600;
     cursor: pointer;
 }
-.work-pickall input { width: 20px; height: 20px; margin: 0; }
-.work-pickall__hint { color: var(--texto-2); }
+.inbox-pickall input { width: 20px; height: 20px; margin: 0; }
 
-/* ---------- Faixas (Urgentes, Outros setores, Chegaram, Em andamento) ---------- */
-.lane + .lane { margin-top: 20px; }
-.lane__title {
+.inbox-group + .inbox-group { margin-top: 18px; }
+.inbox-group__title {
     display: flex;
-    flex-wrap: wrap;
     align-items: baseline;
-    gap: 4px 8px;
-    margin: 0 0 10px;
-    font-size: var(--t-sm);
+    gap: 6px;
+    margin: 0 0 8px;
+    padding: 0 4px;
+    font-size: var(--t-xs);
     font-weight: 700;
-    color: var(--texto);
+    letter-spacing: .04em;
+    text-transform: uppercase;
+    color: var(--texto-2);
 }
-.lane__count { font-weight: 600; color: var(--texto-2); font-variant-numeric: tabular-nums; }
-.lane__hint { font-weight: 400; font-size: var(--t-xs); color: var(--texto-2); }
-.lane--urgentes .lane__title { color: #991B1B; }
+.inbox-group__title span { font-weight: 600; color: var(--texto-3); font-variant-numeric: tabular-nums; }
+.inbox-group--atrasados .inbox-group__title { color: #991B1B; }
 
-.work-list {
+.inbox-rows {
     list-style: none;
     margin: 0;
     padding: 0;
-    display: flex;
-    flex-direction: column;
-    gap: 10px;
-}
-
-/* ---------- Cartão (celular) ---------- */
-.work-row {
-    position: relative;
     display: grid;
-    grid-template-columns: minmax(0, 1fr);
-    gap: 12px;
-    padding: 14px 14px 14px 18px;
-    border: 1px solid var(--linha);
-    border-radius: var(--r-3);
-    background: var(--superficie);
-    box-shadow: inset 4px 0 0 var(--faixa, transparent);
+    gap: 8px;
 }
-/* Cor da situação: faixa à esquerda + selo. Urgente vence a faixa (fica vermelha) */
-.work-row.st-novo { --faixa: var(--info); }
-.work-row.st-andamento { --faixa: var(--laranja); }
-.work-row.st-chegou, .work-row.st-ajuda { --faixa: #9333EA; }
-.work-row.st-aguardando { --faixa: #D97706; }
-.work-row.st-concluido { --faixa: var(--ok); }
-.work-row.st-transferido { --faixa: #A1A1AA; }
-.work-row.is-other:not([class*=" st-"]) { --faixa: #9333EA; }
-.work-row.is-urgent { --faixa: #DC2626; border-color: #FECACA; }
+@media (min-width: 900px) {
+    .inbox-rows {
+        gap: 0;
+        border: 1px solid var(--linha);
+        border-radius: var(--r-2);
+        background: var(--superficie);
+        overflow: hidden;
+    }
+}
 
+.inbox-row {
+    position: relative;
+    display: flex;
+    align-items: stretch;
+    border: 1px solid var(--linha);
+    border-radius: var(--r-2);
+    background: var(--superficie);
+    transition: background-color var(--dur-1), border-color var(--dur-1);
+}
+@media (min-width: 900px) {
+    .inbox-row { border: 0; border-radius: 0; }
+    .inbox-row + .inbox-row { border-top: 1px solid var(--linha); }
+    .inbox-row:hover { background: var(--fundo); }
+    .inbox-row.is-selected { background: var(--laranja-claro); }
+    .inbox-row.is-selected::after {
+        content: "";
+        position: absolute;
+        inset: 0 0 0 auto;
+        width: 3px;
+        background: var(--laranja);
+    }
+}
+/* Marca lateral de urgente */
+.inbox-row.is-urgent::before {
+    content: "";
+    position: absolute;
+    inset: 8px auto 8px 0;
+    width: 4px;
+    border-radius: 0 4px 4px 0;
+    background: #DC2626;
+}
+.inbox-row.picked { border-color: var(--laranja); }
+
+/* Espaço da caixa de seleção (vazio nos que não entram no lote, para alinhar os títulos) */
+.inbox-row__check {
+    flex: none;
+    display: flex;
+    align-items: center;
+    width: 34px;
+    padding-left: 14px;
+}
+.inbox-row__check input { width: 20px; height: 20px; margin: 0; }
+
+.inbox-row__link {
+    flex: 1;
+    min-width: 0;
+    display: grid;
+    gap: 3px;
+    padding: 12px 14px 12px 16px;
+    color: var(--texto);
+    text-decoration: none;
+    border-radius: inherit;
+}
+.inbox-row__link:focus-visible { outline: none; box-shadow: var(--anel-dentro); }
+
+.inbox-row__top { display: flex; align-items: center; gap: 8px; min-width: 0; }
+.inbox-row__title {
+    flex: 0 1 auto;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    font-weight: 600;
+}
+.inbox-row__top .prio-tag { flex: none; font-size: var(--t-xs); }
+.inbox-row__due {
+    flex: none;
+    margin-left: auto;
+    padding-left: 8px;
+    font-size: var(--t-xs);
+    font-weight: 600;
+    color: var(--texto-2);
+    white-space: nowrap;
+    font-variant-numeric: tabular-nums;
+}
+.inbox-row__due--bad { color: var(--perigo); }
+.inbox-row__due--warn { color: var(--aviso); }
+.inbox-row__due--muted { font-weight: 400; color: var(--texto-3); }
+
+.inbox-row__sub {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    font-size: var(--t-xs);
+    color: var(--texto-2);
+}
+.inbox-row__next { font-size: var(--t-xs); font-weight: 600; color: var(--texto-2); }
+.inbox-row__next--go { color: var(--laranja); }
+.inbox-row__next--go::after { content: " →"; }
+.inbox-row__next--wait { color: var(--aviso); }
+.inbox-row__next--done { font-weight: 400; }
+
+/* Celular: prazo na primeira linha, antes do título */
+@media (max-width: 899.98px) {
+    .inbox-row__top { flex-wrap: wrap; }
+    .inbox-row__due { order: -1; flex-basis: 100%; margin-left: 0; padding-left: 0; }
+    .inbox-row__title { white-space: normal; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; }
+}
+
+/* ---------- Painel de detalhes (direita) ---------- */
+.inbox-panel { display: none; }
+@media (min-width: 900px) {
+    .inbox-panel {
+        display: block;
+        position: sticky;
+        top: calc(var(--topbar-h) + 16px);
+        max-height: calc(100vh - var(--topbar-h) - 32px);
+        overflow: auto;
+        border: 1px solid var(--linha);
+        border-radius: var(--r-3);
+        background: var(--superficie);
+        box-shadow: var(--sombra-1);
+    }
+}
+.inbox-detail { display: grid; gap: 14px; padding: 18px 20px 20px; }
+.inbox-detail[hidden] { display: none; }
+
+.inbox-detail__bar { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.inbox-detail__num {
+    font-family: ui-monospace, SFMono-Regular, Consolas, monospace;
+    font-size: var(--t-sm);
+    font-weight: 700;
+    color: var(--texto-2);
+}
+.inbox-detail__pager { display: flex; gap: 4px; margin-left: auto; }
+.inbox-detail__pager .btn { padding: 0 10px; }
+.inbox-detail__pager .btn:disabled { opacity: .4; cursor: default; }
+.inbox-detail__close { display: none; }
+
+.inbox-detail__chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.inbox-detail__chips:empty { display: none; }
+.inbox-detail__title { margin: 0; font-size: var(--t-xl); line-height: 1.25; font-weight: 700; overflow-wrap: anywhere; }
+.inbox-detail__title .prio-tag { font-size: var(--t-sm); vertical-align: middle; }
+
+.inbox-detail__note {
+    margin: 0;
+    padding: 10px 12px;
+    border-left: 3px solid var(--laranja);
+    border-radius: 0 var(--r-1) var(--r-1) 0;
+    background: var(--laranja-claro);
+    font-size: var(--t-sm);
+    color: var(--texto);
+    overflow-wrap: anywhere;
+}
+
+.inbox-detail__fields { display: grid; gap: 10px; margin: 0; padding: 14px 0 0; border-top: 1px solid var(--linha); }
+.inbox-detail__fields > div { display: grid; grid-template-columns: 96px minmax(0, 1fr); gap: 12px; align-items: baseline; }
+.inbox-detail__fields dt { font-size: var(--t-xs); color: var(--texto-2); }
+.inbox-detail__fields dd { margin: 0; font-size: var(--t-sm); font-weight: 500; overflow-wrap: anywhere; }
+.inbox-detail__due--bad { color: var(--perigo); font-weight: 700; }
+.inbox-detail__due--warn { color: var(--aviso); font-weight: 700; }
+.inbox-detail__due--muted { color: var(--texto-3); }
+.inbox-detail__situation--bad { color: var(--perigo); }
+.inbox-detail__situation--in { color: var(--info); }
+
+.inbox-detail__actions { display: flex; align-items: center; gap: 12px 16px; flex-wrap: wrap; padding-top: 4px; }
+.inbox-detail__act { min-width: 180px; }
+.inbox-detail__open { font-size: var(--t-sm); font-weight: 600; color: var(--laranja); text-decoration: none; }
+.inbox-detail__open:hover { text-decoration: underline; }
+/* Com pedidos marcados no lote, a ação de um pedido só sai (a lista não pode redesenhar e perder a seleção) */
+body.has-bulk .inbox-detail__act { display: none; }
+
+/* Selos de situação (cores) */
 .status-chip {
-    --chip: var(--texto-2); --chip-bg: var(--fundo-2);
-    order: 2;
-    display: inline-flex; align-items: center; gap: 5px;
-    min-height: 20px; padding: 0 8px;
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    min-height: 22px;
+    padding: 0 9px;
     border-radius: var(--r-pill);
-    background: var(--chip-bg); color: var(--chip);
-    font-size: 11px; font-weight: 700; white-space: nowrap;
+    background: var(--chip-bg, var(--fundo));
+    color: var(--chip, var(--texto-2));
+    font-size: 12px;
+    font-weight: 600;
+    white-space: nowrap;
 }
 .status-chip::before { content: ""; width: 6px; height: 6px; border-radius: 50%; background: currentColor; }
 .status-chip--novo { --chip: #1D4ED8; --chip-bg: var(--info-claro); }
 .status-chip--andamento { --chip: var(--laranja-escuro); --chip-bg: var(--laranja-claro); }
 .status-chip--chegou { --chip: var(--texto-inv); --chip-bg: #9333EA; }
-.status-chip--chegou::before { background: var(--texto-inv); }
 .status-chip--ajuda { --chip: var(--roxo); --chip-bg: var(--roxo-claro); }
 .status-chip--aguardando { --chip: var(--aviso); --chip-bg: var(--aviso-claro); }
 .status-chip--concluido { --chip: var(--ok); --chip-bg: var(--ok-claro); }
-.status-chip--transferido { --chip: var(--texto-2); --chip-bg: var(--fundo-2); }
+.status-chip--transferido { --chip: var(--texto-2); --chip-bg: var(--fundo-2, var(--fundo)); }
 
-/* Legenda das cores, acima da lista */
-.status-legend { list-style: none; display: flex; flex-wrap: wrap; align-items: center; gap: 6px 18px; margin: 0 0 10px; padding: 0 2px; font-size: var(--t-xs); line-height: 1.4; color: var(--texto-2); }
-.status-legend li { display: inline-flex; align-items: center; gap: 7px; white-space: nowrap; }
-.status-legend__dot { flex: none; width: 8px; height: 8px; border-radius: 50%; background: var(--linha-forte); }
-.status-legend__dot--novo { background: var(--info); }
-.status-legend__dot--andamento { background: var(--laranja); }
-.status-legend__dot--chegou, .status-legend__dot--ajuda { background: #9333EA; }
-.status-legend__dot--aguardando { background: #D97706; }
-.status-legend__dot--concluido { background: var(--ok); }
-.status-legend__dot--transferido { background: #A1A1AA; }
-.status-legend__dot--urgente { background: #DC2626; }
-.work-row:has(input[data-pick]:checked) { border-color: var(--laranja); }
-
-.work-row__bar { display: none; }
-
-.work-row.has-check { grid-template-columns: 32px minmax(0, 1fr); column-gap: 8px; }
-.work-row__check {
-    display: flex;
-    align-items: flex-start;
-    justify-content: center;
-    min-height: var(--h-md);
-    margin: -10px 0 0 -10px;
-    padding-top: 10px;
-    cursor: pointer;
-}
-.work-row__check input { width: 20px; height: 20px; margin: 0; cursor: pointer; }
-
-.work-row__link {
-    display: flex;
-    flex-direction: column;
-    gap: 6px;
-    min-width: 0;
-    color: var(--texto);
-    text-decoration: none;
-    border-radius: var(--r-1);
-}
-.work-row__link:focus-visible { outline: none; box-shadow: var(--anel); }
-/* O cartão inteiro abre o pedido; o botão de ação fica por cima */
-.work-row__link::after { content: ""; position: absolute; inset: 0; border-radius: var(--r-3); }
-.work-row__check, .work-row__act { position: relative; z-index: 1; }
-
-/* Linha 1: Nº · selos · prazo (à direita); linha 2: título */
-.work-row__head {
-    display: flex;
-    flex-wrap: wrap;
-    align-items: center;
-    gap: 6px;
-    min-width: 0;
-}
-.work-row__num { order: 1; font-size: var(--t-xs); color: var(--texto-2); font-variant-numeric: tabular-nums; }
-.work-row__head .badge-urgent { order: 2; }
-.work-row__head .badge-sector { order: 3; max-width: 100%; overflow: hidden; text-overflow: ellipsis; }
-.work-row__sector { order: 4; font-size: var(--t-xs); font-weight: 600; color: var(--texto-2); }
-.work-row__tab {
-    order: 5;
-    padding: 0 8px;
-    border: 1px solid var(--linha);
-    border-radius: var(--r-pill);
-    font-size: 11px;
-    font-weight: 600;
-    color: var(--texto-2);
-}
-.work-row__due--top { order: 6; margin-left: auto; }
-.work-row__title {
-    order: 7;
-    flex: 1 0 100%;
-    font-size: var(--t-md);
-    font-weight: 600;
-    line-height: 1.3;
-    overflow-wrap: anywhere;
-}
-.work-row__meta { font-size: var(--t-xs); line-height: 1.4; color: var(--texto-2); overflow-wrap: anywhere; }
-.work-row__note { font-size: var(--t-xs); color: var(--texto-2); overflow-wrap: anywhere; }
-.work-row__note--in { color: var(--texto); font-weight: 600; }
-.work-row__note--bad { color: var(--perigo); font-weight: 600; }
-.work-row__note--ok { color: var(--ok); }
-
-/* Prazo colorido */
-.work-row__due { font-size: var(--t-xs); font-weight: 600; color: var(--texto-2); white-space: nowrap; font-variant-numeric: tabular-nums; }
-.work-row__due--bad { color: var(--perigo); font-weight: 700; }
-.work-row__due--warn { color: var(--laranja-escuro); font-weight: 700; }
-.work-row__due--muted { font-weight: 400; }
-.work-row__due--col { display: none; }
-
-/* Ação rápida: 46px no celular, largura toda */
-.work-row__act {
-    grid-column: 1 / -1;
-    width: 100%;
-    min-height: 46px;
-    font-size: 0.9375rem;
-}
-.work-row__act--go { background: var(--grafite); border-color: var(--grafite); color: var(--texto-inv); }
-.work-row__act--go:hover { background: #27272A; border-color: #27272A; }
-.work-row__act:focus-visible { outline: none; box-shadow: var(--anel); }
-
-/* Barra de lote fixa (celular) não cobre o último cartão */
+/* ---------- Celular: painel em tela cheia ---------- */
 @media (max-width: 899.98px) {
-    body.has-bulk .queue--cards { margin-bottom: 150px; }
-    .work-row.has-check .work-row__check:empty { visibility: hidden; }
-}
-
-/* ---------- Computador: linhas tipo tabela dentro de um painel ---------- */
-@media (min-width: 900px) {
-    .queue--cards {
+    .inbox-body.is-detail-open .inbox-panel {
+        display: block;
+        position: fixed;
+        inset: 0;
+        z-index: 80; /* acima das barras fixas (até 70) e abaixo das janelas de confirmação (100+) */
+        overflow: auto;
         background: var(--superficie);
-        border: 1px solid var(--linha);
-        border-radius: var(--r-3);
-        overflow: clip;
+        padding-bottom: env(safe-area-inset-bottom);
     }
-    .queue--cards > .empty-state { border: 0; border-radius: 0; }
-    .queue--cards > .queue__note { margin: 0; border: 0; border-bottom: 1px solid var(--linha); border-radius: 0; }
-
-    .work-pickall { margin: 0; padding: 4px 20px; border-bottom: 1px solid var(--linha); }
-    .status-legend { margin: 0; padding: 10px 20px; border-bottom: 1px solid var(--linha); background: var(--fundo); }
-
-    .lane + .lane { margin-top: 0; }
-    .lane__title {
-        margin: 0;
-        padding: 12px 20px;
-        background: #FAFAFA;
+    .inbox-body.is-detail-open .inbox-detail__bar {
+        position: sticky;
+        top: 0;
+        z-index: 1;
+        margin: -18px -20px 0;
+        padding: 10px 12px;
         border-bottom: 1px solid var(--linha);
-        font-size: var(--t-xs);
+        background: var(--superficie);
     }
-    .lane + .lane .lane__title { border-top: 1px solid var(--linha); }
-
-    .work-list { gap: 0; }
-    .work-row {
-        display: flex;
-        align-items: center;
-        gap: 16px;
-        padding: 12px 20px;
-        border: 0;
-        border-radius: 0;
-        box-shadow: none;
-    }
-    .work-row + .work-row { border-top: 1px solid var(--fundo-2); }
-    .work-row:hover { background: var(--fundo); }
-    .work-row.is-urgent { border-color: transparent; }
-    .work-row:has(input[data-pick]:checked) { background: var(--fundo); }
-    .work-row.has-check { padding-left: 8px; }
-
-    .work-row__bar {
-        display: block;
-        flex: 0 0 4px;
-        align-self: stretch;
-        min-height: 36px;
-        border-radius: 4px;
-        background: var(--faixa, var(--linha));
-    }
-    .work-row__check { flex: 0 0 32px; margin: 0; padding: 0; align-items: center; min-height: var(--h-md); }
-
-    .work-row__link { flex: 1 1 auto; gap: 4px; }
-    .work-row__link::after { border-radius: 0; }
-
-    /* Nº, título e selos na mesma linha */
-    .work-row__head { gap: 6px 8px; }
-    .work-row__num, .work-row__title, .work-row__head .badge-urgent, .work-row__head .badge-sector,
-    .work-row__sector, .work-row__tab, .work-row__head .status-chip { order: 0; }
-    .work-row__num { font-size: var(--t-xs); }
-    .work-row__title { flex: 0 1 auto; font-size: 0.9375rem; }
-    .work-row__due--top { display: none; }
-
-    .work-row__due--col {
-        display: block;
-        flex: 0 0 132px;
-        text-align: right;
-        font-size: var(--t-xs);
-    }
-    .work-row__act {
-        flex: 0 0 auto;
-        width: auto;
-        min-width: 132px;
-        min-height: 38px;
-        padding: 0 14px;
-        font-size: var(--t-xs);
-    }
-    /* Cabe o botão + a coluna de seleção na barra de lote fixa ao fim da lista */
-    .queue--cards .bulk-bar { border-radius: 0; }
+    .inbox-detail__close { display: inline-flex; }
+    .inbox-detail__num { order: 3; flex-basis: 100%; padding: 0 8px; }
+    .inbox-detail__act { flex: 1; min-height: var(--h-lg); }
+    body.inbox-detail-open { overflow: hidden; }
 }
+
+/* ---------- Lote: barra flutuante no rodapé ---------- */
+.inbox-body .bulk-bar__pending { font-weight: 400; color: var(--texto-2); }
+@media (min-width: 900px) {
+    .inbox-body .bulk-bar {
+        position: fixed;
+        left: calc(var(--sidebar-w) + 50% - var(--sidebar-w) / 2);
+        bottom: 20px;
+        transform: translateX(-50%);
+        width: min(720px, calc(100% - var(--sidebar-w) - 48px));
+        border-radius: var(--r-pill);
+        padding-left: 20px;
+    }
+    body.has-bulk .inbox-body { padding-bottom: 72px; }
+}
+@media (max-width: 899.98px) {
+    body.has-bulk .inbox-body { margin-bottom: 150px; }
+}
+.bulk-bar .btn:disabled { opacity: .45; cursor: default; }
