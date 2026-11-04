@@ -40,11 +40,6 @@ class RequestManager {
         return self::$userSubdivisionMap;
     }
 
-    public static function clearCache() {
-        self::$requestCache = [];
-        self::$userSubdivisionMap = null;
-    }
-
     /**
      * Filtro de subdivisão (coordenação): pedidos da subdivisão ou de quem pertence a ela.
      * null = sem filtro (admin geral); lista vazia = coordenação sem subdivisão, não vê nada.

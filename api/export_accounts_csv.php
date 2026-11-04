@@ -8,13 +8,8 @@ if (!isGlobalAdminRole($_SESSION['role'] ?? '')) {
     die('Acesso negado.');
 }
 
-// "Último acesso" só existe depois da migração 003
-$hasLastLogin = false;
-try {
-    $hasLastLogin = (bool)$pdo->query("SHOW COLUMNS FROM ctd_users LIKE 'last_login_at'")->fetch();
-} catch (PDOException $e) {
-    $hasLastLogin = false;
-}
+// "Último acesso" (ctd_users.last_login_at, migração 003)
+$hasLastLogin = true;
 
 $filename = "usuarios_sisreq_" . date('Ymd_His') . ".csv";
 header('Content-Type: text/csv; charset=utf-8');

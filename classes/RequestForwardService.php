@@ -156,18 +156,6 @@ class RequestForwardService
         return $areaId ? (int)$areaId : self::originAreaId($pdo, $sector);
     }
 
-    /** Desde quando o responsável atual cuida do pedido (null = desde o início) */
-    public static function ownerSince(PDO $pdo, int $reqId, string $sector): ?string
-    {
-        $stmt = $pdo->prepare("
-            SELECT COALESCE(responded_at, updated_at) FROM request_forwards
-            WHERE request_id = ? AND request_table = ? AND mode = 'transfer' AND status IN ('accepted', 'completed')
-            ORDER BY id DESC LIMIT 1
-        ");
-        $stmt->execute([$reqId, $sector]);
-        return $stmt->fetchColumn() ?: null;
-    }
-
     // ------------------------------------------------------------------
     // Ações
     // ------------------------------------------------------------------

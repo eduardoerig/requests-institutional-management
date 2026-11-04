@@ -10,13 +10,8 @@ if (!isGlobalAdminRole($_SESSION['role'] ?? '')) {
     return;
 }
 
-// "Último acesso" depende da migração 003 (coluna last_login_at). Sem ela, mostra "—".
-$accHasLastLogin = false;
-try {
-    $accHasLastLogin = (bool)$pdo->query("SHOW COLUMNS FROM ctd_users LIKE 'last_login_at'")->fetch();
-} catch (PDOException $e) {
-    $accHasLastLogin = false;
-}
+// "Último acesso": coluna last_login_at (migração 003)
+$accHasLastLogin = true; // ctd_users.last_login_at (migração 003)
 
 // Pessoas (sem a senha), com áreas (subdivisões) e setores ligados
 $accUsers = $pdo->query("
