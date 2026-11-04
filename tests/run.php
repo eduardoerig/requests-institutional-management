@@ -343,6 +343,16 @@ section('10c. Sessão, login e regras de setor (itens 7 a 17 da revisão)');
 $res = $sol->post('api/add_request.php', ['urgent' => '1'] + $base); // sem o campo do motivo
 check('urgente SEM o campo do motivo é recusado', ($res['json']['success'] ?? true) === false && str_contains($res['json']['message'] ?? '', 'urgente'), snippet($res));
 
+$res = $sol->post('api/add_request.php', ['details' => str_repeat('a', 5001)] + $base);
+check('descrição acima de 5000 é recusada com o tamanho (não é cortada)', ($res['json']['success'] ?? true) === false && str_contains($res['json']['message'] ?? '', '5.001'), snippet($res));
+$res = $sol->post('api/add_request.php', ['obs' => str_repeat('b', 2001)] + $base);
+check('observações acima de 2000 são recusadas com o tamanho', ($res['json']['success'] ?? true) === false && str_contains($res['json']['message'] ?? '', '2.001'), snippet($res));
+$xerox = ['type' => 'colorPrint', 'title' => 'Teste cópias', 'end' => $future, 'file' => 'a.pdf', 'model' => 'A4'];
+$res = $sol->post('api/add_request.php', ['qtd' => '2,5'] + $xerox);
+check('cópias com vírgula: mensagem de número inteiro', str_contains($res['json']['message'] ?? '', 'inteiro'), snippet($res));
+$res = $sol->post('api/add_request.php', ['qtd' => '150000'] + $xerox);
+check('cópias acima do máximo: mensagem do máximo', str_contains($res['json']['message'] ?? '', '100.000'), snippet($res));
+
 $res = $adm->post('api/create_sector.php', ['sector_title' => 'Setor de teste automático']);
 check('criar setor pela tela está desligado', ($res['json']['success'] ?? true) === false && (int)$pdo->query("SELECT COUNT(*) FROM ctd_area WHERE title = 'Setor de teste automático'")->fetchColumn() === 0, snippet($res));
 

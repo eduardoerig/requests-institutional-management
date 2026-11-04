@@ -164,7 +164,10 @@ $useCombo = in_array($assetPage, $comboPages, true);
 
                 const handleConfirm = () => {
                     const text = modalInput.value.trim();
-                    if (input && input.required && text === '') {
+                    // input.minLength: mesma regra do servidor; o texto fica na janela para completar
+                    const min = input && input.minLength ? input.minLength : 0;
+                    if (input && ((input.required && text === '') || (min && text.length < min))) {
+                        modalInputError.textContent = text === '' ? 'Este campo é obrigatório.' : `Escreva pelo menos ${min} letras.`;
                         modalInputError.hidden = false;
                         modalInput.focus();
                         return;
@@ -498,11 +501,28 @@ $useCombo = in_array($assetPage, $comboPages, true);
             requestAnimationFrame(() => wiz.classList.add('show'));
             render(true);
             try {
-                const response = await fetch('api/request_forwards.php?action=areas&id=' + encodeURIComponent(id) + '&table=' + encodeURIComponent(table));
+                const url = 'api/request_forwards.php?action=areas&id=' + encodeURIComponent(id) + '&table=' + encodeURIComponent(table);
+                let response = await fetch(url);
+                // Sessão caiu: entra de novo pela janela e busca outra vez
+                if (response.status === 401) {
+                    const expired = await response.clone().json().catch(() => ({}));
+                    if (await ensureSession(expired.message)) response = await fetch(url);
+                }
                 const data = await readJson(response);
                 if (!current || current.id !== id) return; // fechou ou abriu outro enquanto carregava
                 current.from = data.from || '';
-                if (!data.success || !data.data.length) {
+                if (!data.success) {
+                    // Falha não é "lista vazia": diz o motivo (sem permissão, sessão, pedido mudou)
+                    const p = document.createElement('p');
+                    p.className = 'fw__hint';
+                    p.textContent = response.status === 403
+                        ? 'Você não pode encaminhar este pedido.'
+                        : (data.message || 'Não foi possível carregar os setores. Feche e tente de novo.');
+                    areasBox.replaceChildren(p);
+                    render(false);
+                    return;
+                }
+                if (!data.data.length) {
                     areasBox.innerHTML = '<p class="fw__hint">Nenhum outro setor disponível.</p>';
                     render(false);
                     return;
@@ -522,7 +542,10 @@ $useCombo = in_array($assetPage, $comboPages, true);
                 });
                 render(false);
             } catch (err) {
-                areasBox.innerHTML = '<p class="fw__hint">Não foi possível carregar os setores. Feche e tente de novo.</p>';
+                const p = document.createElement('p');
+                p.className = 'fw__hint';
+                p.textContent = requestErrorMessage(err); // sem conexão ou erro do servidor
+                areasBox.replaceChildren(p);
             }
         };
 

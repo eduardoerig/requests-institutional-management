@@ -25,6 +25,21 @@ function fail(string $message): void
     jsonResponse(['success' => false, 'message' => $message]);
 }
 
+/**
+ * Texto longo (descrição, observações): passou do limite, recusa com o tamanho em vez de cortar
+ * calado o fim do que a pessoa escreveu.
+ */
+function postLongText(string $key, int $maxLength, string $what): string
+{
+    $value = trim((string)($_POST[$key] ?? ''));
+    $len = mb_strlen($value);
+    if ($len > $maxLength) {
+        fail(sprintf('%s pode ter até %s letras (hoje tem %s). Encurte o texto e envie de novo.',
+            $what, number_format($maxLength, 0, ',', '.'), number_format($len, 0, ',', '.')));
+    }
+    return $value;
+}
+
 // Tipo do formulário => setor (tabela) e rótulo amigável
 $types = [
     'service'    => ['table' => 'service', 'label' => 'Manutenção'],
@@ -44,7 +59,7 @@ $sectorLabel = $types[$typeKey]['label'];
 // ---- Campos comuns ----
 $title = postText('title', 255);
 $end = postText('end', 10);
-$obs = postText('obs', 2000);
+$obs = postLongText('obs', 2000, 'O campo de observações');
 // Quem pede não escolhe o nível: nasce Normal (ou Alta se for urgente) e o setor ajusta depois
 $priority = 2;
 $urgentReason = '';
@@ -60,7 +75,11 @@ if (!empty($_POST['urgent'])) {
         fail('Conte por que o pedido é urgente.');
     }
     if ($urgentReason !== '') {
-        $obs = mb_substr('Urgente: ' . $urgentReason . ($obs !== '' ? "\n" . $obs : ''), 0, 2000);
+        $obs = 'Urgente: ' . $urgentReason . ($obs !== '' ? "\n" . $obs : '');
+        // Reprografia guarda as observações em varchar(2000); nas outras tabelas a coluna é text
+        if ($sector === 'xerox' && mb_strlen($obs) > 2000) {
+            fail('O motivo da urgência e as observações juntos passam de 2.000 letras. Encurte as observações.');
+        }
     }
 }
 $urgent = $priority >= 3 ? 1 : 0;
@@ -78,7 +97,7 @@ switch ($sector) {
     case 'service':
     case 'ti':
     case 'shop':
-        $details = postText('details');
+        $details = postLongText('details', 5000, 'A descrição');
         if ($details === '') {
             fail('Descreva o que você precisa.');
         }
@@ -97,8 +116,17 @@ switch ($sector) {
         if ($file === '') {
             fail('Informe onde está o arquivo para imprimir.');
         }
-        if ($qtdRaw === '' || !ctype_digit($qtdRaw) || (int)$qtdRaw < 1 || (int)$qtdRaw > 100000) {
-            fail('Informe quantas cópias você precisa (número maior que zero).');
+        if ($qtdRaw === '') {
+            fail('Informe quantas cópias você precisa.');
+        }
+        if (!ctype_digit($qtdRaw)) {
+            fail('Use um número inteiro de cópias, sem vírgula nem ponto (ex.: 30).');
+        }
+        if ((int)$qtdRaw < 1) {
+            fail('O número de cópias precisa ser maior que zero.');
+        }
+        if ((int)$qtdRaw > 100000) {
+            fail('O máximo é 100.000 cópias por pedido.');
         }
         if ($model === '') {
             fail('Escolha o formato da impressão.');
@@ -109,7 +137,7 @@ switch ($sector) {
 
     case 'mkt':
         // Aceita 'details' (padrão) e 'descp' (nome antigo do campo)
-        $details = postText('details') ?: postText('descp');
+        $details = postLongText('details', 5000, 'A descrição') ?: postLongText('descp', 5000, 'A descrição');
         if ($details === '') {
             fail('Explique o que você precisa.');
         }

@@ -693,7 +693,19 @@ function validateRequestForm(form) {
             firstInvalid = firstInvalid || field;
             return;
         }
-        if (!invalid && field.type === 'number' && !(parseInt(value, 10) > 0)) invalid = true;
+        // Número: a mensagem diz o que está errado (decimal, zero, acima do máximo), como o servidor
+        if (field.type === 'number' && ((field.validity && field.validity.badInput) || value !== '')) {
+            const max = parseInt(field.max, 10);
+            let problem = '';
+            if ((field.validity && field.validity.badInput) || !/^\d+$/.test(value)) problem = 'Use um número inteiro, sem vírgula nem ponto (ex.: 30).';
+            else if (parseInt(value, 10) < 1) problem = 'O número precisa ser maior que zero.';
+            else if (max > 0 && parseInt(value, 10) > max) problem = `O máximo é ${max.toLocaleString('pt-BR')}.`;
+            if (problem) {
+                showFieldError(field, problem);
+                firstInvalid = firstInvalid || field;
+                return;
+            }
+        }
         if (invalid) {
             showFieldError(field, messages[field.name] || 'Preencha este campo.');
             firstInvalid = firstInvalid || field;
@@ -814,6 +826,7 @@ function customConfirm(message, title = 'Confirmação') {
 }
 
 // Funções Globais de Ação de Requisição
+// Devolve true quando o servidor confirmou a ação (changePriority usa para desfazer o campo se falhar)
 async function globalRequestAction(action, id, table, value = '') {
     // Configurações de mensagens de confirmação
     const confirmations = {
@@ -827,12 +840,12 @@ async function globalRequestAction(action, id, table, value = '') {
     // Se houver uma mensagem definida para a ação, pede confirmação via Custom Modal
     if (confirmations[action]) {
         const confirmed = await customConfirm(confirmations[action]);
-        if (!confirmed) return;
+        if (!confirmed) return false;
     }
 
     if (!id || !table) {
         showToast("Dados do pedido não encontrados.", "error");
-        return;
+        return false;
     }
 
     let fullTable = table;
@@ -851,7 +864,7 @@ async function globalRequestAction(action, id, table, value = '') {
 
         if (!data.success && data.redirect) {
             window.location.href = data.redirect;
-            return;
+            return false;
         }
 
         if (data.success) {
@@ -865,12 +878,14 @@ async function globalRequestAction(action, id, table, value = '') {
             } else {
                 refreshAfterChange({ advance: action === 'finish', message: data.message });
             }
-        } else {
-            showToast(data.message || 'Não foi possível concluir a ação.', 'error');
+            return true;
         }
+        showToast(data.message || 'Não foi possível concluir a ação.', 'error');
+        return false;
     } catch (error) {
         console.error("Erro fatal", error);
         showToast(requestErrorMessage(error), "error");
+        return false;
     } finally {
         hideLoading();
     }
@@ -1110,8 +1125,12 @@ async function changePriority(select, id, table) {
         select.value = select.dataset.current;
         return;
     }
-    select.dataset.current = select.value;
-    return globalRequestAction('set_priority', id, table, select.value);
+    const chosen = select.value;
+    const ok2 = await globalRequestAction('set_priority', id, table, chosen);
+    // Falhou: o campo volta para o que está gravado (antes ficava mostrando o valor novo)
+    if (ok2) select.dataset.current = chosen;
+    else select.value = select.dataset.current;
+    return ok2;
 }
 
 // Imprimir sem sair da tela: carrega a folha num iframe oculto e abre o diálogo de impressão
@@ -1190,14 +1209,14 @@ async function forwardActNow(action, forwardId, mode = 'help') {
     } else if (action === 'refuse') {
         const reason = await showConfirm({
             title: 'Recusar encaminhamento', message: 'Quem enviou vai receber o motivo.', type: 'error', confirmLabel: 'Recusar', isDanger: true,
-            input: { label: 'Por que não é com vocês? *', placeholder: 'Ex.: isso é com a Manutenção, não com Compras', required: true }
+            input: { label: 'Por que não é com vocês? *', placeholder: 'Ex.: isso é com a Manutenção, não com Compras', required: true, minLength: 5 }
         });
         if (reason === false) return;
         fields.reason = reason;
     } else if (action === 'return') {
         const note = await showConfirm({
             title: 'Devolver ajuda', message: 'O setor responsável recebe o que você escrever.', type: 'success', confirmLabel: 'Devolver',
-            input: { label: 'O que foi feito? *', placeholder: 'Ex.: compramos 2 cabos HDMI, já estão na secretaria', required: true }
+            input: { label: 'O que foi feito? *', placeholder: 'Ex.: compramos 2 cabos HDMI, já estão na secretaria', required: true, minLength: 5 }
         });
         if (note === false) return;
         fields.note = note;

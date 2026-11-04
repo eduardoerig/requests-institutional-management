@@ -9,7 +9,7 @@
         </div>
         <div class="form-group">
             <label for="details">Detalhes <span class="req">*</span></label>
-            <textarea name="details" id="details" required rows="4" placeholder="O que comprar, quantidade, modelo ou marca de preferência e link de referência."></textarea>
+            <textarea name="details" id="details" required rows="4" maxlength="5000" placeholder="O que comprar, quantidade, modelo ou marca de preferência e link de referência."></textarea>
         </div>
         <div class="form-group date-group">
             <label for="end">Para quando? <span class="req">*</span></label>
