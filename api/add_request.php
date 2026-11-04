@@ -161,7 +161,7 @@ try {
 
     $userId = (int)$_SESSION['id'];
     $userName = $_SESSION['name'] ?? 'Usuário';
-    RequestManager::addHistory($pdo, $newId, $sector, $userId, $userName, 'Requisição criada', null, 'Pendente');
+    RequestManager::addHistory($pdo, $newId, $sector, $userId, $userName, 'Requisição criada', null, 'P', 'created');
     $pdo->commit();
 } catch (Throwable $e) {
     if ($pdo->inTransaction()) {

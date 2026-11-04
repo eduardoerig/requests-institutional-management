@@ -65,8 +65,9 @@ try {
     RequestManager::addHistory(
         $pdo, $id, $table, $user_id, $user_name,
         'Requisição ' . $response,
-        'Pendente',
-        $response
+        'P',
+        $value,
+        $value === 'Y' ? 'approved' : 'refused'
     );
 
     // Motivo fica registrado no chat da requisição, visível ao solicitante

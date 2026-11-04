@@ -368,10 +368,15 @@ class RequestManager {
     /**
      * Registra uma ação no histórico da requisição.
      */
-    public static function addHistory($pdo, $reqId, $reqTable, $userId, $userName, $action, $oldValue = null, $newValue = null) {
+    /**
+     * Registra um evento do pedido. $eventCode diz o que aconteceu (created, approved, started...,
+     * ver migração 008); $oldValue/$newValue vão em código: situação P/Y/W/C/N/F, prioridade 1-4 e,
+     * nos encaminhamentos, o nome do setor. $action é o texto para leitura (impressão, registros antigos).
+     */
+    public static function addHistory($pdo, $reqId, $reqTable, $userId, $userName, $action, $oldValue = null, $newValue = null, ?string $eventCode = null) {
         try {
-            $stmt = $pdo->prepare("INSERT INTO request_history (request_id, request_table, user_id, user_name, action, old_value, new_value) VALUES (?, ?, ?, ?, ?, ?, ?)");
-            $stmt->execute([$reqId, $reqTable, $userId, $userName, $action, $oldValue, $newValue]);
+            $stmt = $pdo->prepare("INSERT INTO request_history (request_id, request_table, user_id, user_name, action, event_code, old_value, new_value) VALUES (?, ?, ?, ?, ?, ?, ?, ?)");
+            $stmt->execute([$reqId, $reqTable, $userId, $userName, $action, $eventCode, $oldValue, $newValue]);
         } catch (Throwable $e) {
             error_log("RequestManager::addHistory $reqTable/$reqId \"$action\": " . $e->getMessage());
             // Dentro de uma transação o histórico faz parte da operação: sem ele, desfaz tudo

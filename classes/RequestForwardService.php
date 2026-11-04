@@ -264,7 +264,7 @@ class RequestForwardService
             }
             RequestManager::addHistory($pdo, $reqId, $sector, $userId, $userName,
                 $mode === 'transfer' ? 'Encaminhou para o setor ' . $toLabel : 'Pediu ajuda ao setor ' . $toLabel,
-                $fromLabel, $toLabel);
+                $fromLabel, $toLabel, $mode === 'transfer' ? 'forward_transfer' : 'forward_help');
             $pdo->commit();
         } catch (Throwable $e) {
             return self::rollback($pdo, $e, 'forward');
@@ -310,7 +310,7 @@ class RequestForwardService
             }
             RequestManager::addHistory($pdo, $reqId, $sector, $userId, $userName,
                 $fwd['mode'] === 'transfer' ? "Assumiu o pedido ($toLabel)" : "Aceitou ajudar ($toLabel)",
-                null, $toLabel);
+                null, $toLabel, $fwd['mode'] === 'transfer' ? 'accepted_transfer' : 'accepted_help');
             $pdo->commit();
         } catch (Throwable $e) {
             return self::rollback($pdo, $e, 'accept');
@@ -355,7 +355,7 @@ class RequestForwardService
                 $back = in_array($fwd['previous_status'], ['Y', 'W'], true) ? $fwd['previous_status'] : 'Y';
                 self::setRequestStatus($pdo, $sector, $reqId, 'F', $back);
             }
-            RequestManager::addHistory($pdo, $reqId, $sector, $userId, $userName, "Recusou o encaminhamento ($toLabel)", null, null);
+            RequestManager::addHistory($pdo, $reqId, $sector, $userId, $userName, "Recusou o encaminhamento ($toLabel)", null, $toLabel, 'forward_refused');
             $pdo->commit();
         } catch (Throwable $e) {
             return self::rollback($pdo, $e, 'refuse');
@@ -388,7 +388,7 @@ class RequestForwardService
                 $back = in_array($fwd['previous_status'], ['Y', 'W'], true) ? $fwd['previous_status'] : 'Y';
                 self::setRequestStatus($pdo, $sector, $reqId, 'F', $back);
             }
-            RequestManager::addHistory($pdo, $reqId, $sector, $userId, $userName, "Cancelou o encaminhamento para $toLabel", null, null);
+            RequestManager::addHistory($pdo, $reqId, $sector, $userId, $userName, "Cancelou o encaminhamento para $toLabel", null, $toLabel, 'forward_cancelled');
             $pdo->commit();
         } catch (Throwable $e) {
             return self::rollback($pdo, $e, 'cancel');
@@ -420,7 +420,7 @@ class RequestForwardService
         try {
             $pdo->beginTransaction();
             self::changeForward($pdo, $forwardId, $fwd['status'], 'returned', $userId, $note);
-            RequestManager::addHistory($pdo, $reqId, $sector, $userId, $userName, "Devolveu a ajuda ($toLabel)", null, null);
+            RequestManager::addHistory($pdo, $reqId, $sector, $userId, $userName, "Devolveu a ajuda ($toLabel)", null, $toLabel, 'help_returned');
             $pdo->commit();
         } catch (Throwable $e) {
             return self::rollback($pdo, $e, 'return');

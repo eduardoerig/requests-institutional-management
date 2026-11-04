@@ -92,7 +92,7 @@ try {
 
             $pdo->beginTransaction();
             changeStatus($pdo, $table, (int)$id, 'C', 'W');
-            RequestManager::addHistory($pdo, $id, $sector, $user_id, $user_name, 'Requisição reaberta para atendimento', statusLabel('C'), statusLabel('W'));
+            RequestManager::addHistory($pdo, $id, $sector, $user_id, $user_name, 'Requisição reaberta para atendimento', 'C', 'W', 'reopened');
             $pdo->commit();
 
             RequestManager::notifyStakeholders($pdo, $reqData, $sector,
@@ -121,7 +121,7 @@ try {
 
             $pdo->beginTransaction();
             changeStatus($pdo, $table, (int)$id, 'Y', 'W');
-            RequestManager::addHistory($pdo, $id, $sector, $user_id, $user_name, 'Atendimento iniciado', statusLabel('Y'), statusLabel('W'));
+            RequestManager::addHistory($pdo, $id, $sector, $user_id, $user_name, 'Atendimento iniciado', 'Y', 'W', 'started');
             $pdo->commit();
 
             RequestManager::notifyStakeholders($pdo, $reqData, $sector,
@@ -153,7 +153,7 @@ try {
 
             $pdo->beginTransaction();
             changeStatus($pdo, $table, (int)$id, 'W', 'C');
-            RequestManager::addHistory($pdo, $id, $sector, $user_id, $user_name, 'Requisição concluída', statusLabel('W'), statusLabel('C'));
+            RequestManager::addHistory($pdo, $id, $sector, $user_id, $user_name, 'Requisição concluída', 'W', 'C', 'finished');
             $pdo->commit();
 
             $reqTitle = $reqData['title'] ?? "Requisição #$id";
@@ -186,7 +186,7 @@ try {
             $pdo->beginTransaction();
             $stmt = $pdo->prepare("UPDATE `$table` SET priority = ?, urgent = ? WHERE id = ?");
             $stmt->execute([$priority, $priority >= 3 ? 1 : 0, $id]);
-            RequestManager::addHistory($pdo, $id, $sector, $user_id, $user_name, 'Prioridade alterada', $oldVal, $newVal);
+            RequestManager::addHistory($pdo, $id, $sector, $user_id, $user_name, 'Prioridade alterada', (string)(int)$oldPri, (string)$priority, 'priority');
             $pdo->commit();
 
             RequestManager::notifyStakeholders($pdo, $reqData, $sector,

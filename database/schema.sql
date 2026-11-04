@@ -223,12 +223,14 @@ CREATE TABLE `request_history` (
   `user_id` int unsigned NOT NULL,
   `user_name` varchar(150) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci NOT NULL,
   `action` varchar(100) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci NOT NULL COMMENT 'Ex: Status alterado para Aprovado',
+  `event_code` varchar(30) COLLATE utf8mb4_unicode_ci DEFAULT NULL COMMENT 'O que aconteceu (created, approved, started...); valores em código',
   `old_value` varchar(100) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci DEFAULT NULL,
   `new_value` varchar(100) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci DEFAULT NULL,
   `created_at` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP,
   PRIMARY KEY (`id`),
   KEY `idx_request` (`request_id`,`request_table`),
-  KEY `idx_created` (`created_at`)
+  KEY `idx_created` (`created_at`),
+  KEY `idx_request_event` (`request_id`,`request_table`,`event_code`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- Dados de referência

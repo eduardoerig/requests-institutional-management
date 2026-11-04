@@ -22,9 +22,37 @@ require_once __DIR__ . '/../classes/RequestForwardService.php';
 require_once __DIR__ . '/request_card.php';
 
 if (!function_exists('renderRequestView')) {
-    /** Evento do histórico contado por quem fez ("aprovou o pedido"); null = não mostrar */
-    function requestEventText(string $action, ?string $old, ?string $new): ?string
+    /**
+     * Evento do histórico contado por quem fez ("aprovou o pedido"); null = não mostrar.
+     * Pelo event_code (migração 008); registros sem código (ou legados) caem nas regras pelo texto.
+     */
+    function requestEventText(string $action, ?string $old, ?string $new, ?string $code = null): ?string
     {
+        $area = trim((string)$new);
+        $byCode = [
+            'created' => null, // o próprio pedido abre a linha do tempo
+            'approved' => 'aprovou o pedido',
+            'refused' => 'recusou o pedido',
+            'started' => 'começou o atendimento',
+            'finished' => 'concluiu o pedido',
+            'reopened' => 'reabriu o pedido',
+            'forward_transfer' => "encaminhou para o setor $area",
+            'forward_help' => "pediu ajuda ao setor $area",
+            'accepted_transfer' => "assumiu o pedido ($area)",
+            'accepted_help' => "aceitou ajudar ($area)",
+            'forward_refused' => "recusou o encaminhamento ($area)",
+            'forward_cancelled' => "cancelou o encaminhamento para $area",
+            'help_returned' => "devolveu a ajuda ($area)",
+        ];
+        if ($code === 'priority') {
+            // Número (1-4) desde a migração 008; rótulo nos registros que ela não converteu
+            $label = fn(?string $v) => ctype_digit((string)$v) ? priorityLabel((int)$v) : (string)$v;
+            return 'mudou a urgência' . ($old && $new ? ' de ' . $label($old) . ' para ' . $label($new) : '');
+        }
+        $needsArea = in_array($code, ['forward_transfer', 'forward_help', 'accepted_transfer', 'accepted_help', 'forward_refused', 'forward_cancelled', 'help_returned'], true);
+        if ($code !== null && array_key_exists($code, $byCode) && (!$needsArea || $area !== '')) {
+            return $byCode[$code];
+        }
         if ($action === 'Prioridade alterada') {
             return 'mudou a urgência' . ($old && $new ? " de $old para $new" : '');
         }
@@ -51,7 +79,7 @@ if (!function_exists('renderRequestView')) {
     /** Histórico do pedido, do mais antigo ao mais novo */
     function requestHistoryRows(PDO $pdo, int $reqId, string $sector): array
     {
-        $st = $pdo->prepare('SELECT user_name, action, old_value, new_value, created_at FROM request_history WHERE request_id = ? AND request_table = ? ORDER BY created_at ASC, id ASC');
+        $st = $pdo->prepare('SELECT user_name, action, event_code, old_value, new_value, created_at FROM request_history WHERE request_id = ? AND request_table = ? ORDER BY created_at ASC, id ASC');
         $st->execute([$reqId, $sector]);
         return $st->fetchAll(PDO::FETCH_ASSOC);
     }
@@ -266,11 +294,15 @@ if (!function_exists('renderRequestView')) {
             if ($history === null && $thread['events']) {
                 $history = requestHistoryRows($pdo, $reqId, $sector);
             }
+            // Eventos de encaminhamento: para o setor vêm dos cartões de encaminhamento, com a mensagem
+            $fwdCodes = array_merge(['forward_transfer', 'forward_help', 'accepted_transfer', 'accepted_help', 'forward_refused', 'forward_cancelled', 'help_returned'],
+                $forwards ? ['legacy_forward', 'legacy_forward_accepted'] : []);
             foreach ($thread['events'] ? $history : [] as $h) {
-                if ($isStaff && preg_match($skip, (string)$h['action'])) {
+                $code = $h['event_code'] ?? null;
+                if ($isStaff && ($code !== null ? in_array($code, $fwdCodes, true) : preg_match($skip, (string)$h['action']))) {
                     continue; // vem dos encaminhamentos, com a mensagem
                 }
-                $text = requestEventText((string)$h['action'], $h['old_value'], $h['new_value']);
+                $text = requestEventText((string)$h['action'], $h['old_value'], $h['new_value'], $h['event_code'] ?? null);
                 if ($text !== null) {
                     $items[] = ['at' => (string)$h['created_at'], 'type' => 'event', 'who' => (string)$h['user_name'], 'text' => $text, 'note' => '', 'bad' => false];
                 }
@@ -607,23 +639,16 @@ if (!function_exists('renderRequestView')) {
         $statusAt = [];
         $worker = '';
         $workerAt = '';
+        // Situação => quando chegou nela, pelo event_code (migração 008); valores em código (P/Y/W/C/N/F)
+        $statusEvents = ['approved' => 'Y', 'refused' => 'N', 'started' => 'W', 'reopened' => 'W', 'finished' => 'C', 'legacy_finished_forward' => 'C'];
         foreach ($history as $h) {
-            // Pelo nome da ação também: registros antigos podem ter outro texto em new_value
-            $action = (string)$h['action'];
-            if ($action === 'Atendimento iniciado') {
-                $statusAt[statusLabel('W')] = $h['created_at'];
-                $worker = (string)$h['user_name'];
-                $workerAt = (string)$h['created_at'];
-            } elseif (preg_match('/^Requisição concluída/iu', $action)) {
-                $statusAt[statusLabel('C')] = $h['created_at'];
-            } elseif (preg_match('/^Requisição (aprovada|recusada)$/iu', $action, $m)) {
-                $statusAt[mb_strtolower($m[1]) === 'aprovada' ? 'Aprovada' : 'Recusada'] = $h['created_at'];
-            }
-            if ($h['new_value'] === null) {
+            $code = (string)($h['event_code'] ?? '');
+            $reached = $statusEvents[$code] ?? ($code === 'status' ? (string)$h['new_value'] : null);
+            if ($reached === null || $reached === '') {
                 continue;
             }
-            $statusAt[(string)$h['new_value']] = $h['created_at'];
-            if ((string)$h['new_value'] === statusLabel('W')) {
+            $statusAt[$reached] = $h['created_at'];
+            if ($reached === 'W') {
                 $worker = (string)$h['user_name'];
                 $workerAt = (string)$h['created_at'];
             }
@@ -741,13 +766,13 @@ if (!function_exists('renderRequestView')) {
             ? '<span class="' . ($lateDays > 0 ? 'rv-late' : '') . '">' . e(date('d/m', strtotime((string)$req['date'])) . ', ' . $weekdays[(int)date('w', strtotime((string)$req['date']))]) . '</span>'
             : 'Sem prazo';
         $props['Aberto em'] = e(date('d/m, H\hi', strtotime((string)$req['created_at'])));
-        if (!empty($statusAt['Aprovada'])) {
-            $props['Aprovado em'] = e(date('d/m, H\hi', strtotime((string)$statusAt['Aprovada'])));
-        } elseif (!empty($statusAt['Recusada'])) {
-            $props['Recusado em'] = e(date('d/m, H\hi', strtotime((string)$statusAt['Recusada'])));
+        if (!empty($statusAt['Y'])) {
+            $props['Aprovado em'] = e(date('d/m, H\hi', strtotime((string)$statusAt['Y'])));
+        } elseif (!empty($statusAt['N'])) {
+            $props['Recusado em'] = e(date('d/m, H\hi', strtotime((string)$statusAt['N'])));
         }
-        if (!empty($statusAt[statusLabel('C')])) {
-            $props['Concluído em'] = e(date('d/m, H\hi', strtotime((string)$statusAt[statusLabel('C')])));
+        if (!empty($statusAt['C'])) {
+            $props['Concluído em'] = e(date('d/m, H\hi', strtotime((string)$statusAt['C'])));
         }
         foreach ($extra as $label => $value) { // campos do tipo de pedido
             $value = trim((string)$value);

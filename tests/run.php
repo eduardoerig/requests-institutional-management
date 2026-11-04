@@ -286,7 +286,7 @@ check('gestor TI conclui', ($res['json']['success'] ?? false) === true, snippet(
 $status = $pdo->query("SELECT status FROM ctd_ti_frm WHERE id = $reqId")->fetchColumn();
 check('banco registra Concluída', $status === 'C', (string)$status);
 $steps = $pdo->query("SELECT new_value FROM request_history WHERE request_id = $reqId AND request_table = 'ti' ORDER BY id")->fetchAll(PDO::FETCH_COLUMN);
-check('histórico completo (Pendente→Aprovada→Em atendimento→Concluída)', $steps === ['Pendente', 'Aprovada', 'Em atendimento', 'Concluída'], json_encode($steps, JSON_UNESCAPED_UNICODE));
+check('histórico completo em código (P→Y→W→C)', $steps === ['P', 'Y', 'W', 'C'], json_encode($steps, JSON_UNESCAPED_UNICODE));
 
 // ------------------------------------------------------------------
 section('9. Conversa');
@@ -473,6 +473,10 @@ check('Compras recusa com motivo', ($res['json']['success'] ?? false) === true, 
 check('recusa devolve para Em atendimento', $reqStatus() === 'W', $reqStatus());
 $note = $pdo->query("SELECT response_note FROM request_forwards WHERE id = $fwdId")->fetchColumn();
 check('motivo da recusa fica registrado', $note === 'Não é com Compras', (string)$note);
+$evt = $pdo->query("SELECT event_code, new_value FROM request_history WHERE request_id = $fwdReqId AND request_table = 'ti' AND event_code = 'forward_refused' ORDER BY id DESC LIMIT 1")->fetch(PDO::FETCH_ASSOC);
+check('histórico grava a recusa com código e setor', $evt && $evt['new_value'] !== null && $evt['new_value'] !== '', json_encode($evt, JSON_UNESCAPED_UNICODE));
+$res = $sol->get("request_detail?id=$fwdReqId&table=ti");
+check('linha do tempo de quem pediu diz "recusou o encaminhamento (setor)"', (bool)preg_match('/recusou o encaminhamento \([^)]+\)/u', $res['body']), 'HTTP ' . $res['status']);
 $res = $shop->post('api/request_forwards.php', ['action' => 'refuse', 'forward_id' => $fwdId, 'reason' => 'De novo não']);
 check('recusar duas vezes é bloqueado', ($res['json']['success'] ?? true) === false);
 

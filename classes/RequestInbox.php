@@ -608,23 +608,23 @@ class RequestInbox
             return $people;
         }
         $conds = [];
-        $params = [statusLabel('W'), statusLabel('C'), statusLabel('Y')];
+        $params = [];
         foreach ($bySector as $tbl => $ids) {
             $conds[] = '(request_table = ? AND request_id IN (' . implode(',', array_fill(0, count($ids), '?')) . '))';
             $params = array_merge($params, [$tbl], $ids);
         }
         $stmt = $pdo->prepare('
-            SELECT request_table, request_id, user_name, created_at, new_value
+            SELECT request_table, request_id, user_name, created_at, event_code
             FROM request_history
-            WHERE new_value IN (?, ?, ?) AND (' . implode(' OR ', $conds) . ')
+            WHERE event_code IN (\'started\', \'reopened\', \'finished\', \'legacy_finished_forward\', \'approved\') AND (' . implode(' OR ', $conds) . ')
             ORDER BY id ASC
         ');
         $stmt->execute($params);
         foreach ($stmt->fetchAll(PDO::FETCH_ASSOC) as $h) {
             $key = $h['request_table'] . ':' . $h['request_id'];
-            if ($h['new_value'] === statusLabel('W')) {
+            if (in_array($h['event_code'], ['started', 'reopened'], true)) { // reabrir também põe alguém atendendo
                 $people[$key]['worker'] = (string)$h['user_name'];
-            } elseif ($h['new_value'] === statusLabel('C')) {
+            } elseif ($h['event_code'] !== 'approved') { // finished e o legado concluído via repasse
                 $people[$key]['closer'] = (string)$h['user_name'];
                 $people[$key]['closed_at'] = (string)$h['created_at'];
             } else {
