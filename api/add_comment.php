@@ -34,41 +34,17 @@ if (!$req || !userCanViewRequest($pdo, $req, $sector, $userId, $role)) {
 $role = requestChatRole($pdo, $req, $sector, $userId, $role);
 
 // Canais: public (quem pediu × responsável), internal (responsável × quem ajuda) e
-// helper (quem pediu × um setor que ajuda, em helper_area_id; o responsável também lê). O servidor decide:
-// quem pediu não escolhe: com ajuda aceita vai para helper (responsável e quem ajuda recebem), senão public;
-// quem só ajuda: internal ou helper do próprio setor; responsável: public ou internal
-require_once __DIR__ . '/../classes/RequestForwardService.php';
-$wanted = (string)($_POST['channel'] ?? 'public');
-$helperArea = null;
-$openHelp = requestOpenHelperAreaIds(RequestForwardService::forRequest($pdo, $reqId, $sector)); // devolvida = só consulta
-if ($role === 'solicitante') {
-    $helperArea = $openHelp[0] ?? null; // só um encaminhamento aberto por vez
-    $channel = $helperArea ? 'helper' : 'public';
-} elseif ($wanted === 'helper') {
-    $allowed = userSeesOnlyInternalChat($pdo, $req, $sector, $userId, $role)
-        ? array_values(array_intersect($openHelp, RequestForwardService::userAreaIds($pdo, $userId)))
-        : []; // o responsável só lê esta conversa
-    $helperArea = (int)($_POST['area'] ?? 0);
-    if (!in_array($helperArea, $allowed, true)) {
-        jsonResponse(['success' => false, 'message' => 'Você não pode escrever nesta conversa.'], 403);
-    }
-    $channel = 'helper';
-} elseif (userSeesOnlyInternalChat($pdo, $req, $sector, $userId, $role)) {
-    $channel = 'internal';
-} else {
-    $channel = $wanted === 'internal' ? 'internal' : 'public';
-    // Setor que transferiu o pedido não fala mais com quem pediu: só com quem assumiu
-    if ($channel === 'public') {
-        $myAreas = RequestForwardService::userAreaIds($pdo, $userId);
-        if (!in_array(RequestForwardService::ownerAreaId($pdo, $reqId, $sector), $myAreas, true)) {
-            foreach (RequestForwardService::forRequest($pdo, $reqId, $sector) as $f) {
-                if (RequestForwardService::isEffectiveTransfer($f) && in_array((int)$f['from_area_id'], $myAreas, true)) {
-                    jsonResponse(['success' => false, 'message' => 'O pedido foi transferido. Fale com o setor que assumiu na conversa entre setores.'], 403);
-                }
-            }
-        }
-    }
+// helper (quem pediu × um setor que ajuda, em helper_area_id; o responsável também lê).
+// Onde cada pessoa escreve é a mesma regra das abas da tela (RequestChat::threads): a mensagem só
+// é aceita se o destino for o de uma conversa em que ela pode escrever.
+require_once __DIR__ . '/../classes/RequestChat.php';
+$wanted = isset($_POST['channel']) ? (string)$_POST['channel'] : null;
+[$target, $why] = RequestChat::targetFor($pdo, $req, $sector, $userId, $role, $wanted, (int)($_POST['area'] ?? 0));
+if (!$target) {
+    jsonResponse(['success' => false, 'message' => $why], 403);
 }
+$channel = $target['channel'];
+$helperArea = $channel === 'helper' ? (int)$target['area'] : null;
 
 $userName = $_SESSION['name'] ?? 'Usuário';
 $pdo->prepare('INSERT INTO request_comments (request_id, request_table, user_id, user_name, comment, channel, helper_area_id) VALUES (?, ?, ?, ?, ?, ?, ?)')
