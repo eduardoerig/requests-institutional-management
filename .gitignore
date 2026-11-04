@@ -10,7 +10,6 @@ Thumbs.db
 desktop.ini
 
 # Environment/Config
-config/conn.php
 config/conn.local.php
 .env
 
@@ -33,6 +32,8 @@ files_to_push_v2.json
 
 # Dependencies
 vendor/
+# Bibliotecas front-end com versão fixa ficam no repositório
+!assets/vendor/
 node_modules/
 
 # User Uploads & Media
@@ -42,6 +43,10 @@ arquivos/
 
 # Database Backups & Dumps
 *.sql
+# Estrutura do banco e migrações são versionadas (só os backups ficam fora)
+!database/schema.sql
+!database/migrations/*.sql
+database/backups/
 *.sqlite
 *.sqlite3
 *.db
@@ -51,3 +56,6 @@ assets/img/logoMartin.png
 
 # Agent Rules/Config
 .agents/
+
+# Credenciais locais de teste
+*.local.txt

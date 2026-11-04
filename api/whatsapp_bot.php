@@ -10,15 +10,27 @@
  * Fallback: phone + name (nome parcial)
  */
 
-require_once dirname(__DIR__) . '/config/conn.php';
-
 header('Content-Type: application/json; charset=utf-8');
+
+// Integração desligada até ser homologada. Para ativar: BOT_ENABLED=1 no ambiente
+// ou 'bot_enabled' => true em config/conn.local.php.
+$localConfigFile = dirname(__DIR__) . '/config/conn.local.php';
+$localConfig = is_file($localConfigFile) ? (require $localConfigFile) : [];
+$localConfig = is_array($localConfig) ? $localConfig : [];
+$botEnabled = getenv('BOT_ENABLED') === '1' || !empty($localConfig['bot_enabled']);
+if (!$botEnabled) {
+    http_response_code(503);
+    echo json_encode(['success' => false, 'code' => 'DISABLED', 'message' => 'Integração temporariamente desativada.']);
+    exit;
+}
+
+require_once dirname(__DIR__) . '/config/conn.php';
+require_once dirname(__DIR__) . '/includes/auth.php'; // sectorLabel() (config/sectors.php)
 
 // =========================================
 // 1. Verificar API Key
 // =========================================
-$localConfig = require dirname(__DIR__) . '/config/conn.local.php';
-$validKey    = $localConfig['bot_key'] ?? '';
+$validKey    = getenv('BOT_KEY') ?: ($localConfig['bot_key'] ?? '');
 
 $receivedKey = $_SERVER['HTTP_X_BOT_KEY'] ?? '';
 
@@ -169,16 +181,7 @@ try {
             break;
     }
 
-    // Mapeamento de nomes amigáveis para resposta
-    $typeLabels = [
-        'ti'      => 'TI',
-        'shop'    => 'Compras',
-        'service' => 'Manutenção',
-        'xerox'   => 'Reprografia',
-        'mkt'     => 'Marketing',
-    ];
-
-    $label = $typeLabels[$type] ?? strtoupper($type);
+    $label = sectorLabel($type); // config/sectors.php
 
     echo json_encode([
         'success'    => true,

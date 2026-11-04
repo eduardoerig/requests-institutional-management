@@ -1,44 +1,55 @@
-<form class="form_request">
+<form class="form_request" novalidate>
     <input type="hidden" name="type" value="colorPrint">
 
-    <p style="border-left-color: #06b6d4; color: #0e7490; background: #ecfeff;">Requisições de impressão colorida são utilizadas para realizar impressões coloridas no setor de reprografia.</p>
-
-    <div class="form-group">
-        <label for="title">Evento/atividade/título: </label>
-        <input type="text" name="title" id="title" required maxlength="60">
-        <span>Seja breve no título!</span>
-    </div>
-
-    <div class="form-group">
-        <label for="end">Data de entrega: </label>
-        <input type="date" name="end" id="end" required>
-    </div>
-
-    <div class="form-group">
-        <label for="file">Nome do arquivo/Informações: </label>
-        <input type="text" name="file" id="file" required>
-    </div>
-
-    <div class="form-group">
-        <label for="qtd">Quantidade: </label>
-        <input type="number" name="qtd" id="qtd" required>
-    </div>
-
-    <div class="form-group">
-        <label>Formato:</label>
-        <div class="aplication_select">
-            <label><input type="radio" name="model" value="A4"> A4</label>
-            <label><input type="radio" name="model" value="A4/Cartolina"> A4/Cartolina</label>
-            <label><input type="radio" name="model" value="A3/Cartolina"> A3</label>
+    <div class="form-step" data-form-step="2">
+        <h2 class="form-step__title">2. O que você precisa?</h2>
+        <div class="form-group">
+            <label for="title">O que vai ser impresso? <span class="req">*</span></label>
+            <input type="text" name="title" id="title" required maxlength="80" placeholder="Ex.: Certificados da formatura">
+        </div>
+        <div class="form-group">
+            <label for="file">Onde está o arquivo? <span class="req">*</span></label>
+            <input type="text" name="file" id="file" required maxlength="255" placeholder="Nome do arquivo, e-mail em que foi enviado ou link">
+        </div>
+        <div class="form-row">
+            <div class="form-group">
+                <label for="qtd">Cópias <span class="req">*</span></label>
+                <input type="number" name="qtd" id="qtd" required min="1" max="100000" inputmode="numeric" placeholder="Ex.: 30">
+            </div>
+            <fieldset class="form-group">
+                <legend>Papel <span class="req">*</span></legend>
+                <div class="aplication_select">
+                    <label><input type="radio" name="model" value="A4" required> A4 comum</label>
+                    <label><input type="radio" name="model" value="A4/Cartolina"> A4 papel cartão</label>
+                    <label><input type="radio" name="model" value="A3/Cartolina"> A3</label>
+                </div>
+            </fieldset>
+        </div>
+        <div class="form-group date-group">
+            <label for="end">Para quando? <span class="req">*</span></label>
+            <div class="date-field">
+                <span class="date-quick" data-date-quick role="group" aria-label="Atalhos de prazo"></span>
+                <input type="date" name="end" id="end" required>
+            </div>
+            <p class="date-chosen" data-date-chosen aria-live="polite"></p>
         </div>
     </div>
 
-    <div class="form-group">
-        <label for="obs">Observações ou objetivo: </label>
-        <input type="text" name="obs" id="obs">
-        <span>Não obrigatório, porém interessante para o comitê de aprovação!</span>
+    <div class="form-step" data-form-step="3">
+        <h2 class="form-step__title">3. É urgente?</h2>
+<!--PRIORIDADE-->
+        <details class="form-more">
+            <summary>Mais alguma coisa? <small>(opcional)</small></summary>
+            <div class="form-group">
+                <label for="obs" class="visually-hidden">Observações</label>
+                <textarea name="obs" id="obs" rows="2" maxlength="2000" placeholder="Sala, horário, contato ou algo que ajude quem vai aprovar ou atender"></textarea>
+            </div>
+        </details>
+        <div class="nr-review" data-review></div>
     </div>
 
-    <button type="submit">Enviar Requisição</button>
-
+    <div class="form-submit-bar">
+        <button type="submit"><i class="fa-solid fa-paper-plane" aria-hidden="true"></i> Enviar pedido</button>
+        <a class="btn" href="myRequests">Cancelar</a>
+    </div>
 </form>

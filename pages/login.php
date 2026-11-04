@@ -1,58 +1,67 @@
-<div class="page-login">
-    
-    <div class="card-login" id="container">
-
-        <!-- ====== LADO ESQUERDO/ÚNICO (FORMULÁRIOS) ====== -->
-        <div class="forms">
-            <div class="login-brand-header-mobile">
-                <img src="assets/img/LogoFavConSisreq.png" alt="Sistema de Requisições" class="school-logo-mobile">
+<main class="auth">
+    <section class="auth__form-col">
+        <div class="auth__panel">
+            <div class="auth-brand">
+                <span class="auth-brand__mark"><img src="<?= e(orgSetting('org_logo')) ?>" alt=""></span>
+                <span class="auth-brand__text">
+                    <strong>SisReq</strong>
+                    <span><?= e(orgSetting('org_name')) ?></span>
+                </span>
             </div>
-            <!-- LOGIN -->
-            <form class="form-auth form-login" id="frm_login" autocomplete="off">
-                <div class="form-title-wrapper">
-                    <h1>Acessar o Painel</h1>
-                    <p class="form-subtitle">Insira seu usuário e senha para continuar</p>
-                </div>
 
-                <div class="input-group">
-                    <label for="user">Usuário</label>
-                    <div class="input-with-icon">
-                        <i class="fa-solid fa-user"></i>
-                        <input type="text" id="user" name="user" placeholder="Digite seu usuário" required />
+            <div class="auth-intro">
+                <h1>Entrar</h1>
+                <p>Peça, acompanhe cada etapa e converse com quem está resolvendo.</p>
+            </div>
+            <?php if (!empty($sessionEndedReason)): // index.php: a sessão caiu (conta inativa, senha trocada) ?>
+                <div class="notice notice--warn" role="status"><i class="fa-solid fa-circle-info" aria-hidden="true"></i><span><?= e(sessionEndedMessage($sessionEndedReason)) ?></span></div>
+            <?php endif; ?>
+
+            <form id="frm_login" class="auth-form form-auth form-login">
+                <div class="auth-form__fields">
+                    <div class="field">
+                        <label for="user">Usuário</label>
+                        <input type="text" id="user" name="user" autocomplete="username" autocapitalize="none" spellcheck="false" placeholder="seu.usuario" required>
+                    </div>
+
+                    <div class="field">
+                        <label for="password">Senha</label>
+                        <div class="pw-field">
+                            <input type="password" id="password" name="password" autocomplete="current-password" required>
+                            <button type="button" class="pw-toggle" id="toggle_password" aria-controls="password" aria-pressed="false">Mostrar</button>
+                        </div>
                     </div>
                 </div>
 
-                <div class="input-group">
-                    <label for="password">Senha</label>
-                    <div class="input-with-icon">
-                        <i class="fa-solid fa-lock"></i>
-                        <input type="password" id="password" name="password" placeholder="Digite sua senha" required />
-                    </div>
-                </div>
-
-                <button type="submit" class="btn btn-login-submit" id="btn_login">
-                    <span>Entrar</span>
-                    <i class="fa-solid fa-arrow-right-to-bracket"></i>
-                </button>
-
-                <div class="switch-text" style="margin-top: 15px; text-align: center; width: 100%; position: relative; z-index: 10;">
-                    <span style="color: var(--text-muted); font-size: 0.88rem;">Ainda não tem conta?</span>
-                    <a href="javascript:void(0)" style="color: var(--primary); font-weight: 600; text-decoration: none; margin-left: 5px;" onclick="if(typeof showAlert === 'function') { showAlert({title: 'Entrar em Contato', message: 'O cadastro de novos usuários deve ser solicitado diretamente à administração do sistema.', type: 'info'}); } else { alert('O cadastro de novos usuários deve ser solicitado diretamente à administração do sistema.'); }">Solicitar Cadastro</a>
+                <div class="auth-form__actions">
+                    <button type="submit" class="btn btn--primary" id="btn_login">Entrar</button>
+                    <p class="auth-form__help">Esqueceu a senha ou ainda não tem acesso? Fale com a administração: ela cria uma senha temporária para você.</p>
                 </div>
             </form>
-
         </div>
+    </section>
 
-        <!-- ====== OVERLAY DE DESKTOP (MOVE LATERIALMENTE) ====== -->
-        <aside class="overlay-login">
-            <div class="overlay-content">
-                <img src="assets/img/LogoFavConSisreq.png" alt="Sistema de Requisições" class="school-logo-desktop">
-                <h2>Bem-Vindo ao <br><span>Sistema de Requisições Institucionais</span></h2>
-                <p>Gerenciamento institucional moderno e simplificado.</p>
-            </div>
-        </aside>
-
-    </div>
-</div>
-
-
+    <section class="auth__showcase" aria-hidden="true">
+        <div class="auth-demo">
+            <article class="auth-demo__card">
+                <div class="auth-demo__head">
+                    <span class="auth-demo__ref">Pedido nº <span data-demo="num">427</span> · <span data-demo="sector">TI</span></span>
+                    <span class="status-pill status-pill--W" data-demo="pill">Em atendimento</span>
+                </div>
+                <p class="auth-demo__title" data-demo="title">Projetor da sala 12 sem imagem</p>
+                <ol class="steps4" data-demo="steps">
+                    <li class="is-done"><span>Enviado</span></li>
+                    <li class="is-done"><span>Aprovado</span></li>
+                    <li class="is-now"><span>No setor</span></li>
+                    <li><span>Concluído</span></li>
+                </ol>
+                <div class="auth-demo__msg">
+                    <span class="auth-demo__avatar" data-demo="avatar">TI</span>
+                    <span data-demo="msg">Trocamos o cabo HDMI. Passo aí às 14h para testar com você.</span>
+                </div>
+            </article>
+            <p class="auth-demo__caption">Cada pedido tem um número. Você vê em que etapa ele está e conversa direto com quem está resolvendo.</p>
+        </div>
+    </section>
+</main>
+<script src="assets/js/login.js?v=<?= (int)$assetVersion ?>" defer></script>

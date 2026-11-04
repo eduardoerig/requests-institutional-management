@@ -1,4 +1,47 @@
+Options -Indexes
+DirectoryIndex index.php
+
 RewriteEngine On
+
+# HTTPS obrigatório fora do ambiente local
+RewriteCond %{HTTPS} off
+RewriteCond %{HTTP:X-Forwarded-Proto} !https
+RewriteCond %{HTTP_HOST} !^(localhost|127\.0\.0\.1)(:\d+)?$ [NC]
+RewriteRule ^ https://%{HTTP_HOST}%{REQUEST_URI} [L,R=301]
+
+# Pastas internas nunca são servidas diretamente
+# Só as pastas da raiz do projeto: assets/css/pages e assets/js/pages continuam públicas
+RewriteRule ^(scratch|config|database|migrations|classes|components|includes|partials|pages|tests|vendor|\.agents|\.claude|\.github|\.git)(/|$) - [F,L,NC]
+
+# Arquivos sensíveis
+<FilesMatch "(\.(log|md|sql|example\.php|ini|lock|json|dist)$|^conn.*\.php$|^(security|session)\.php$|^\.)">
+    Require all denied
+</FilesMatch>
+
+# Rotas amigáveis
 RewriteCond %{REQUEST_FILENAME} !-f
 RewriteCond %{REQUEST_FILENAME} !-d
 RewriteRule ^(.+)$ index.php?url=$1 [QSA,L]
+
+# Desempenho: CSS e JS vão sempre com ?v= (muda a cada versão), então podem ficar no navegador;
+# imagens por uma semana. Assim cada navegação não revalida os mesmos arquivos.
+<IfModule mod_headers.c>
+    <FilesMatch "\.(css|js)$">
+        Header set Cache-Control "public, max-age=31536000, immutable"
+    </FilesMatch>
+    <FilesMatch "\.(png|jpe?g|gif|svg|ico|webp)$">
+        Header set Cache-Control "public, max-age=604800"
+    </FilesMatch>
+</IfModule>
+
+# Texto comprimido (onde o servidor tiver mod_deflate)
+<IfModule mod_deflate.c>
+    AddOutputFilterByType DEFLATE text/html text/css text/plain text/javascript application/javascript application/json image/svg+xml
+</IfModule>
+
+<IfModule mod_headers.c>
+    Header always set X-Content-Type-Options "nosniff"
+    Header always set X-Frame-Options "SAMEORIGIN"
+    Header always set Referrer-Policy "strict-origin-when-cross-origin"
+    Header always set Permissions-Policy "camera=(), microphone=(), geolocation=()"
+</IfModule>

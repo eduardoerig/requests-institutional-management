@@ -1,0 +1,214 @@
+/* Nova requisição (UI 2.0) — celular primeiro: 3 passos; computador (≥900px): uma página só */
+
+.nr { display: flex; flex-direction: column; gap: 16px; padding-bottom: 88px; }
+
+/* ---------- Cabeçalho do passo ---------- */
+.nr-head { display: flex; flex-direction: column; gap: 4px; }
+.nr-head__back { display: none; }
+.nr-head__count { margin: 0; font-size: var(--t-xs); color: var(--texto-2); }
+.nr-head__title { margin: 0; font-size: 20px; font-weight: 700; letter-spacing: -0.01em; }
+.nr-head__title:focus { outline: none; }
+.nr-head__title--desk { display: none; }
+.nr-progress { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 6px; margin: 10px 0 0; padding: 0; list-style: none; }
+.nr-progress li { height: 4px; border-radius: 2px; background: var(--linha); transition: background-color var(--dur-2); }
+.nr-progress li.is-on { background: var(--laranja); }
+
+.nr-layout { display: flex; flex-direction: column; gap: 20px; }
+.nr-main { display: flex; flex-direction: column; gap: 24px; min-width: 0; }
+
+/* ---------- Passo 1: setor ---------- */
+.nr-sectors__title { display: none; }
+.nr-sector-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+.type-card.nr-sector {
+    display: flex; flex-direction: column; align-items: flex-start; justify-content: flex-start; gap: 4px;
+    min-height: 96px;
+    padding: 16px 14px;
+    border: 2px solid var(--linha);
+    border-radius: 14px;
+    background: var(--superficie);
+    color: var(--texto);
+    text-align: left;
+    font: inherit;
+}
+.type-card.nr-sector:hover { border-color: var(--linha-forte); }
+.type-card.nr-sector[aria-pressed="true"] { border-color: var(--laranja); background: var(--laranja-claro); }
+.nr-sector__name { display: flex; align-items: center; gap: 8px; font-size: var(--t-md); font-weight: 600; }
+.nr-sector__name i { font-size: var(--t-sm); color: var(--texto-2); width: 16px; text-align: center; }
+.nr-sector[aria-pressed="true"] .nr-sector__name i { color: var(--laranja-escuro); }
+.nr-sector__hint { font-size: var(--t-xs); color: var(--texto-2); line-height: 1.35; }
+.nr-sectors__error { margin-top: 10px; }
+
+/* ---------- Formulário ---------- */
+.nr-form .form_request { display: flex; flex-direction: column; gap: 0; }
+.nr-form .form-step { display: flex; flex-direction: column; gap: 0; }
+.form-step__title { display: none; }
+.nr-form .form-group > label,
+.nr-form .form-group > legend { font-size: 15px; }
+.nr-form input[type="text"],
+.nr-form input[type="number"],
+.nr-form input[type="date"] { min-height: var(--h-lg); padding: 0 16px; font-size: 17px; }
+.nr-form textarea { padding: 14px 16px; font-size: 17px; }
+.nr-form .aplication_select label { font-size: var(--t-md); }
+
+/* Prazo: atalhos em pílula; o calendário só aparece em "Escolher data" (ou se houver erro) */
+.nr-form .date-field { display: flex; flex-direction: column; align-items: stretch; gap: 10px; }
+.nr-form .date-field input[type="date"] { width: 100%; min-width: 0; flex: none; }
+.date-group:not(.is-picking):not(.has-error) .date-field input[type="date"] { display: none; }
+.nr-form .date-quick { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+.nr-form .date-quick .chip-btn {
+    min-height: 48px;
+    padding: 0 12px;
+    border: 1px solid var(--linha);
+    border-radius: var(--r-2);
+    background: var(--superficie);
+    color: var(--texto);
+    font-size: 15px;
+    font-weight: 600;
+}
+.nr-form .date-quick .chip-btn[aria-pressed="true"] { background: var(--grafite); border-color: var(--grafite); color: var(--texto-inv); }
+.nr-form .date-quick .chip-btn:focus-visible { outline: none; box-shadow: var(--anel); }
+.date-chosen { margin: 0; font-size: var(--t-sm); color: var(--texto-2); }
+.date-chosen:empty { display: none; }
+
+/* Urgência como interruptor (o campo continua sendo o checkbox name="urgent") */
+.nr-form .urgent-field { margin-bottom: 16px; }
+.urgent-switch.check-line {
+    display: flex; align-items: center; justify-content: space-between; gap: 14px;
+    min-height: 44px;
+    padding: 16px;
+    border: 1px solid var(--linha);
+    border-radius: 14px;
+    background: var(--superficie);
+    font-weight: 400;
+    cursor: pointer;
+}
+.urgent-switch:has(input:checked) { background: var(--laranja-claro); border-color: #FDBA74; }
+.urgent-switch__text { display: flex; flex-direction: column; gap: 4px; text-align: left; }
+.urgent-switch__title { font-size: var(--t-md); font-weight: 600; }
+.urgent-switch__hint { font-size: var(--t-sm); color: var(--texto-2); line-height: 1.4; }
+.urgent-switch input[type="checkbox"] {
+    -webkit-appearance: none;
+    appearance: none;
+    position: relative;
+    flex: none;
+    width: 52px; height: 30px;
+    margin: 0;
+    border-radius: var(--r-pill);
+    background: var(--linha-forte);
+    cursor: pointer;
+    transition: background-color var(--dur-1);
+}
+.urgent-switch input[type="checkbox"]::before {
+    content: "";
+    position: absolute;
+    top: 3px; left: 3px;
+    width: 24px; height: 24px;
+    border-radius: 50%;
+    background: #FFFFFF;
+    box-shadow: 0 1px 2px rgb(0 0 0 / .2);
+    transition: transform var(--dur-1);
+}
+.urgent-switch input[type="checkbox"]:checked { background: var(--laranja); }
+.urgent-switch input[type="checkbox"]:checked::before { transform: translateX(22px); }
+.urgent-switch input[type="checkbox"]:focus-visible { outline: none; box-shadow: var(--anel); }
+.nr-form .urgent-field__reason { margin-top: 14px; }
+.nr-form .urgent-field__reason label { font-size: 15px; font-weight: 600; }
+.nr-form .urgent-field__reason input { border-color: #FDBA74; }
+
+/* Revisão (só no celular) */
+.nr-review:empty { display: none; }
+.nr-review {
+    display: flex; flex-direction: column; gap: 6px;
+    padding: 16px;
+    border-radius: 14px;
+    background: var(--fundo-2);
+}
+.nr-review__label { font-size: var(--t-xs); color: var(--texto-2); }
+.nr-review__title { font-size: var(--t-md); font-weight: 600; }
+.nr-review__line { font-size: var(--t-sm); color: var(--texto); overflow-wrap: anywhere; }
+.nr-review__line b { color: var(--laranja-escuro); }
+.nr-review__text { font-size: var(--t-sm); color: #3F3F46; line-height: 1.45; }
+
+/* "O que acontece depois" (só no computador) */
+.nr-after { display: none; }
+
+/* ---------- Celular: passos e barra fixa ---------- */
+@media (max-width: 899.98px) {
+    .nr:not([data-step="1"]) .nr-sectors { display: none; }
+    .nr[data-step="1"] .nr-form { display: none; }
+    .nr[data-step="2"] [data-form-step="3"],
+    .nr[data-step="3"] [data-form-step="2"] { display: none; }
+    .nr-form .form-submit-bar { display: none; }
+
+    /* Fica logo acima da barra de navegação do app (e da área segura do iPhone) */
+    .nr-nav {
+        position: fixed;
+        left: 0; right: 0;
+        bottom: calc(var(--bottomnav-h) + env(safe-area-inset-bottom));
+        z-index: 40;
+        display: flex;
+        gap: 10px;
+        padding: 10px 16px;
+        background: var(--superficie);
+        border-top: 1px solid var(--linha);
+        box-shadow: 0 -4px 12px rgb(24 24 27 / .04);
+    }
+    .nr-nav .btn { min-height: var(--h-lg); border-radius: 14px; font-size: var(--t-md); font-weight: 600; }
+    .nr-nav__back { flex: none; padding: 0 20px; }
+    .nr-nav__next, .nr-nav__send { flex: 1; justify-content: center; font-size: 17px; }
+}
+
+/* ---------- Computador: tudo numa página ---------- */
+@media (min-width: 900px) {
+    .nr { padding-bottom: 0; gap: 24px; }
+    .nr-nav { display: none; }
+    .nr-head__back {
+        display: inline-flex; align-items: center; gap: 8px;
+        align-self: flex-start;
+        min-height: var(--h-md);
+        color: var(--texto-2); font-size: var(--t-sm); font-weight: 600; text-decoration: none;
+    }
+    .nr-head__back:hover { color: var(--texto); }
+    .nr-head__count, .nr-progress, .nr-head__title[data-step-title] { display: none; }
+    .nr-head__title--desk { display: block; font-size: 26px; letter-spacing: -0.02em; }
+
+    .nr-layout { flex-direction: row; flex-wrap: wrap; align-items: flex-start; gap: 24px; }
+    .nr-main { flex: 999 1 480px; }
+    .nr-after {
+        display: flex; flex-direction: column; gap: 14px;
+        flex: 1 1 260px;
+        position: sticky; top: calc(var(--topbar-h) + 24px);
+        padding: 20px;
+        background: var(--superficie);
+        border: 1px solid var(--linha);
+        border-radius: 14px;
+    }
+    .nr-after h2 { margin: 0; font-size: 15px; font-weight: 600; }
+    .nr-after ol { margin: 0; padding-left: 20px; display: flex; flex-direction: column; gap: 10px; font-size: var(--t-sm); line-height: 1.5; color: #3F3F46; }
+
+    .nr-sectors__title, .form-step__title { display: block; margin: 0 0 12px; font-size: 15px; font-weight: 600; }
+    .nr-sector-grid { grid-template-columns: repeat(auto-fill, minmax(170px, 1fr)); }
+    .type-card.nr-sector { min-height: 84px; }
+
+    .nr-form .form_request { gap: 24px; }
+    .nr-form .form-group > label, .nr-form .form-group > legend { font-size: var(--t-sm); }
+    .nr-form input[type="text"], .nr-form input[type="number"], .nr-form input[type="date"] { min-height: var(--h-md); font-size: var(--t-md); padding: 0 14px; }
+    .nr-form textarea { font-size: var(--t-md); padding: 12px 14px; }
+    .nr-form .date-field { flex-direction: row; flex-wrap: wrap; align-items: center; }
+    .nr-form .date-field input[type="date"] { width: auto; min-width: 200px; }
+    .nr-form .date-quick { display: flex; flex-wrap: wrap; }
+    .nr-form .date-quick .chip-btn { min-height: 44px; padding: 0 16px; font-size: var(--t-sm); }
+
+    .urgent-switch.check-line { justify-content: flex-start; }
+    .urgent-switch input[type="checkbox"] { order: -1; }
+    .urgent-switch__title { font-size: 15px; }
+    .urgent-switch__hint { font-size: 13px; }
+
+    .nr-review { display: none; }
+    .nr-form .form-submit-bar { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; }
+    .nr-form .form-submit-bar .btn { min-height: 46px; }
+}
+
+/* Troca de setor: se o formulário novo demorar, o atual esmaece (o atraso evita piscar quando é rápido) */
+#dynamicForm { transition: opacity var(--dur-1); }
+#dynamicForm[aria-busy="true"] { opacity: .5; transition-delay: .2s; pointer-events: none; }

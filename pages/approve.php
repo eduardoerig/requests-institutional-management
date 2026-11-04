@@ -1,216 +1,113 @@
 <?php
-require_once __DIR__ . '/../classes/RequestManager.php';
+/**
+ * Aprovar pedidos (UI 2.0).
+ * Celular: um pedido por vez em cartão grande (urgentes primeiro), progresso "X de Y decididos"
+ * e Recusar/Aprovar fixos acima da barra inferior. Computador (≥900px): grade de 3 colunas, faixa
+ * vermelha com prioridade e motivo nos urgentes e Recusar | Aprovar no rodapé do cartão.
+ * A decisão espera ~5 s com "Desfazer" antes de ir para api/approve_request.php (assets/js/pages/approve.js):
+ * no próprio cartão (computador e lista) ou no aviso fixo (celular, um por vez).
+ * A aprovação em lote (caixas de seleção + barra de lote do script.js) continua igual.
+ */
+require_once __DIR__ . '/../classes/RequestInbox.php';
+require_once __DIR__ . '/../components/request_card.php';
 
 $role = $_SESSION['role'] ?? 'solicitante';
-$user_id = $_SESSION['id'] ?? 0;
-
-$adminRoles = ['admin', 'adm'];
-$gestorRoles = ['gestor', 'ti', 'xerox', 'service', 'shop', 'mkt', 'marketing'];
-
-$isAdmin = in_array($role, $adminRoles);
+$isAdmin = isGlobalAdminRole($role);
 $isAdmSub = ($role === 'adm_sub');
-$isGestor = in_array($role, $gestorRoles);
-$canApprove = $isAdmin; // Apenas admin e adm aprovam agora
 
-if (!$canApprove) {
-    echo '<div class="main"><div class="empty-state"><i class="fa-solid fa-lock"></i><p>Você não tem permissão para acessar esta página.<br>Apenas administradores podem aprovar requisições.</p></div></div>';
-    exit;
+if (!$isAdmin && !$isAdmSub) {
+    echo '<div class="panel"><div class="empty-big"><i class="fa-solid fa-lock"></i><h2>Sem acesso</h2><p>Somente a coordenação e os administradores aprovam pedidos.</p><a class="btn" href="home"><i class="fa-solid fa-arrow-left"></i> Voltar ao início</a></div></div>';
+    return;
 }
 
-$managingId = null; // Admin vê tudo para aprovação
+// Coordenação aprova só a própria subdivisão; admin geral aprova tudo
 $subdivisionFilter = $isAdmSub ? ($_SESSION['subdivision_ids'] ?? null) : null;
+$sector = (string)($_GET['setor'] ?? '');
+$q = mb_substr(trim((string)($_GET['q'] ?? '')), 0, 100);
+$approvals = RequestInbox::approvals($pdo, $subdivisionFilter, $sector, $q, (int)($_SESSION['id'] ?? 0));
+$rows = $approvals['rows'];
+$total = count($approvals['all']);
+$urgentCount = count(array_filter($approvals['all'], fn($r) => !empty($r['is_urgent'])));
 
-$data = RequestManager::getRequests($pdo, null, $managingId, 'P', null, null, 'DESC', [], null, null, $subdivisionFilter);
-$requests = $data['requests'] ?? [];
-$totalPendentes = count($requests);
-
-$map = [
-    'mkt' => 'gray',
-    'xerox' => 'blue',
-    'shop' => 'green',
-    'service' => 'yellow',
-    'ti' => 'red',
-];
-
-$sectorNames = [
-    'mkt' => 'MKT',
-    'xerox' => 'Reprografia',
-    'shop' => 'Compras',
-    'service' => 'Manutenção',
-    'ti' => 'TI',
-];
-
-// Pegar setores permitidos para os botões de rádio
-$allowedSectors = [];
-if ($user_id) {
-    $stmtSectors = $pdo->prepare("SELECT LOWER(a.title) FROM ctd_area a JOIN cfg_user_area cua ON a.id = cua.id_area WHERE cua.id_user = ?");
-    $stmtSectors->execute([$user_id]);
-    $allowedSectors = $stmtSectors->fetchAll(PDO::FETCH_COLUMN);
+$sectors = [];
+foreach ($approvals['all'] as $r) {
+    $sectors[$r['table']] = requestSectorName($r['table']);
 }
-if (!is_array($allowedSectors)) $allowedSectors = [];
+asort($sectors);
+
+$listParams = array_filter(['setor' => $sector !== '' ? $sector : null, 'q' => $q !== '' ? $q : null]);
+$rowLink = fn(array $row) => 'request_detail?' . http_build_query(['id' => (int)$row['id'], 'table' => $row['table'], 'from' => 'approve'] + $listParams);
+
 ?>
-    <div class="main">
-        <div class="page-header">
-            <div>
-                <i class="fa-solid fa-clipboard-check"></i>
-                <div>
-                    <h3>Aprovar Requisições</h3>
-                    <p style="font-size: 0.85rem; color: var(--text-muted); margin: 2px 0 0;">
-                        <?= $totalPendentes ?> requisição(ões) aguardando aprovação
-                    </p>
-                </div>
-            </div>
-            <?php if ($totalPendentes > 0): ?>
-                <span class="flow-count-header"><?= $totalPendentes ?> pendente<?= $totalPendentes > 1 ? 's' : '' ?></span>
-            <?php endif; ?>
+<div class="page-head page-head--hide-mobile">
+    <h1>Aprovar pedidos</h1>
+</div>
+
+<div class="toolbar approve-toolbar" data-sync="approve-sub"<?= $total === 0 ? ' hidden' : '' ?>>
+    <?php // "N aguardando decisão · X enviando · urgentes primeiro"; approve.js atualiza N e X enquanto há decisões esperando o Desfazer ?>
+    <p class="toolbar__text approve-summary" data-approve-summary data-total="<?= $total ?>" aria-live="polite">
+        <strong data-summary-waiting><?= $total ?> aguardando decisão</strong><span class="approve-summary__sending" data-summary-sending hidden></span><?php if ($urgentCount > 0): ?><span> · urgentes primeiro</span><?php endif; ?>
+    </p>
+    <?php if ($total > 0): ?>
+    <form method="get" action="approve" class="toolbar__filters" role="search">
+        <?php if (count($sectors) > 1): ?>
+            <select name="setor" aria-label="Setor" onchange="this.form.submit()">
+                <option value="">Todos os setores</option>
+                <?php foreach ($sectors as $slug => $label): ?>
+                    <option value="<?= e($slug) ?>" <?= $sector === $slug ? 'selected' : '' ?>><?= e($label) ?></option>
+                <?php endforeach; ?>
+            </select>
+        <?php endif; ?>
+        <div class="search-box">
+            <i class="fas fa-search" aria-hidden="true"></i>
+            <input type="search" name="q" value="<?= e($q) ?>" placeholder="Título, número ou nome" aria-label="Buscar">
         </div>
+    </form>
+    <?php endif; ?>
+</div>
 
-        <div class="filter_req">
-            <div class="left_group">
-                <div style="display: flex; gap: 24px; align-items: center; flex-wrap: wrap; width: 100%;">
-                    <!-- Filtro de Setor -->
-                    <div style="display: flex; flex-direction: column; gap: 4px;">
-                        <span style="font-size: 0.7rem; color: var(--text-muted); font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px;">Filtrar por Setor</span>
-                        <div class="radio_field">
-                            <?php 
-                            $activeSectors = array_unique(array_column($requests, 'table'));
-                            foreach ($sectorNames as $slug => $name): 
-                                if (in_array($slug, $activeSectors)):
-                                    // Se não for admin nem adm_sub, só mostra se estiver nos allowedSectors
-                                    if (!$isAdmin && !$isAdmSub && !in_array($slug, $allowedSectors)) continue;
-                            ?>
-                                <input type="radio" value="<?= $slug ?>" name="tipo" class="radioType" data-tooltip="<?= $name ?>">
-                            <?php 
-                                endif;
-                            endforeach; 
-                            ?>
-                            <input type="radio" value="all" name="tipo" class="radioType" data-tooltip="Todas req" checked>
-                        </div>
-                    </div>
-
-                    <!-- Busca -->
-                    <div style="flex: 1; min-width: 200px; display: flex; flex-direction: column; gap: 4px;">
-                        <span style="font-size: 0.7rem; color: var(--text-muted); font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px;">Busca</span>
-                        <div class="search_input" style="width: 100%; margin: 0;">
-                            <i class="fas fa-search"></i>
-                            <input type="text" placeholder="Pesquisar título..." id="campoPesquisa">
-                        </div>
-                    </div>
-
-                    <!-- Filtro de Data -->
-                    <div style="display: flex; flex-direction: column; gap: 4px;">
-                        <span style="font-size: 0.7rem; color: var(--text-muted); font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px;">Data</span>
-                        <input type="date" id="dataFiltro" style="padding: 6px 12px; border-radius: 6px; border: 1px solid var(--border-color); outline: none; background: #fff; color: var(--text-muted); font-family: var(--font-sans); font-size: 0.85rem; cursor: pointer; height: 38px; box-shadow: var(--shadow-sm);">
-                    </div>
-                </div>
-            </div>
-            <div class="order_icon" id="orderIcon" data-order="desc">
-                <i class="fas fa-sort-amount-down"></i>
-            </div>
-        </div>
-        <div class="inbox-split-layout">
-            <!-- Esquerda: Lista de Requisições -->
-            <div class="request_list_container">
-                <div class="card-wrapper-scroll">
-                    <?php
-                    // Pre-carregar subdivisões do adm_sub (evitar N+1 queries)
-                    $mySubData = [];
-                    if ($isAdmSub && $user_id) {
-                        $mySubSlugsStmt = $pdo->prepare("SELECT s.slug, s.name FROM ctd_subdivision s JOIN cfg_user_subdivision cus ON s.id = cus.id_subdivision WHERE cus.id_user = ?");
-                        $mySubSlugsStmt->execute([$user_id]);
-                        $mySubData = $mySubSlugsStmt->fetchAll(PDO::FETCH_KEY_PAIR); // slug => name
-                    }
-
-                    if (count($requests) > 0) {
-                        foreach ($requests as $row) {
-                            $urgentMark = !empty($row['urgent']) ? '<span class="req_alert">!</span>' : '';
-                            $cardClass = isset($map[$row['table']]) ? $map[$row['table']] : 'gray';
-                            $pri = $row['priority'] ?? 2;
-                            $priBadge = '';
-                            if ($pri == 4) $priBadge = '<span class="card-priority critical"><i class="fa-solid fa-fire-extinguisher"></i></span>';
-                            elseif ($pri == 3) $priBadge = '<span class="card-priority high"><i class="fa-solid fa-angles-up"></i></span>';
-                            
-                            $sectorBadge = '<span class="card-sector-tag">' . ($sectorNames[$row['table']] ?? '') . '</span>';
-                            $subBadge = '';
-                            if ($isAdmSub && !empty($row['all_subdivision_slugs']) && !empty($mySubData)) {
-                                // Para adm_sub: mostra apenas as subdivisões que ele gerencia
-                                $allSlugs = explode(',', $row['all_subdivision_slugs']);
-                                
-                                $matchedBadges = [];
-                                foreach ($allSlugs as $slug) {
-                                    $slug = trim($slug);
-                                    if (isset($mySubData[$slug])) {
-                                        $matchedBadges[] = '<span class="badge-subdivision badge-sub-' . $slug . '">' . htmlspecialchars($mySubData[$slug]) . '</span>';
-                                    }
-                                }
-                                $subBadge = implode(' ', $matchedBadges);
-                                
-                                // Fallback: se não achou nenhuma em comum, mostra a da requisição
-                                if (empty($subBadge) && !empty($row['subdivision_name'])) {
-                                    $subBadge = '<span class="badge-subdivision badge-sub-' . ($row['subdivision_slug'] ?? 'default') . '">' . htmlspecialchars($row['subdivision_name']) . '</span>';
-                                }
-                            } elseif (!empty($row['subdivision_name'])) {
-                                $subBadge = '<span class="badge-subdivision badge-sub-' . ($row['subdivision_slug'] ?? 'default') . '">' . htmlspecialchars($row['subdivision_name']) . '</span>';
-                            }
-                            
-                            $rd = $row['date'] ?? '';
-                            $prazoBadge = getPrazoBadge($rd, $row['status'] ?? 'P');
-                            echo '
-                                <div class="card_req ' . $cardClass . '" data-id="' . $row['id'] . '" data-table="' . $row['table'] . '">
-                                    <div class="card_header">
-                                        <span class="req_nome">Requisição ' . strtoupper($sectorNames[$row['table']] ?? $row['table'] ?? '') . ' #' . $row['id'] . '</span>
-                                        <div style="display:flex; gap:6px; align-items:center;">' . $priBadge . $urgentMark . '</div>
-                                    </div>
-                                    <div class="card_title">' . htmlspecialchars($row['title'] ?? 'Sem Título') . '</div>
-                                    <div style="display:flex; justify-content:space-between; align-items:center; margin-top:8px; flex-wrap:wrap; gap:6px;">
-                                        <div class="card_date" style="display:flex; align-items:center;">' . $prazoBadge . '</div>
-                                        <div style="display:flex; gap:6px; align-items:center;">' . $sectorBadge . '</div>
-                                    </div>
-                                </div>
-                            ';
-                        }
-                    } else {
-                        echo '<div class="empty-state"><i class="fa-solid fa-inbox"></i><p>Nenhuma requisição pendente encontrada.</p><p style="font-size:0.85rem; color:var(--text-muted);">Todas as requisições foram analisadas! 🎉</p></div>';
-                    }
-                    ?>
-                </div>
-            </div>
-
-            <!-- Direita: Visualização Detalhada da Requisição -->
-            <div class="form-container-embedded">
-                <form class="modal_req_embedded" id="modalReqCard" style="display: none;">
-                    <input type="hidden" class="Rtype">
-                    <input type="hidden" class="Rid">
-
-                    <div class="modal_header">
-                        <span class="modal_nome" id="modalNome">Solicitação</span>
-                        <span class="modal_alert" style="display: none;">!</span>
-                    </div>
-
-                    <div class="modal_title" id="modalTitle">Título da Requisição</div>
-
-                    <div class="modal_descp" id="modalDescp">Descrição da Requisição</div>
-
-                    <div class="modal_obs" id="modalObs">OBS</div>
-
-                    <div class="modal_date" id="modalDate1">Data</div>
-                    <div class="modal_date" id="modalDate">Data</div>
-
-                    <div class="modal_actions">
-                        <button type="submit" class="btn_ok" value="Y">
-                            <i class="fas fa-check" style="margin-right:6px;"></i> Aprovar
-                        </button>
-                        <button type="submit" class="btn_x" value="N">
-                            <i class="fas fa-xmark" style="margin-right:6px;"></i> Reprovar
-                        </button>
-                    </div>
-                </form>
-
-                <div class="empty-state" id="modalEmptyState">
-                    <i class="fa-solid fa-clipboard-check" style="color: #94a3b8;"></i>
-                    <p>Nenhuma requisição selecionada</p>
-                    <p style="font-size: 0.83rem; color: var(--text-muted); margin-top: 4px;">Selecione uma requisição ao lado para analisar os detalhes e aprovar ou reprovar.</p>
-                </div>
-            </div>
-        </div>
+<?php if ($rows): ?>
+<div class="approve-progress" data-approve-progress>
+    <div class="approve-progress__row">
+        <span class="approve-progress__text" data-progress-text aria-live="polite">0 de <?= count($rows) ?> decididos</span>
+        <button type="button" class="btn btn--ghost btn--sm approve-progress__toggle" data-deck-toggle aria-pressed="false">Ver todos</button>
     </div>
+    <div class="approve-progress__track" aria-hidden="true"><span data-progress-bar></span></div>
+</div>
+<?php endif; ?>
+
+<section class="queue approve-deck" data-queue data-approve-deck data-url="<?= e('approve' . ($listParams ? '?' . http_build_query($listParams) : '')) ?>" aria-label="Pedidos aguardando aprovação">
+    <?php if ($q !== '' || $sector !== ''): ?>
+        <p class="queue__note"><?= count($rows) ?> de <?= $total ?> pedidos. <a href="approve">Limpar filtros</a></p>
+    <?php endif; ?>
+    <?php if ($rows): ?>
+        <div class="approve-pickall">
+            <label><input type="checkbox" data-pick-all> Selecionar todos</label>
+            <span class="approve-pickall__hint">para aprovar ou recusar vários de uma vez</span>
+        </div>
+        <ul class="approve-list">
+            <?php foreach ($rows as $row): ?>
+                <?= renderApproveCard($row, ['href' => $rowLink($row), 'check' => true]) ?>
+            <?php endforeach; ?>
+        </ul>
+        <p class="approve-next" data-next-hint aria-live="polite"></p>
+        <div class="empty-state approve-done" data-approve-done hidden><i class="fa-regular fa-circle-check" aria-hidden="true"></i><p><strong>Tudo em dia.</strong> Nenhum pedido esperando sua decisão.</p></div>
+        <?= renderBulkBar(['approve' => ['Aprovar', 'btn--primary', 'fa-check'], 'refuse' => ['Recusar', '', 'fa-xmark']]) ?>
+    <?php else: ?>
+        <div class="empty-state"><i class="fa-regular fa-circle-check" aria-hidden="true"></i><p><?= $total === 0 ? 'Tudo em dia: nenhum pedido aguardando aprovação. Quando alguém pedir algo, o pedido aparece aqui e você recebe um aviso.' : 'Nada encontrado com esses filtros.' ?></p></div>
+    <?php endif; ?>
+</section>
+
+<?php if ($rows): ?>
+<!-- Celular: decisão do cartão atual, fixa acima da barra inferior -->
+<div class="approve-dock" data-approve-dock hidden>
+    <button type="button" class="btn approve-dock__refuse" data-dock="refuse">Recusar</button>
+    <button type="button" class="btn btn--primary approve-dock__approve" data-dock="approve">Aprovar</button>
+</div>
+<?php endif; ?>
+
+<!-- Aviso com Desfazer: a decisão só vai para o servidor quando ele some -->
+<div class="undo-toast" data-undo-toast role="status" aria-live="polite" hidden>
+    <span class="undo-toast__text" data-undo-text></span>
+    <button type="button" class="undo-toast__btn" data-undo>Desfazer</button>
+</div>

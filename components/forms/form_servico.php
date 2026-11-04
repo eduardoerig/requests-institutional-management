@@ -1,36 +1,41 @@
-<form class="form_request">
-
-    <p style="border-left-color: #eab308; color: #a16207; background: #fefce8;">Requisições de serviço são utilizadas para realizar a solicitação de atividades da manutenção ou de outro setor.</p>
-
+<form class="form_request" novalidate>
     <input type="hidden" name="type" value="service">
 
-    <div class="form-group">
-        <label for="title">Evento/atividade/título: </label>
-        <input type="text" name="title" id="title" required maxlength="60">
-        <span>Seja breve no título!</span>
+    <div class="form-step" data-form-step="2">
+        <h2 class="form-step__title">2. O que você precisa?</h2>
+        <div class="form-group">
+            <label for="title">Resumo em uma frase <span class="req">*</span></label>
+            <input type="text" name="title" id="title" required maxlength="80" placeholder="Ex.: Lâmpada queimada na sala 12">
+        </div>
+        <div class="form-group">
+            <label for="details">Detalhes <span class="req">*</span></label>
+            <textarea name="details" id="details" required rows="4" maxlength="5000" placeholder="Onde é, o que aconteceu e o que precisa ser feito."></textarea>
+        </div>
+        <div class="form-group date-group">
+            <label for="end">Para quando? <span class="req">*</span></label>
+            <div class="date-field">
+                <span class="date-quick" data-date-quick role="group" aria-label="Atalhos de prazo"></span>
+                <input type="date" name="end" id="end" required>
+            </div>
+            <p class="date-chosen" data-date-chosen aria-live="polite"></p>
+        </div>
     </div>
 
-    <div class="form-group">
-        <label for="end">Data de entrega: </label>
-        <input type="date" name="end" id="end" required>
+    <div class="form-step" data-form-step="3">
+        <h2 class="form-step__title">3. É urgente?</h2>
+<!--PRIORIDADE-->
+        <details class="form-more">
+            <summary>Mais alguma coisa? <small>(opcional)</small></summary>
+            <div class="form-group">
+                <label for="obs" class="visually-hidden">Observações</label>
+                <textarea name="obs" id="obs" rows="2" maxlength="2000" placeholder="Sala, horário, contato ou algo que ajude quem vai aprovar ou atender"></textarea>
+            </div>
+        </details>
+        <div class="nr-review" data-review></div>
     </div>
 
-    <div class="form-group">
-        <label for="details">Informações da requisição: </label>
-        <textarea name="details" id="details" required></textarea>
+    <div class="form-submit-bar">
+        <button type="submit"><i class="fa-solid fa-paper-plane" aria-hidden="true"></i> Enviar pedido</button>
+        <a class="btn" href="myRequests">Cancelar</a>
     </div>
-
-    <div class="checkbox_group">
-        <input type="checkbox" name="urgent" id="urgent">
-        <label for="urgent">Necessita ser adquirido com urgência (antes do prazo supracitado)</label>
-    </div>
-
-    <div class="form-group">
-        <label for="obs">Observações ou objetivo: </label>
-        <input type="text" name="obs" id="obs">
-        <span>Não obrigatório, porém interessante para o comitê de aprovação!</span>
-    </div>
-
-    <button type="submit">Enviar Requisição</button>
-
 </form>

@@ -1,1127 +1,502 @@
 <?php
-if (session_status() === PHP_SESSION_NONE) {
-    session_start();
+/**
+ * Usuários e setores (somente administrador geral).
+ * Pessoas: lista só de leitura; tocar/clicar abre a edição (folha no celular, painel lateral no PC).
+ * Setores: um cartão por setor com pedidos abertos e responsáveis.
+ * Comportamento em assets/js/pages/accounts.js; estilos em assets/css/pages/accounts.css.
+ */
+if (!isGlobalAdminRole($_SESSION['role'] ?? '')) {
+    echo '<div class="panel"><div class="empty-big"><i class="fa-solid fa-lock" aria-hidden="true"></i><h2>Sem acesso</h2><p>Somente administradores gerenciam usuários.</p></div></div>';
+    return;
 }
 
-if (!isset($_SESSION['id']) || !isset($_SESSION['role'])) { 
-    header("Location: ../index.php"); 
-    exit; 
-}
+// "Último acesso": coluna last_login_at (migração 003)
+$accHasLastLogin = true; // ctd_users.last_login_at (migração 003)
 
-// Buscar dados completos do usuário logado (Apenas admins acessam esta página)
-if (!in_array($_SESSION['role'], ['admin', 'adm'])) {
-    echo '<div class="main"><p>Acesso negado.</p></div>';
-    exit;
-}
-
-// Buscar todos os usuários com seus respectivos setores (Concatenados para evitar duplicidade)
-$query_users = "
-    SELECT u.*,
-           GROUP_CONCAT(DISTINCT sub.id SEPARATOR ',') as all_subdivision_ids,
-           GROUP_CONCAT(DISTINCT sub.name SEPARATOR ', ') as all_subdivisions,
-           GROUP_CONCAT(DISTINCT a.title SEPARATOR ', ') as all_sectors
+// Pessoas (sem a senha), com áreas (subdivisões) e setores ligados
+$accUsers = $pdo->query("
+    SELECT u.id, u.name, u.login, u.phone, u.role, u.status" . ($accHasLastLogin ? ", u.last_login_at" : "") . ",
+           GROUP_CONCAT(DISTINCT cus.id_subdivision) AS sub_ids,
+           GROUP_CONCAT(DISTINCT cua.id_area) AS area_ids
     FROM ctd_users u
     LEFT JOIN cfg_user_subdivision cus ON u.id = cus.id_user
-    LEFT JOIN ctd_subdivision sub ON cus.id_subdivision = sub.id
     LEFT JOIN cfg_user_area cua ON u.id = cua.id_user
-    LEFT JOIN ctd_area a ON cua.id_area = a.id
     GROUP BY u.id
     ORDER BY u.name ASC
-";
-$all_users = $pdo->query($query_users)->fetchAll();
+")->fetchAll(PDO::FETCH_ASSOC);
 
-// Buscar todos os setores disponíveis
-$all_sectors = $pdo->query("SELECT * FROM ctd_area ORDER BY title ASC")->fetchAll();
-$all_subdivisions = $pdo->query("SELECT * FROM ctd_subdivision ORDER BY name ASC")->fetchAll();
+$accSubdivisions = [];
+foreach ($pdo->query("SELECT id, name FROM ctd_subdivision ORDER BY name ASC")->fetchAll(PDO::FETCH_ASSOC) as $row) {
+    $accSubdivisions[(int)$row['id']] = (string)$row['name'];
+}
+$accAreas = areaTitles($pdo);
+$accAreaDescriptions = areaDescriptions($pdo);
 
-$categories = [
-    'shop' => 'Compras',
-    'mkt' => 'Marketing',
-    'service' => 'Manutenção',
-    'xerox' => 'Reprografia',
-    'ti' => 'TI'
+// Setores de atendimento do sistema: o perfil (role) é o próprio setor. Ícones iguais aos de "Novo pedido".
+$accSectorMeta = sectorRegistry(); // label e icon de cada setor (config/sectors.php)
+$accKindMeta = [
+    'req'    => ['label' => 'Faz pedidos',     'icon' => 'fa-user',                'hint' => 'Professores e funcionários. Abrem e acompanham os próprios pedidos.'],
+    'coord'  => ['label' => 'Coordenação',     'icon' => 'fa-user-check',          'hint' => 'Aprova os pedidos da sua área antes de irem para os setores.'],
+    'sector' => ['label' => 'Atende um setor', 'icon' => 'fa-screwdriver-wrench',  'hint' => 'TI, Manutenção, Compras, Reprografia ou Marketing. Recebe e resolve os pedidos.'],
+    'admin'  => ['label' => 'Administrador',   'icon' => 'fa-user-shield',         'hint' => 'Vê tudo, aprova e cadastra pessoas e setores.'],
 ];
 
-$role_labels = [
-    'admin' => 'Administrador',
-    'adm_sub' => 'Admin de Subdivisão',
-    'ti' => 'Gestor de TI',
-    'xerox' => 'Gestor de Reprografia',
-    'service' => 'Gestor de Manutenção',
-    'shop' => 'Gestor de Compras',
-    'mkt' => 'Gestor de Marketing',
-    'solicitante' => 'Solicitante'
+$accKindOf = function (string $role): string {
+    if (isGlobalAdminRole($role)) return 'admin';
+    if ($role === 'adm_sub') return 'coord';
+    if (isGestorRole($role)) return 'sector';
+    return 'req';
+};
+$accAreaLabel = function (string $title) use ($accSectorMeta): string {
+    $key = areaTitleToSector($title);
+    return $key !== null && isset($accSectorMeta[$key]) ? $accSectorMeta[$key]['label'] : $title;
+};
+$accInitials = function (string $name): string {
+    $parts = preg_split('/\s+/u', trim($name), -1, PREG_SPLIT_NO_EMPTY) ?: ['?'];
+    $first = mb_substr($parts[0], 0, 1);
+    $last = count($parts) > 1 ? mb_substr($parts[count($parts) - 1], 0, 1) : '';
+    return mb_strtoupper($first . $last);
+};
+$accLastLabel = function (?string $value) use ($accHasLastLogin): string {
+    if (!$accHasLastLogin) return '—';
+    if (empty($value)) return 'nunca entrou';
+    try {
+        $when = new DateTimeImmutable($value);
+    } catch (Exception $e) {
+        return '—';
+    }
+    $days = (int)$when->setTime(0, 0)->diff(new DateTimeImmutable('today'))->format('%r%a');
+    if ($days <= 0) return 'hoje';
+    if ($days === 1) return 'ontem';
+    if ($days <= 30) return 'há ' . $days . ' dias';
+    return $when->format('d/m/Y');
+};
+
+// Monta cada pessoa uma vez: a lista (PHP) e a edição (JS) usam os mesmos dados
+$accPeople = [];
+$accCounts = ['active' => 0, 'inactive' => 0];
+foreach ($accUsers as $row) {
+    $role = (string)$row['role'];
+    $kind = $accKindOf($role);
+    $sector = roleDefaultSector($role);
+    $subIds = array_values(array_filter(array_map('intval', explode(',', (string)($row['sub_ids'] ?? '')))));
+    $areaIds = array_values(array_filter(array_map('intval', explode(',', (string)($row['area_ids'] ?? '')))));
+    $subNames = array_values(array_filter(array_map(fn($id) => $accSubdivisions[$id] ?? null, $subIds)));
+
+    if ($kind === 'sector') {
+        $roleLabel = 'Setor de ' . ($accSectorMeta[$sector]['label'] ?? 'TI');
+        $roleIcon = $accSectorMeta[$sector]['icon'] ?? $accKindMeta['sector']['icon'];
+        $where = $accSectorMeta[$sector]['label'] ?? '';
+    } else {
+        $roleLabel = $kind === 'req' && !in_array($role, ['solicitante', ''], true) ? $role : $accKindMeta[$kind]['label'];
+        $roleIcon = $accKindMeta[$kind]['icon'];
+        $where = $kind === 'admin' ? 'Tudo' : implode(', ', $subNames);
+    }
+
+    $active = (int)($row['status'] ?? 1) === 1;
+    $accCounts[$active ? 'active' : 'inactive']++;
+    $accPeople[] = [
+        'id' => (int)$row['id'],
+        'name' => (string)$row['name'],
+        'login' => (string)$row['login'],
+        'phone' => (string)($row['phone'] ?? ''),
+        'role' => $role,
+        'kind' => $kind,
+        'sector' => $sector,
+        'roleLabel' => $roleLabel,
+        'roleIcon' => $roleIcon,
+        'where' => $where,
+        'active' => $active,
+        'subs' => $subIds,
+        'areas' => $areaIds,
+        'last' => $accLastLabel($row['last_login_at'] ?? null),
+        'initials' => $accInitials((string)$row['name']),
+    ];
+}
+
+// Pedidos abertos por setor do sistema (aprovados aguardando ou em atendimento): uma consulta só
+$accOpen = [];
+try {
+    $parts = [];
+    foreach (allowedRequestTables() as $table) {
+        $parts[] = "SELECT ? AS sector, COUNT(*) AS total FROM `ctd_{$table}_frm` WHERE status IN ('Y', 'W')";
+    }
+    $stmtOpen = $pdo->prepare(implode(' UNION ALL ', $parts));
+    $stmtOpen->execute(allowedRequestTables());
+    foreach ($stmtOpen->fetchAll(PDO::FETCH_ASSOC) as $row) {
+        $accOpen[(string)$row['sector']] = (int)$row['total'];
+    }
+} catch (PDOException $e) {
+    error_log('accounts.php (pedidos abertos): ' . $e->getMessage());
+}
+
+// Setores com seus responsáveis ativos e quem pode ser adicionado
+$accSectorCards = [];
+foreach ($accAreas as $areaId => $title) {
+    $key = areaTitleToSector($title);
+    $isSystem = $key !== null && isset($accSectorMeta[$key]);
+    $resp = [];
+    $eligible = [];
+    foreach ($accPeople as $p) {
+        if (!$p['active']) continue;
+        if (in_array($areaId, $p['areas'], true)) {
+            $resp[] = $p + ['byRole' => $p['sector'] !== null && $p['sector'] === $key];
+        } elseif ($p['kind'] === 'sector' || $p['kind'] === 'admin') {
+            $eligible[] = $p;
+        }
+    }
+    $accSectorCards[] = [
+        'id' => $areaId,
+        'label' => $accAreaLabel($title),
+        'description' => $accAreaDescriptions[$areaId] ?? '',
+        'icon' => $isSystem ? $accSectorMeta[$key]['icon'] : 'fa-building',
+        'system' => $isSystem,
+        'open' => $isSystem ? ($accOpen[$key] ?? null) : null,
+        'resp' => $resp,
+        'eligible' => $eligible,
+    ];
+}
+
+$accScheme = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off') ? 'https' : 'http';
+$accAppUrl = $accScheme . '://' . ($_SERVER['HTTP_HOST'] ?? 'localhost') . ($basePath ?? '/');
+
+$accData = [
+    'people' => array_map(fn($p) => array_diff_key($p, ['roleIcon' => 1]), $accPeople),
+    'subdivisions' => array_map(fn($id, $name) => ['id' => $id, 'name' => $name], array_keys($accSubdivisions), $accSubdivisions),
+    'sectors' => array_map(fn($k, $m) => ['key' => $k, 'label' => $m['label']], array_keys($accSectorMeta), $accSectorMeta),
+    'me' => (int)($_SESSION['id'] ?? 0),
+    'appUrl' => $accAppUrl,
+    'orgName' => orgSetting('org_name'),
 ];
-
-// Mapeamento estendido para exibir nomes de perfis legados no banco de dados
-$full_role_labels = array_merge($role_labels, [
-    'gestor' => 'Gestor de TI',
-    'marketing' => 'Gestor de Marketing'
-]);
-
 ?>
-<div class="main" style="max-width: 1300px; margin: 0 auto; padding: 20px;">
-
-    <!-- 1. Header da Página -->
-    <div class="page-header">
-        <div style="display: flex; align-items: center; gap: 15px;">
-            <div style="background: var(--primary); color: white; width: 50px; height: 50px; border-radius: 12px; display: flex; align-items: center; justify-content: center; font-size: 1.5rem; box-shadow: 0 4px 12px rgba(124, 58, 237, 0.2);">
-                <i class="fa-solid fa-users-gear"></i>
-            </div>
-            <div>
-                <h3>Gestão de Contas</h3>
-                <p style="margin: 5px 0 0; font-size: 0.9rem; color: var(--text-muted);">Controle centralizado de usuários, permissões e setores do sistema.</p>
-            </div>
+<div class="acc" id="accApp">
+    <header class="acc-head">
+        <div class="acc-head__title">
+            <h1>Usuários e setores</h1>
+            <p>Quem usa o sistema, o que cada pessoa faz e quem responde por cada setor.</p>
         </div>
-        <a href="api/export_accounts_csv.php" class="btn-primary" style="background: #1e293b; width: auto; padding: 0 20px; height: 42px; display: flex; align-items: center; gap: 8px; font-size: 0.85rem;">
-            <i class="fa-solid fa-file-csv"></i> Exportar CSV
-        </a>
+        <div class="acc-head__actions">
+            <a href="api/export_accounts_csv.php" class="btn acc-head__export" download><i class="fa-solid fa-file-csv" aria-hidden="true"></i> Exportar planilha</a>
+            <button type="button" class="btn btn--primary" data-acc-action="new-person"><i class="fa-solid fa-user-plus" aria-hidden="true"></i> Nova pessoa</button>
+        </div>
+    </header>
+
+    <div class="acc-tabs" role="tablist" aria-label="Seção">
+        <button type="button" class="acc-tab is-active" role="tab" id="accTabPeople" aria-controls="accPanelPeople" aria-selected="true" data-acc-tab="pessoas">
+            <i class="fa-solid fa-users" aria-hidden="true"></i> Pessoas · <?= count($accPeople) ?>
+        </button>
+        <button type="button" class="acc-tab" role="tab" id="accTabSectors" aria-controls="accPanelSectors" aria-selected="false" tabindex="-1" data-acc-tab="setores">
+            <i class="fa-solid fa-building" aria-hidden="true"></i> Setores · <?= count($accSectorCards) ?>
+        </button>
     </div>
 
-    <!-- 2. Grid de Três Colunas (Ações Rápidas) -->
-    <div class="actions-grid" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(350px, 1fr)); gap: 20px; margin-bottom: 30px;">
-
-        <!-- Card: Criar Novo Setor -->
-        <div class="card" style="border-left: 4px solid #8b5cf6;">
-            <div class="card-header" style="padding: 15px 20px; border-bottom: 1px solid var(--border-color);">
-                <h4 style="margin: 0; font-size: 0.95rem; color: var(--text-main); display: flex; align-items: center; gap: 10px;">
-                    <i class="fa-solid fa-folder-plus" style="color: #8b5cf6;"></i> Criar Novo Setor
-                </h4>
-            </div>
-            <div class="card-body" style="padding: 20px;">
-                <form id="formCreateSector">
-                    <div style="display: flex; gap: 10px;">
-                        <input type="text" name="sector_title" placeholder="Ex: financeiro, rh..." required
-                               style="padding: 10px 14px; border: 1px solid var(--border-color); border-radius: 8px; outline: none; flex: 1; font-size: 0.85rem;">
-                        <button type="submit" class="btn-primary" style="width: auto; background: #8b5cf6; padding: 0 15px; border-radius: 8px;">
-                            <i class="fa-solid fa-plus"></i>
-                        </button>
-                    </div>
-                </form>
-            </div>
-        </div>
-
-        <!-- Card: Setores Cadastrados -->
-        <div class="card" style="border-left: 4px solid #6366f1;">
-            <div class="card-header" style="padding: 15px 20px; border-bottom: 1px solid var(--border-color);">
-                <h4 style="margin: 0; font-size: 0.95rem; color: var(--text-main); display: flex; align-items: center; gap: 10px;">
-                    <i class="fa-solid fa-tags" style="color: #6366f1;"></i> Setores Cadastrados
-                </h4>
-            </div>
-            <div class="card-body" style="padding: 15px 20px; max-height: 100px; overflow-y: auto;">
-                <div style="display: flex; flex-wrap: wrap; gap: 8px;">
-                    <?php foreach($all_sectors as $s):
-                        $label = $categories[$s['title']] ?? ucfirst($s['title']);
-                    ?>
-                        <span style="background: #f1f5f9; padding: 4px 10px; border-radius: 6px; font-size: 0.75rem; font-weight: 600; color: #475569; border: 1px solid #e2e8f0; display: flex; align-items: center; gap: 6px;">
-                            <?= $label ?>
-                            <i class="fa-solid fa-times" onclick="deleteSector(<?= $s['id'] ?>)" style="cursor: pointer; opacity: 0.6; hover: opacity: 1;"></i>
-                        </span>
-                    <?php endforeach; ?>
-                </div>
-            </div>
-        </div>
-
-        <!-- Card: Vincular Responsável -->
-        <div class="card" style="border-left: 4px solid var(--primary);">
-            <div class="card-header" style="padding: 15px 20px; border-bottom: 1px solid var(--border-color);">
-                <h4 style="margin: 0; font-size: 0.95rem; color: var(--text-main); display: flex; align-items: center; gap: 10px;">
-                    <i class="fa-solid fa-link" style="color: var(--primary);"></i> Vincular Responsável
-                </h4>
-            </div>
-            <div class="card-body" style="padding: 20px;">
-                <form id="formAssignSector">
-                    <div style="display: grid; grid-template-columns: 1fr 1fr auto; gap: 10px;">
-                        <select name="user_id" required style="padding: 10px; border: 1px solid var(--border-color); border-radius: 8px; background: #fff; font-size: 0.8rem;">
-                            <option value="">Usuário...</option>
-                            <?php foreach($all_users as $u): ?>
-                                <option value="<?= $u['id'] ?>"><?= htmlspecialchars($u['name']) ?></option>
-                            <?php endforeach; ?>
-                        </select>
-                        <select name="sector_id" required style="padding: 10px; border: 1px solid var(--border-color); border-radius: 8px; background: #fff; font-size: 0.8rem;">
-                            <option value="">Setor...</option>
-                            <?php foreach($all_sectors as $s):
-                                $label = $categories[$s['title']] ?? ucfirst($s['title']);
-                            ?>
-                                <option value="<?= $s['id'] ?>"><?= $label ?></option>
-                            <?php endforeach; ?>
-                        </select>
-                        <button type="submit" class="btn-primary" style="height: 38px; width: 38px; border-radius: 8px; padding: 0;">
-                            <i class="fa-solid fa-link"></i>
-                        </button>
-                    </div>
-                </form>
-            </div>
-        </div>
-    </div>
-
-    <!-- 3. Card Cadastrar Novo Usuário (Largura Total - Expansivo) -->
-    <div class="card" style="border-left: 4px solid #10b981; margin-bottom: 30px;">
-        <div class="card-header" style="padding: 15px 20px; border-bottom: 1px solid var(--border-color);">
-            <h4 style="margin: 0; font-size: 1rem; color: var(--text-main); display: flex; align-items: center; gap: 10px;">
-                <i class="fa-solid fa-user-plus" style="color: #10b981;"></i> Cadastrar Novo Usuário
-            </h4>
-        </div>
-        <div class="card-body" style="padding: 20px;">
-            <form id="formCreateUser">
-                <div style="display: grid; grid-template-columns: 2fr 1fr 1fr 1fr 1fr 1fr; gap: 15px; align-items: start;">
-                    <div style="display: flex; flex-direction: column; gap: 5px;">
-                        <label style="font-size: 0.75rem; font-weight: 700; color: var(--text-muted);">NOME COMPLETO</label>
-                        <input type="text" name="new_name" placeholder="Nome do usuário" required style="padding: 11px; border: 1px solid var(--border-color); border-radius: 8px; font-size: 0.85rem;">
-                    </div>
-                    <div style="display: flex; flex-direction: column; gap: 5px;">
-                        <label style="font-size: 0.75rem; font-weight: 700; color: var(--text-muted);">LOGIN</label>
-                        <input type="text" name="new_login" placeholder="Ex: joao.silva" required style="padding: 11px; border: 1px solid var(--border-color); border-radius: 8px; font-size: 0.85rem;">
-                    </div>
-                    <div style="display: flex; flex-direction: column; gap: 5px;">
-                        <label style="font-size: 0.75rem; font-weight: 700; color: var(--text-muted);">SENHA INICIAL</label>
-                        <input type="password" name="new_password" placeholder="******" required style="padding: 11px; border: 1px solid var(--border-color); border-radius: 8px; font-size: 0.85rem;">
-                    </div>
-                    <div style="display: flex; flex-direction: column; gap: 5px;">
-                        <label style="font-size: 0.75rem; font-weight: 700; color: var(--text-muted);">WHATSAPP <i class="fa-brands fa-whatsapp" style="color:#25d366;"></i></label>
-                        <input type="text" name="new_phone" placeholder="5511999998888" maxlength="20" style="padding: 11px; border: 1px solid var(--border-color); border-radius: 8px; font-size: 0.85rem;" title="Formato internacional sem + (ex: 5511999998888)">
-                    </div>
-                    <div style="display: flex; flex-direction: column; gap: 5px;">
-                        <label style="font-size: 0.75rem; font-weight: 700; color: var(--text-muted);">PERFIL DE ACESSO</label>
-                        <select name="new_role" required style="padding: 11px; border: 1px solid var(--border-color); border-radius: 8px; background: #fff; font-size: 0.85rem;">
-                            <?php foreach($role_labels as $key => $label): ?>
-                                <option value="<?= $key ?>"><?= $label ?></option>
-                            <?php endforeach; ?>
-                        </select>
-                    </div>
-                    <div style="display: flex; flex-direction: column; gap: 5px;" id="subdivisionContainer">
-                        <label style="font-size: 0.75rem; font-weight: 700; color: var(--text-muted); display: flex; justify-content: space-between; align-items: center;">
-                            SUBDIVISÃO
-                            <button type="button" onclick="addSubdivisionField()" style="background: var(--primary); color: white; border: none; border-radius: 4px; padding: 2px 6px; font-size: 0.7rem; cursor: pointer;">
-                                <i class="fa-solid fa-plus"></i>
-                            </button>
-                        </label>
-                        <select name="new_subdivisions[]" style="padding: 11px; border: 1px solid var(--border-color); border-radius: 8px; background: #fff; font-size: 0.85rem;">
-                            <option value="">Nenhuma</option>
-                            <?php foreach($all_subdivisions as $sub): ?>
-                                <option value="<?= $sub['id'] ?>"><?= htmlspecialchars($sub['name']) ?></option>
-                            <?php endforeach; ?>
-                        </select>
-                    </div>
-                </div>
-                <div style="margin-top: 15px; display: flex; justify-content: space-between; align-items: center;">
-                    <label style="display: flex; align-items: center; gap: 10px; font-size: 0.85rem; color: var(--text-main); cursor: pointer;">
-                        <input type="checkbox" name="force_reset" value="1" style="width: 18px; height: 18px; accent-color: var(--primary);">
-                        Forçar redefinição de senha no próximo login
+    <!-- ===================== Pessoas ===================== -->
+    <section class="acc-panel" id="accPanelPeople" role="tabpanel" aria-labelledby="accTabPeople">
+        <div class="acc-people" id="accPeopleLayout">
+            <div class="acc-list">
+                <div class="acc-toolbar">
+                    <label class="acc-search">
+                        <i class="fa-solid fa-magnifying-glass" aria-hidden="true"></i>
+                        <span class="visually-hidden">Buscar pessoa</span>
+                        <input type="search" id="accSearch" placeholder="Buscar por nome ou usuário" autocomplete="off" autocapitalize="none">
                     </label>
-                    <button type="submit" class="btn-primary" style="width: auto; padding: 0 30px; background: #10b981; font-weight: 600;">
-                        <i class="fa-solid fa-plus-circle" style="margin-right: 8px;"></i> Criar Usuário
-                    </button>
+                    <div class="acc-filters" role="group" aria-label="Filtrar por perfil">
+                        <button type="button" class="acc-pill is-active" aria-pressed="true" data-acc-kind="all">Todos</button>
+                        <button type="button" class="acc-pill" aria-pressed="false" data-acc-kind="req"><i class="fa-solid fa-user" aria-hidden="true"></i> Fazem pedidos</button>
+                        <button type="button" class="acc-pill" aria-pressed="false" data-acc-kind="coord"><i class="fa-solid fa-user-check" aria-hidden="true"></i> Coordenação</button>
+                        <button type="button" class="acc-pill" aria-pressed="false" data-acc-kind="sector"><i class="fa-solid fa-screwdriver-wrench" aria-hidden="true"></i> Setores</button>
+                        <button type="button" class="acc-pill" aria-pressed="false" data-acc-kind="admin"><i class="fa-solid fa-user-shield" aria-hidden="true"></i> Admin</button>
+                    </div>
+                    <div class="acc-state-tabs" role="group" aria-label="Situação da conta">
+                        <button type="button" class="acc-state-tab is-active" aria-pressed="true" data-acc-state="active">Ativos · <span data-acc-count="active"><?= (int)$accCounts['active'] ?></span></button>
+                        <button type="button" class="acc-state-tab" aria-pressed="false" data-acc-state="inactive">Desativados · <span data-acc-count="inactive"><?= (int)$accCounts['inactive'] ?></span></button>
+                    </div>
                 </div>
-            </form>
-        </div>
-    </div>
 
-    <!-- 4. Card Contas Registradas -->
-    <div class="card" style="border-left: 4px solid var(--primary);">
-        <!-- Cabeçalho com filtros em linha, sem scroll -->
-        <div style="padding: 12px 16px; border-bottom: 1px solid var(--border-color); display: flex; align-items: center; gap: 8px; min-width: 0;">
-            <!-- Título fixo -->
-            <h4 style="margin: 0; font-size: 0.9rem; color: var(--text-main); display: flex; align-items: center; gap: 6px; white-space: nowrap; flex-shrink: 0;">
-                <i class="fa-solid fa-users" style="color: var(--primary);"></i>
-                Contas
-                <span id="userCount" style="background: var(--primary); color: #fff; font-size: 0.65rem; padding: 1px 7px; border-radius: 20px; font-weight: 700;"></span>
-            </h4>
-            <!-- Separador -->
-            <div style="width: 1px; height: 20px; background: var(--border-color); flex-shrink: 0;"></div>
-            <!-- Busca: cresce para preencher espaço disponível -->
-            <div style="position: relative; flex: 2; min-width: 80px;">
-                <i class="fa-solid fa-search" style="position: absolute; left: 9px; top: 50%; transform: translateY(-50%); color: var(--text-muted); font-size: 0.72rem; pointer-events:none;"></i>
-                <input type="text" id="userSearch" placeholder="Buscar..."
-                       style="padding: 6px 8px 6px 28px; border: 1px solid var(--border-color); border-radius: 7px; font-size: 0.78rem; outline: none; width: 100%; box-sizing: border-box;">
+                <div class="acc-rows-head" aria-hidden="true">
+                    <span>Pessoa</span><span>Perfil</span><span>Área ou setor</span><span><i class="fa-solid fa-clock"></i> Último acesso</span>
+                </div>
+                <ul class="acc-rows" id="accRows">
+                    <?php foreach ($accPeople as $p) { include __DIR__ . '/../partials/_account_row.php'; } ?>
+                </ul>
+                <p class="acc-empty" id="accEmpty" hidden>Ninguém com esse filtro.</p>
             </div>
-            <!-- Filtro de Perfil -->
-            <select id="roleFilter" style="flex: 1.5; min-width: 80px; padding: 6px 6px; border: 1px solid var(--border-color); border-radius: 7px; font-size: 0.78rem; outline: none; background: #fff; color: var(--text-muted); overflow: hidden; text-overflow: ellipsis;">
-                <option value="all">Todos os Perfis</option>
-                <?php foreach($role_labels as $key => $label): ?>
-                    <option value="<?= $key ?>"><?= $label ?></option>
-                <?php endforeach; ?>
-            </select>
-            <!-- Filtro de Subdivisão -->
-            <select id="subdivisionFilter" style="flex: 1.5; min-width: 80px; padding: 6px 6px; border: 1px solid var(--border-color); border-radius: 7px; font-size: 0.78rem; outline: none; background: #fff; color: var(--text-muted); overflow: hidden; text-overflow: ellipsis;">
-                <option value="all">Todas as Subdivisões</option>
-                <?php foreach($all_subdivisions as $sub): ?>
-                    <option value="<?= $sub['id'] ?>"><?= htmlspecialchars($sub['name']) ?></option>
-                <?php endforeach; ?>
-            </select>
-        </div>
 
-        <div style="overflow-x: auto; overflow-y: visible;">
-            <table id="tableUsers" style="width: 100%; border-collapse: collapse; font-size: 0.82rem;">
-                <thead>
-                    <tr style="background: #f8fafc; border-bottom: 2px solid var(--border-color);">
-                        <th class="ac-th">Usuário</th>
-                        <th class="ac-th">Login</th>
-                        <th class="ac-th">WhatsApp <i class="fa-brands fa-whatsapp" style="color:#25d366;"></i></th>
-                        <th class="ac-th">Perfil de Acesso</th>
-                        <th class="ac-th">Setores</th>
-                        <th class="ac-th">Subdivisões</th>
-                        <th class="ac-th" style="text-align:center;">Status</th>
-                        <th class="ac-th" style="text-align:center;">Ações</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    <?php foreach($all_users as $u):
-                        $isActive = ($u['status'] ?? 1) == 1;
-                        $subIds = array_filter(explode(',', $u['all_subdivision_ids'] ?? ''));
-                    ?>
-                    <tr class="user-row ac-row"
-                        data-role="<?= $u['role'] ?>"
-                        data-subdivisions="<?= htmlspecialchars(implode(',', $subIds)) ?>"
-                        style="<?= !$isActive ? 'opacity:0.55;' : '' ?>">
-
-                        <!-- Usuário -->
-                        <td class="ac-td">
-                            <div style="display:flex; align-items:center; gap:10px;">
-                                <div class="ac-avatar" style="background: <?= $isActive ? 'var(--primary)' : '#94a3b8' ?>;">
-                                    <?= strtoupper(substr($u['name'], 0, 1)) ?>
-                                </div>
-                                <div>
-                                    <div class="user-name" style="font-weight:600; color:var(--text-main); white-space:nowrap;"><?= htmlspecialchars($u['name']) ?></div>
-                                    <div style="font-size:0.7rem; color:var(--text-muted);">#<?= (int)$u['id'] ?></div>
-                                </div>
+            <!-- Edição: folha de baixo para cima no celular, painel lateral no PC -->
+            <aside class="acc-editor" id="accEditor" aria-labelledby="accEdName" hidden>
+                <div class="acc-editor__top">
+                    <button type="button" class="acc-back" data-acc-action="close-editor">
+                        <i class="fa-solid fa-arrow-left acc-only-mobile" aria-hidden="true"></i><span class="acc-only-mobile">Pessoas</span>
+                        <i class="fa-solid fa-xmark acc-only-desktop" aria-hidden="true"></i><span class="visually-hidden acc-only-desktop">Fechar edição</span>
+                    </button>
+                    <div class="acc-editor__who">
+                        <span class="acc-avatar acc-avatar--lg" id="accEdAvatar" aria-hidden="true"></span>
+                        <div class="acc-editor__id">
+                            <h2 id="accEdName" tabindex="-1"></h2>
+                            <div class="acc-chipline">
+                                <span class="acc-role" id="accEdRole"></span>
+                                <span class="acc-state" id="accEdState"></span>
                             </div>
-                        </td>
+                        </div>
+                    </div>
+                </div>
 
-                        <!-- Login -->
-                        <td class="ac-td">
-                            <input type="text" value="<?= htmlspecialchars($u['login']) ?>"
-                                   class="row-login-input ac-input"
-                                   onfocus="this.style.borderColor='var(--primary)'"
-                                   onblur="this.style.borderColor='var(--border-color)'"
-                                   oninput="markRowDirty(this)">
-                        </td>
+                <div class="acc-editor__body">
+                    <p class="acc-note" id="accEdSelfNote" hidden><i class="fa-solid fa-circle-info" aria-hidden="true"></i> Esta é a sua conta: perfil, situação e exclusão ficam travados. Sua senha você troca em "Minha conta".</p>
 
-                        <!-- WhatsApp -->
-                        <td class="ac-td">
-                            <input type="text" value="<?= htmlspecialchars($u['phone'] ?? '') ?>"
-                                   class="row-phone-input ac-input"
-                                   placeholder="5511999998888"
-                                   maxlength="20"
-                                   onfocus="this.style.borderColor='var(--primary)'"
-                                   onblur="this.style.borderColor='var(--border-color)'"
-                                   oninput="markRowDirty(this)"
-                                   title="Formato internacional sem + (ex: 5511999998888)">
-                        </td>
+                    <section class="acc-sec" aria-labelledby="accSecData">
+                        <h3 id="accSecData"><i class="fa-solid fa-id-card" aria-hidden="true"></i> Dados</h3>
+                        <div class="acc-field">
+                            <label for="accEdNameInput">Nome completo</label>
+                            <input type="text" id="accEdNameInput" maxlength="150" autocomplete="off">
+                            <p class="field-error" id="accEdNameErr" hidden></p>
+                        </div>
+                        <div class="acc-field">
+                            <label for="accEdLogin">Usuário para entrar</label>
+                            <input type="text" id="accEdLogin" maxlength="100" autocomplete="off" autocapitalize="none" spellcheck="false">
+                            <p class="field-error" id="accEdLoginErr" hidden></p>
+                        </div>
+                        <div class="acc-field">
+                            <label for="accEdPhone">WhatsApp <small>(opcional)</small></label>
+                            <input type="tel" id="accEdPhone" inputmode="numeric" maxlength="20" placeholder="(11) 99999-8888" autocomplete="off">
+                            <p class="field-error" id="accEdPhoneErr" hidden></p>
+                        </div>
+                    </section>
 
-                        <!-- Perfil -->
-                        <td class="ac-td">
-                            <select class="row-role-select ac-input" onchange="markRowDirty(this)">
-                                <?php foreach($full_role_labels as $key => $label): ?>
-                                    <option value="<?= $key ?>" <?= $u['role'] == $key ? 'selected' : '' ?>><?= $label ?></option>
+                    <section class="acc-sec" aria-labelledby="accSecAccess">
+                        <h3 id="accSecAccess"><i class="fa-solid fa-shield-halved" aria-hidden="true"></i> Acesso</h3>
+                        <div class="acc-field">
+                            <label for="accEdKind">O que a pessoa faz</label>
+                            <select id="accEdKind">
+                                <?php foreach ($accKindMeta as $k => $m): ?>
+                                    <option value="<?= e($k) ?>"><?= e($m['label']) ?></option>
                                 <?php endforeach; ?>
                             </select>
-                        </td>
-
-                        <!-- Setores -->
-                        <td class="ac-td">
-                            <?php if($u['all_sectors']): ?>
-                                <div class="sector-list" style="display:flex; flex-wrap:wrap; gap:3px;">
-                                    <?php foreach(explode(', ', $u['all_sectors']) as $stitle):
-                                        $lbl = $categories[$stitle] ?? ucfirst($stitle);
-                                    ?>
-                                        <span class="ac-pill"><?= $lbl ?></span>
-                                    <?php endforeach; ?>
-                                </div>
-                            <?php else: ?>
-                                <span style="color:#cbd5e1; font-style:italic; font-size:0.75rem;">Nenhum</span>
-                            <?php endif; ?>
-                        </td>
-
-                        <!-- Subdivisões -->
-                        <td class="ac-td">
-                            <div class="sub-popover-wrap" style="position:relative;">
-
-                                <!-- Exibição compacta: pills + botão editar -->
-                                <div class="sub-display" onclick="toggleSubPopover(<?= $u['id'] ?>)">
-                                    <?php
-                                    $subNames = [];
-                                    foreach ($all_subdivisions as $sub) {
-                                        if (in_array((string)$sub['id'], $subIds, true)) {
-                                            $subNames[] = htmlspecialchars($sub['name']);
-                                        }
-                                    }
-                                    ?>
-                                    <?php if ($subNames): ?>
-                                        <?php foreach (array_slice($subNames, 0, 2) as $sn): ?>
-                                            <span class="sub-pill"><?= $sn ?></span>
-                                        <?php endforeach; ?>
-                                        <?php if (count($subNames) > 2): ?>
-                                            <span class="sub-pill sub-pill-more">+<?= count($subNames) - 2 ?></span>
-                                        <?php endif; ?>
-                                    <?php else: ?>
-                                        <span class="sub-none">Nenhuma</span>
-                                    <?php endif; ?>
-                                    <i class="fa-solid fa-pen-to-square sub-edit-icon"></i>
-                                </div>
-
-                                <!-- Popover com checkboxes (oculto) -->
-                                <div id="subPop_<?= $u['id'] ?>" class="sub-popover" style="display:none;">
-                                    <div class="sub-pop-arrow"></div>
-                                    <p class="sub-pop-title"><i class="fa-solid fa-layer-group"></i> Subdivisões</p>
-                                    <!-- Editor oculto mantido para compatibilidade com saveRowAccount -->
-                                    <div class="subdivision-editor" data-subdivision-editor data-user-id="<?= $u['id'] ?>" style="display:flex; flex-direction:column; gap:6px;">
-                                        <?php foreach($all_subdivisions as $sub): ?>
-                                            <label class="sub-pop-check-label">
-                                                <input type="checkbox"
-                                                       value="<?= $sub['id'] ?>"
-                                                       <?= in_array((string)$sub['id'], $subIds, true) ? 'checked' : '' ?>
-                                                       onchange="syncSubDisplay(<?= $u['id'] ?>)"
-                                                       style="accent-color: var(--primary); width:14px; height:14px; flex-shrink:0; cursor:pointer;">
-                                                <span><?= htmlspecialchars($sub['name']) ?></span>
-                                            </label>
-                                        <?php endforeach; ?>
-                                    </div>
-                                    <div style="display:flex; gap:6px; margin-top:10px; border-top:1px solid #f1f5f9; padding-top:10px;">
-                                        <button onclick="saveSubsAndClose(<?= $u['id'] ?>, this)" class="sub-pop-btn sub-pop-save"><i class="fa-solid fa-floppy-disk"></i> Salvar</button>
-                                        <button onclick="closeSubPopover(<?= $u['id'] ?>)" class="sub-pop-btn sub-pop-cancel">Cancelar</button>
-                                    </div>
-                                </div>
+                        </div>
+                        <div class="acc-field" data-acc-ed-group="subs">
+                            <span class="acc-label" id="accEdSubsLabel">Área</span>
+                            <div class="acc-choices" role="group" aria-labelledby="accEdSubsLabel" id="accEdSubs">
+                                <?php foreach ($accSubdivisions as $subId => $subName): ?>
+                                    <button type="button" class="acc-choice" aria-pressed="false" data-value="<?= (int)$subId ?>"><?= e($subName) ?></button>
+                                <?php endforeach; ?>
                             </div>
-                        </td>
+                        </div>
+                        <div class="acc-field" data-acc-ed-group="sector">
+                            <span class="acc-label" id="accEdSectorLabel">Setor que atende</span>
+                            <div class="acc-choices" role="group" aria-labelledby="accEdSectorLabel" id="accEdSector">
+                                <?php foreach ($accSectorMeta as $key => $m): ?>
+                                    <button type="button" class="acc-choice" aria-pressed="false" data-value="<?= e($key) ?>"><i class="fa-solid <?= e($m['icon']) ?>" aria-hidden="true"></i> <?= e($m['label']) ?></button>
+                                <?php endforeach; ?>
+                            </div>
+                        </div>
+                        <p class="acc-note" data-acc-ed-group="admin"><i class="fa-solid fa-user-shield" aria-hidden="true"></i> O administrador vê tudo e cadastra pessoas. Não precisa escolher área.</p>
+                        <p class="field-error" id="accEdAccessErr" hidden></p>
+                    </section>
 
-                        <!-- Status -->
-                        <td class="ac-td" style="text-align:center; white-space:nowrap;">
-                            <label class="switch">
-                                <input type="checkbox" <?= $isActive ? 'checked' : '' ?> onchange="toggleUserStatus(<?= $u['id'] ?>, this.checked)">
+                    <section class="acc-sec" aria-labelledby="accSecPass">
+                        <h3 id="accSecPass"><i class="fa-solid fa-key" aria-hidden="true"></i> Senha</h3>
+                        <p class="acc-muted">Esqueceu a senha? Gere uma temporária: a pessoa cria a própria no próximo acesso.</p>
+                        <div class="acc-secret" id="accEdSecret" hidden>
+                            <span class="acc-secret__label">Senha temporária (aparece só agora)</span>
+                            <code class="acc-secret__value" id="accEdSecretValue"></code>
+                            <div class="acc-secret__actions">
+                                <button type="button" class="btn" data-acc-action="copy-edit"><i class="fa-solid fa-copy" aria-hidden="true"></i> Copiar usuário e senha</button>
+                                <a class="btn acc-btn-whats" id="accEdWhats" href="#" target="_blank" rel="noopener noreferrer"><i class="fa-brands fa-whatsapp" aria-hidden="true"></i> Enviar pelo WhatsApp</a>
+                            </div>
+                        </div>
+                        <button type="button" class="btn btn--block" id="accEdResetBtn" data-acc-action="reset-password"><i class="fa-solid fa-key" aria-hidden="true"></i> <span>Gerar senha temporária</span></button>
+                    </section>
+
+                    <section class="acc-sec" aria-labelledby="accSecState">
+                        <h3 id="accSecState"><i class="fa-solid fa-toggle-on" aria-hidden="true"></i> Situação</h3>
+                        <label class="acc-switch-row" for="accEdActive">
+                            <span class="acc-switch-row__text">
+                                <strong>Conta ativa</strong>
+                                <small>Desativada, a pessoa não entra, mas o histórico fica.</small>
+                            </span>
+                            <span class="switch">
+                                <input type="checkbox" id="accEdActive">
                                 <span class="slider round"></span>
-                            </label>
-                            <div style="font-size:0.6rem; margin-top:3px; font-weight:800; color: <?= $isActive ? '#10b981' : '#ef4444' ?>;">
-                                <?= $isActive ? 'ATIVO' : 'INATIVO' ?>
-                            </div>
-                        </td>
+                            </span>
+                        </label>
+                    </section>
 
-                        <!-- Ações -->
-                        <td class="ac-td" style="text-align:center; white-space:nowrap;">
-                            <div style="display:flex; gap:4px; justify-content:center; align-items:center; margin-bottom:4px;">
-                                <button onclick="saveRowAccount(<?= $u['id'] ?>, this)" class="ac-btn ac-btn-save" title="Salvar alterações">
-                                    <i class="fa-solid fa-floppy-disk"></i>
-                                </button>
-                                <div class="pass-popover-wrap" style="position:relative;">
-                                    <button onclick="togglePassPopover(<?= $u['id'] ?>, this)" class="ac-btn ac-btn-key" title="Alterar senha">
-                                        <i class="fa-solid fa-key"></i>
-                                    </button>
-                                    <div id="passPopover_<?= $u['id'] ?>" class="pass-popover" style="display:none;">
-                                        <div class="pass-popover-arrow"></div>
-                                        <p class="pass-popover-title"><i class="fa-solid fa-key"></i> Alterar Senha</p>
-                                        <input type="password" id="pop_newpass_<?= $u['id'] ?>" placeholder="Nova senha..." class="pass-popover-input" autocomplete="new-password">
-                                        <div style="display:flex; gap:6px; margin-top:8px;">
-                                            <button onclick="confirmPassChange(<?= $u['id'] ?>)" class="pass-pop-btn pass-pop-confirm">Confirmar</button>
-                                            <button onclick="closePassPopover(<?= $u['id'] ?>)" class="pass-pop-btn pass-pop-cancel">Cancelar</button>
-                                        </div>
-                                    </div>
-                                </div>
-                                <button onclick="deleteUser(<?= $u['id'] ?>)" class="ac-btn ac-btn-del" title="Excluir usuário">
-                                    <i class="fa-solid fa-trash"></i>
-                                </button>
-                            </div>
-                            <div class="row-save-state" style="font-size:0.6rem; color:var(--text-muted); font-weight:600;"></div>
-                        </td>
-                    </tr>
-                    <?php endforeach; ?>
-                </tbody>
-            </table>
+                    <button type="button" class="btn btn--danger btn--block" id="accEdDelete" data-acc-action="delete-user"><i class="fa-solid fa-trash" aria-hidden="true"></i> Excluir conta</button>
+                </div>
+
+                <div class="acc-editor__foot">
+                    <button type="button" class="btn btn--primary btn--block" id="accEdSave" data-acc-action="save-user" disabled><i class="fa-solid fa-check" aria-hidden="true"></i> <span>Nada para salvar</span></button>
+                </div>
+            </aside>
         </div>
+    </section>
+
+    <!-- ===================== Setores ===================== -->
+    <section class="acc-panel" id="accPanelSectors" role="tabpanel" aria-labelledby="accTabSectors" hidden>
+        <div class="acc-sectors">
+            <?php foreach ($accSectorCards as $s): ?>
+                <article class="card acc-sector<?= empty($s['resp']) ? ' is-alert' : '' ?>" data-area-id="<?= (int)$s['id'] ?>" data-area-label="<?= e($s['label']) ?>">
+                    <header class="acc-sector__head">
+                        <h3><i class="fa-solid <?= e($s['icon']) ?>" aria-hidden="true"></i> <?= e($s['label']) ?></h3>
+                        <?php if ($s['open'] !== null): ?>
+                            <span class="acc-sector__open"><?= (int)$s['open'] ?> <?= (int)$s['open'] === 1 ? 'pedido aberto' : 'pedidos abertos' ?></span>
+                        <?php endif; ?>
+                    </header>
+
+                    <div class="acc-sector__desc">
+                        <p class="acc-sector__desc-text<?= $s['description'] === '' ? ' is-empty' : '' ?>"><?= $s['description'] !== '' ? e($s['description']) : 'Sem descrição. Ela aparece para quem encaminha um pedido.' ?></p>
+                        <button type="button" class="btn btn--ghost btn--sm" data-acc-action="toggle-desc" aria-expanded="false" aria-label="<?= $s['description'] !== '' ? 'Editar' : 'Escrever' ?> a descrição de <?= e($s['label']) ?>"><i class="fa-solid fa-pen" aria-hidden="true"></i> <?= $s['description'] !== '' ? 'Editar' : 'Escrever' ?></button>
+                    </div>
+                    <form class="acc-add-form" data-acc-form="sector-desc" hidden>
+                        <label for="accDesc<?= (int)$s['id'] ?>">O que <?= e($s['label']) ?> faz <small>(aparece no Encaminhar)</small></label>
+                        <input type="text" id="accDesc<?= (int)$s['id'] ?>" name="description" maxlength="160" value="<?= e($s['description']) ?>" placeholder="Ex.: Compra de peças, materiais e serviços">
+                        <div class="acc-add-form__actions">
+                            <button type="button" class="btn" data-acc-action="toggle-desc">Cancelar</button>
+                            <button type="submit" class="btn btn--primary">Salvar</button>
+                        </div>
+                    </form>
+
+                    <p class="acc-label">Responsáveis</p>
+                    <?php if (!empty($s['resp'])): ?>
+                        <ul class="acc-resp">
+                            <?php foreach ($s['resp'] as $r): ?>
+                                <li>
+                                    <span class="acc-avatar acc-avatar--sm acc-avatar--<?= e($r['kind']) ?>" aria-hidden="true"><?= e($r['initials']) ?></span>
+                                    <span class="acc-resp__name"><?= e($r['name']) ?><small><?= e($r['roleLabel']) ?></small></span>
+                                    <?php if ($r['byRole']): ?>
+                                        <span class="acc-resp__note" title="Para tirar, mude o perfil da pessoa">pelo perfil</span>
+                                    <?php else: ?>
+                                        <button type="button" class="acc-icon-btn" data-acc-action="remove-resp" data-user-id="<?= (int)$r['id'] ?>" data-user-name="<?= e($r['name']) ?>" aria-label="Tirar <?= e($r['name']) ?> do setor <?= e($s['label']) ?>"><i class="fa-solid fa-xmark" aria-hidden="true"></i></button>
+                                    <?php endif; ?>
+                                </li>
+                            <?php endforeach; ?>
+                        </ul>
+                    <?php else: ?>
+                        <p class="acc-alert" role="note"><i class="fa-solid fa-triangle-exclamation" aria-hidden="true"></i> Ninguém responde por este setor. Os pedidos ficam parados.</p>
+                    <?php endif; ?>
+
+                    <button type="button" class="acc-add" data-acc-action="toggle-add-resp" aria-expanded="false"><i class="fa-solid fa-user-plus" aria-hidden="true"></i> Adicionar responsável</button>
+                    <form class="acc-add-form" data-acc-form="add-resp" hidden>
+                        <?php if (!empty($s['eligible'])): ?>
+                            <label for="accAddResp<?= (int)$s['id'] ?>">Quem passa a responder por <?= e($s['label']) ?></label>
+                            <select id="accAddResp<?= (int)$s['id'] ?>" name="user_id" required data-combo data-combo-empty="Ninguém com esse nome">
+                                <option value="">Escolha a pessoa</option>
+                                <?php foreach ($s['eligible'] as $p): ?>
+                                    <option value="<?= (int)$p['id'] ?>"><?= e($p['name'] . ' · ' . $p['roleLabel']) ?></option>
+                                <?php endforeach; ?>
+                            </select>
+                            <div class="acc-add-form__actions">
+                                <button type="button" class="btn" data-acc-action="toggle-add-resp">Cancelar</button>
+                                <button type="submit" class="btn btn--primary"><i class="fa-solid fa-user-plus" aria-hidden="true"></i> Adicionar</button>
+                            </div>
+                        <?php else: ?>
+                            <p class="acc-muted">Ninguém disponível. Só pessoas ativas com perfil "Atende um setor" ou "Administrador" podem responder por um setor. Cadastre em "Nova pessoa".</p>
+                        <?php endif; ?>
+                    </form>
+
+                    <footer class="acc-sector__foot">
+                        <?php if ($s['system']): ?>
+                            <span class="acc-muted"><i class="fa-solid fa-lock" aria-hidden="true"></i> Setor do sistema</span>
+                        <?php else: ?>
+                            <button type="button" class="btn btn--sm btn--ghost acc-danger-text" data-acc-action="delete-sector"><i class="fa-solid fa-trash" aria-hidden="true"></i> Excluir setor</button>
+                        <?php endif; ?>
+                    </footer>
+                </article>
+            <?php endforeach; ?>
+
+        </div>
+    </section>
+</div>
+
+<!-- ===================== Nova pessoa (assistente) ===================== -->
+<div class="acc-wizard" id="accWizard" hidden>
+    <div class="acc-wizard__card" role="dialog" aria-modal="true" aria-labelledby="accWzTitle">
+        <header class="acc-wizard__head">
+            <div class="acc-wizard__titlebar">
+                <button type="button" class="acc-icon-btn acc-icon-btn--lg" data-acc-action="close-wizard" aria-label="Fechar"><i class="fa-solid fa-xmark" aria-hidden="true"></i></button>
+                <div>
+                    <span class="acc-wizard__step" id="accWzStep">Passo 1 de 3</span>
+                    <h2 id="accWzTitle" tabindex="-1">O que a pessoa faz?</h2>
+                </div>
+            </div>
+            <div class="acc-wizard__bars" id="accWzBars" aria-hidden="true"><span></span><span></span><span></span></div>
+        </header>
+
+        <div class="acc-wizard__body">
+            <!-- Passo 1 -->
+            <div class="acc-wz-step" data-acc-step="1">
+                <div class="acc-kinds" role="group" aria-label="O que a pessoa faz">
+                    <?php foreach ($accKindMeta as $k => $m): ?>
+                        <button type="button" class="acc-kind" aria-pressed="false" data-acc-wz-kind="<?= e($k) ?>">
+                            <span class="acc-kind__icon acc-avatar--<?= e($k) ?>" aria-hidden="true"><i class="fa-solid <?= e($m['icon']) ?>"></i></span>
+                            <span class="acc-kind__text">
+                                <strong><?= e($m['label']) ?></strong>
+                                <span><?= e($m['hint']) ?></span>
+                            </span>
+                        </button>
+                    <?php endforeach; ?>
+                </div>
+                <p class="field-error" id="accWzKindErr" hidden></p>
+            </div>
+
+            <!-- Passo 2 -->
+            <div class="acc-wz-step" data-acc-step="2" hidden>
+                <div class="acc-field">
+                    <label for="accWzName">Nome completo</label>
+                    <input type="text" id="accWzName" maxlength="150" placeholder="Ex.: Ana Souza" autocomplete="off">
+                    <p class="field-error" id="accWzNameErr" hidden></p>
+                </div>
+                <div class="acc-field">
+                    <label for="accWzLogin">Usuário para entrar</label>
+                    <input type="text" id="accWzLogin" maxlength="100" placeholder="ana.souza" autocomplete="off" autocapitalize="none" spellcheck="false" aria-describedby="accWzLoginHint">
+                    <span class="acc-muted" id="accWzLoginHint">Sugerido a partir do nome. Pode trocar.</span>
+                    <p class="field-error" id="accWzLoginErr" hidden></p>
+                </div>
+                <div class="acc-field">
+                    <label for="accWzPhone">WhatsApp <small>(opcional)</small></label>
+                    <input type="tel" id="accWzPhone" inputmode="numeric" maxlength="20" placeholder="(11) 99999-8888" autocomplete="off" aria-describedby="accWzPhoneHint">
+                    <span class="acc-muted" id="accWzPhoneHint">Com DDD. Serve para mandar o acesso e os avisos.</span>
+                    <p class="field-error" id="accWzPhoneErr" hidden></p>
+                </div>
+            </div>
+
+            <!-- Passo 3 -->
+            <div class="acc-wz-step" data-acc-step="3" hidden>
+                <p class="acc-wz-hint" id="accWzWhereHint"></p>
+                <div class="acc-choices" role="group" aria-labelledby="accWzTitle" id="accWzSubs" data-acc-wz-group="subs">
+                    <?php foreach ($accSubdivisions as $subId => $subName): ?>
+                        <button type="button" class="acc-choice" aria-pressed="false" data-value="<?= (int)$subId ?>"><?= e($subName) ?></button>
+                    <?php endforeach; ?>
+                </div>
+                <div class="acc-choices" role="group" aria-labelledby="accWzTitle" id="accWzSector" data-acc-wz-group="sector">
+                    <?php foreach ($accSectorMeta as $key => $m): ?>
+                        <button type="button" class="acc-choice" aria-pressed="false" data-value="<?= e($key) ?>"><i class="fa-solid <?= e($m['icon']) ?>" aria-hidden="true"></i> <?= e($m['label']) ?></button>
+                    <?php endforeach; ?>
+                </div>
+                <p class="acc-note" data-acc-wz-group="admin"><i class="fa-solid fa-user-shield" aria-hidden="true"></i> O administrador vê tudo e cadastra pessoas. Não precisa escolher área.</p>
+                <p class="field-error" id="accWzWhereErr" hidden></p>
+            </div>
+
+            <!-- Resultado -->
+            <div class="acc-wz-step acc-wz-done" data-acc-step="4" hidden>
+                <span class="acc-wz-done__icon" aria-hidden="true"><i class="fa-solid fa-check"></i></span>
+                <p class="acc-wz-done__title"><span id="accWzDoneName"></span> já pode entrar</p>
+                <p class="acc-muted">Passe o usuário e a senha abaixo. No primeiro acesso a pessoa cria a própria senha.</p>
+                <dl class="acc-credentials">
+                    <div><dt>Usuário</dt><dd id="accWzDoneLogin"></dd></div>
+                    <div><dt>Senha temporária (aparece só agora)</dt><dd><code id="accWzDonePass"></code></dd></div>
+                </dl>
+                <button type="button" class="btn btn--block acc-btn-tall" data-acc-action="copy-wizard"><i class="fa-solid fa-copy" aria-hidden="true"></i> <span>Copiar usuário e senha</span></button>
+                <a class="btn btn--block acc-btn-tall acc-btn-whats" id="accWzWhats" href="#" target="_blank" rel="noopener noreferrer"><i class="fa-brands fa-whatsapp" aria-hidden="true"></i> Enviar pelo WhatsApp</a>
+            </div>
+        </div>
+
+        <footer class="acc-wizard__foot">
+            <button type="button" class="btn acc-btn-tall" id="accWzBack" data-acc-action="wizard-back" hidden>Voltar</button>
+            <button type="button" class="btn btn--primary acc-btn-tall acc-grow" id="accWzNext" data-acc-action="wizard-next">Continuar</button>
+            <button type="button" class="btn acc-btn-tall acc-grow acc-btn-dark" id="accWzFinish" data-acc-action="wizard-finish" hidden><i class="fa-solid fa-check" aria-hidden="true"></i> Concluir</button>
+        </footer>
     </div>
 </div>
 
-<style>
-    /* === ACCOUNTS TABLE COMPACT UI === */
-    .ac-th {
-        padding: 10px 14px;
-        font-size: 0.68rem;
-        font-weight: 700;
-        color: var(--text-muted);
-        text-transform: uppercase;
-        letter-spacing: 0.6px;
-        white-space: nowrap;
-        text-align: left;
-    }
-    .ac-td {
-        padding: 10px 14px;
-        vertical-align: middle;
-        border-bottom: 1px solid #f1f5f9;
-    }
-    .ac-row:hover { background: #f8fafc; }
-    .ac-row:hover .ac-td { border-bottom-color: #e2e8f0; }
-    .ac-avatar {
-        width: 32px; height: 32px; border-radius: 50%;
-        color: #fff; display: flex; align-items: center;
-        justify-content: center; font-weight: 800; font-size: 0.85rem;
-        flex-shrink: 0;
-    }
-    .ac-input {
-        padding: 6px 10px;
-        border: 1px solid var(--border-color);
-        border-radius: 6px;
-        font-size: 0.8rem;
-        outline: none;
-        transition: border-color 0.15s;
-        background: #fff;
-        width: 100%;
-    }
-    .ac-input:focus { border-color: var(--primary); }
-    .ac-pill {
-        background: #f1f5f9;
-        color: #475569;
-        padding: 2px 7px;
-        border-radius: 10px;
-        font-size: 0.62rem;
-        font-weight: 700;
-        border: 1px solid #e2e8f0;
-        white-space: nowrap;
-    }
-    .ac-subs-editor {
-        display: flex;
-        flex-direction: column;
-        gap: 4px;
-        max-height: 90px;
-        overflow-y: auto;
-        padding: 4px 0;
-    }
-    .ac-check-label {
-        display: flex;
-        align-items: center;
-        gap: 6px;
-        font-size: 0.72rem;
-        color: var(--text-main);
-        cursor: pointer;
-        white-space: nowrap;
-    }
-    .ac-btn {
-        width: 30px; height: 30px;
-        border: none; border-radius: 6px;
-        cursor: pointer; display: inline-flex;
-        align-items: center; justify-content: center;
-        font-size: 0.75rem; transition: opacity 0.15s, transform 0.1s;
-    }
-    .ac-btn:hover { opacity: 0.85; transform: scale(1.05); }
-    .ac-btn-save { background: #1e293b; color: #fff; }
-    .ac-btn-key  { background: #0f766e; color: #fff; }
-    .ac-btn-del  { background: #ef4444; color: #fff; }
-    /* Toggle Switch */
-    .switch { position: relative; display: inline-block; width: 34px; height: 20px; }
-    .switch input { opacity: 0; width: 0; height: 0; }
-    .slider { position: absolute; cursor: pointer; inset: 0; background: #cbd5e1; transition: .3s; }
-    .slider:before { position: absolute; content: ""; height: 14px; width: 14px; left: 3px; bottom: 3px; background: white; transition: .3s; }
-    input:checked + .slider { background: #10b981; }
-    input:checked + .slider:before { transform: translateX(14px); }
-    .slider.round { border-radius: 34px; }
-    .slider.round:before { border-radius: 50%; }
-    /* Card overrides */
-    .card { transform: none !important; cursor: default !important; transition: none !important; }
-    .card:hover { transform: none !important; background: var(--bg-card) !important; border-top-color: var(--border-color) !important; border-right-color: var(--border-color) !important; border-bottom-color: var(--border-color) !important; }
-    #userSearch:focus { border-color: var(--primary); box-shadow: 0 0 0 3px rgba(124,58,237,0.1); }
-    @media (max-width: 768px) {
-        #formCreateUser > div:first-child { grid-template-columns: 1fr !important; }
-        #userSearch { width: 100% !important; }
-    }
-    /* === PASSWORD POPOVER === */
-    .pass-popover-wrap { position: relative; display: inline-block; }
-    .pass-popover {
-        position: absolute;
-        bottom: calc(100% + 10px);
-        right: 0;
-        width: 210px;
-        background: #fff;
-        border: 1px solid #e2e8f0;
-        border-radius: 10px;
-        padding: 14px;
-        box-shadow: 0 8px 24px rgba(15,23,42,0.14);
-        z-index: 1000;
-        animation: popoverIn 0.15s ease;
-    }
-    .pass-popover-arrow {
-        position: absolute;
-        bottom: -7px;
-        right: 11px;
-        width: 12px; height: 12px;
-        background: #fff;
-        border-right: 1px solid #e2e8f0;
-        border-bottom: 1px solid #e2e8f0;
-        transform: rotate(45deg);
-    }
-    .pass-popover-title {
-        font-size: 0.75rem;
-        font-weight: 700;
-        color: var(--text-main);
-        margin: 0 0 10px;
-        display: flex;
-        align-items: center;
-        gap: 6px;
-    }
-    .pass-popover-title i { color: #0f766e; }
-    .pass-popover-input {
-        width: 100%;
-        padding: 7px 10px;
-        border: 1px solid var(--border-color);
-        border-radius: 6px;
-        font-size: 0.8rem;
-        outline: none;
-        transition: border-color 0.15s;
-        box-sizing: border-box;
-    }
-    .pass-popover-input:focus { border-color: #0f766e; box-shadow: 0 0 0 2px rgba(15,118,110,0.12); }
-    .pass-pop-btn {
-        flex: 1;
-        padding: 6px 0;
-        border: none;
-        border-radius: 6px;
-        font-size: 0.75rem;
-        font-weight: 700;
-        cursor: pointer;
-        transition: opacity 0.15s;
-    }
-    .pass-pop-btn:hover { opacity: 0.85; }
-    .pass-pop-confirm { background: #0f766e; color: #fff; }
-    .pass-pop-cancel  { background: #f1f5f9; color: #64748b; }
-    @keyframes popoverIn {
-        from { opacity: 0; transform: translateY(6px); }
-        to   { opacity: 1; transform: translateY(0); }
-    }
-    /* === SUB-POPOVER (Subdivis\u00f5es) === */
-    .sub-display {
-        display: flex; flex-wrap: wrap; gap: 4px; align-items: center;
-        cursor: pointer; padding: 4px 6px; border-radius: 6px;
-        transition: background 0.15s; min-height: 28px;
-    }
-    .sub-display:hover { background: #f1f5f9; }
-    .sub-display:hover .sub-edit-icon { opacity: 1; }
-    .sub-pill {
-        background: #ede9fe; color: #6d28d9;
-        padding: 2px 8px; border-radius: 10px;
-        font-size: 0.62rem; font-weight: 700; white-space: nowrap;
-        border: 1px solid #ddd6fe;
-    }
-    .sub-pill-more {
-        background: #f1f5f9; color: #64748b; border-color: #e2e8f0;
-    }
-    .sub-none {
-        color: #cbd5e1; font-style: italic; font-size: 0.75rem;
-    }
-    .sub-edit-icon {
-        font-size: 0.65rem; color: #94a3b8;
-        opacity: 0; transition: opacity 0.15s; margin-left: 2px;
-    }
-    .sub-popover-wrap { position: relative; }
-    .sub-popover {
-        position: absolute;
-        bottom: calc(100% + 10px);
-        left: 0;
-        min-width: 200px;
-        max-width: 260px;
-        background: #fff;
-        border: 1px solid #e2e8f0;
-        border-radius: 10px;
-        padding: 14px;
-        box-shadow: 0 8px 24px rgba(15,23,42,0.14);
-        z-index: 999;
-        animation: popoverIn 0.15s ease;
-    }
-    .sub-pop-arrow {
-        position: absolute;
-        bottom: -7px; left: 16px;
-        width: 12px; height: 12px;
-        background: #fff;
-        border-right: 1px solid #e2e8f0;
-        border-bottom: 1px solid #e2e8f0;
-        transform: rotate(45deg);
-    }
-    .sub-pop-title {
-        font-size: 0.75rem; font-weight: 700;
-        color: var(--text-main); margin: 0 0 10px;
-        display: flex; align-items: center; gap: 6px;
-    }
-    .sub-pop-title i { color: var(--primary); }
-    .sub-pop-check-label {
-        display: flex; align-items: center; gap: 8px;
-        font-size: 0.78rem; color: var(--text-main);
-        cursor: pointer; padding: 4px 6px; border-radius: 6px;
-        transition: background 0.1s;
-    }
-    .sub-pop-check-label:hover { background: #f8fafc; }
-    .sub-pop-btn {
-        flex: 1; padding: 7px 0; border: none;
-        border-radius: 6px; font-size: 0.75rem; font-weight: 700;
-        cursor: pointer; transition: opacity 0.15s;
-    }
-    .sub-pop-btn:hover { opacity: 0.85; }
-    .sub-pop-save   { background: var(--primary); color: #fff; display:flex; align-items:center; justify-content:center; gap:5px; }
-    .sub-pop-cancel { background: #f1f5f9; color: #64748b; }
-</style>
-
-
-<script>
-    function withCsrf(formData) {
-        if (!formData.has('csrf_token')) {
-            formData.append('csrf_token', window.CSRF_TOKEN || '');
-        }
-        return formData;
-    }
-
-    // Inicializa o contador de usu\u00e1rios
-    function updateUserCount() {
-        const visible = document.querySelectorAll('#tableUsers .user-row:not([style*="display: none"])').length;
-        const el = document.getElementById('userCount');
-        if (el) el.textContent = visible;
-    }
-    document.addEventListener('DOMContentLoaded', updateUserCount);
-    // === UTILITÁRIO: posicionar popover com position:fixed (portal) ===
-    function _positionPopover(pop, anchorEl) {
-        if (!anchorEl) return;
-        // Move para body (portal) para escapar de qualquer overflow pai
-        if (pop.parentElement !== document.body) document.body.appendChild(pop);
-
-        // Mede a altura real com visibility:hidden antes de exibir
-        pop.style.visibility = 'hidden';
-        pop.style.display    = 'block';
-        pop.style.position   = 'fixed';
-        pop.style.zIndex     = '99999';
-        pop.style.bottom     = 'auto';
-        pop.style.right      = 'auto';
-
-        const popW = pop.offsetWidth;
-        const popH = pop.offsetHeight;
-        const rect = anchorEl.getBoundingClientRect();
-
-        // Âncora: alinha pela borda direita do botão
-        let left = rect.right - popW;
-        let top  = rect.top - popH - 8;   // acima do botão por padrão
-
-        // Se não couber acima, coloca abaixo
-        if (top < 8) top = rect.bottom + 8;
-        // Não ultrapassar bordas da viewport
-        if (left < 8) left = 8;
-        if (left + popW > window.innerWidth - 8) left = window.innerWidth - popW - 8;
-
-        pop.style.top        = top  + 'px';
-        pop.style.left       = left + 'px';
-        pop.style.visibility = 'visible';
-    }
-
-    // === SUB-POPOVER: Subdivisões ===
-    let _openSubPopId = null;
-
-    function toggleSubPopover(id) {
-        if (_openSubPopId && _openSubPopId !== id) closeSubPopover(_openSubPopId);
-        const pop = document.getElementById('subPop_' + id);
-        if (!pop) return;
-        const isOpen = pop.style.display !== 'none';
-        if (isOpen) { closeSubPopover(id); return; }
-        // Ancora: o .sub-display clicado
-        const anchor = document.querySelector(`[onclick="toggleSubPopover(${id})"]`);
-        _positionPopover(pop, anchor || document.body);
-        _openSubPopId = id;
-        setTimeout(() => {
-            function outsideClick(e) {
-                if (!pop.contains(e.target) && !e.target.closest(`[onclick="toggleSubPopover(${id})"]`)) {
-                    closeSubPopover(id);
-                    document.removeEventListener('click', outsideClick);
-                }
-            }
-            document.addEventListener('click', outsideClick);
-        }, 0);
-    }
-
-    function closeSubPopover(id) {
-        const pop = document.getElementById('subPop_' + id);
-        if (pop) pop.style.display = 'none';
-        if (_openSubPopId === id) _openSubPopId = null;
-    }
-
-    function syncSubDisplay(userId) {
-        const pop = document.getElementById('subPop_' + userId);
-        if (!pop) return;
-        const editor = pop.querySelector('[data-subdivision-editor]');
-        const checked = Array.from(editor.querySelectorAll('input[type="checkbox"]:checked'));
-        const names = checked.map(cb => cb.closest('label')?.querySelector('span')?.textContent?.trim() || '');
-        const row = pop.closest('.user-row');
-        if (row) {
-            row.dataset.subdivisions = checked.map(cb => cb.value).join(',');
-            markRowDirty(pop.querySelector('input'));
-        }
-        // Atualiza o display de pills
-        const display = pop.closest('.sub-popover-wrap')?.querySelector('.sub-display');
-        if (!display) return;
-        const iconEl = display.querySelector('.sub-edit-icon');
-        display.innerHTML = '';
-        if (names.length === 0) {
-            display.innerHTML = '<span class="sub-none">Nenhuma</span>';
-        } else {
-            names.slice(0, 2).forEach(n => {
-                const s = document.createElement('span');
-                s.className = 'sub-pill'; s.textContent = n;
-                display.appendChild(s);
-            });
-            if (names.length > 2) {
-                const s = document.createElement('span');
-                s.className = 'sub-pill sub-pill-more'; s.textContent = '+' + (names.length - 2);
-                display.appendChild(s);
-            }
-        }
-        const icon = document.createElement('i');
-        icon.className = 'fa-solid fa-pen-to-square sub-edit-icon';
-        display.appendChild(icon);
-        display.onclick = () => toggleSubPopover(userId);
-    }
-
-    async function saveSubsAndClose(id, btn) {
-        const row = btn.closest('.user-row');
-        const saveBtn = row?.querySelector('.ac-btn-save');
-        if (saveBtn) {
-            closeSubPopover(id);
-            await saveRowAccount(id, saveBtn);
-            syncSubDisplay(id);
-        } else {
-            closeSubPopover(id);
-        }
-    }
-
-
-    // AJAX: Criar Setor
-    const formSector = document.getElementById('formCreateSector');
-    if (formSector) {
-        formSector.onsubmit = async function(e) {
-            e.preventDefault();
-
-            const confirm = await showConfirm({
-                title: 'Criar Setor',
-                message: 'Deseja realmente criar este novo setor no sistema?',
-                type: 'info',
-                confirmLabel: 'Criar Setor'
-            });
-            if(!confirm) return;
-
-            const formData = new FormData(this);
-            fetch('api/create_sector.php', { method: 'POST', body: withCsrf(formData) })
-            .then(r => r.json()).then(data => {
-                if(data.success) location.reload();
-                else showAlert({ title: 'Atenção', message: data.message, type: 'warning' });
-            });
-        }
-    }
-
-    // Função: Excluir Setor
-    async function deleteSector(id) {
-        const confirm = await showConfirm({
-            title: 'Excluir Setor',
-            message: 'Tem certeza que deseja excluir este setor? Esta ação removerá o vínculo dele com os usuários.',
-            type: 'warning',
-            isDanger: true,
-            confirmLabel: 'Excluir'
-        });
-        if(!confirm) return;
-
-        const formData = new FormData();
-        formData.append('id', id);
-        fetch('api/delete_sector.php', { method: 'POST', body: withCsrf(formData) })
-        .then(r => r.json()).then(data => {
-            if(data.success) location.reload();
-            else showAlert({ title: 'Erro', message: data.message, type: 'error' });
-        });
-    }
-
-    // AJAX: Criar Usuário
-    const formUser = document.getElementById('formCreateUser');
-    if (formUser) {
-        formUser.onsubmit = async function(e) {
-            e.preventDefault();
-
-            const confirm = await showConfirm({
-                title: 'Confirmar Cadastro',
-                message: 'Deseja realmente cadastrar este novo usuário no sistema?',
-                type: 'info',
-                confirmLabel: 'Cadastrar'
-            });
-            if(!confirm) return;
-
-            const formData = new FormData(this);
-            fetch('api/create_user.php', { method: 'POST', body: withCsrf(formData) })
-            .then(r => r.json()).then(data => {
-                if(data.success) {
-                    showAlert({ title: 'Sucesso', message: 'Usuário cadastrado com sucesso!', type: 'success' });
-                    setTimeout(() => location.reload(), 1500);
-                } else {
-                    showAlert({ title: 'Atenção', message: data.message, type: 'warning' });
-                }
-            });
-        };
-    }
-
-    // AJAX: Vincular Responsável
-    const formAssign = document.getElementById('formAssignSector');
-    if (formAssign) {
-        formAssign.onsubmit = async function(e) {
-            e.preventDefault();
-
-            const confirm = await showConfirm({
-                title: 'Vincular Responsável',
-                message: 'Deseja vincular este usuário como responsável pelo setor selecionado?',
-                type: 'info',
-                confirmLabel: 'Vincular'
-            });
-            if(!confirm) return;
-
-            const formData = new FormData(this);
-            fetch('api/assign_sector.php', { method: 'POST', body: withCsrf(formData) })
-            .then(r => r.json()).then(data => {
-                if(data.success) {
-                    showAlert({ title: 'Sucesso', message: data.message, type: 'success' });
-                    setTimeout(() => location.reload(), 1500);
-                } else {
-                    showAlert({ title: 'Erro', message: data.message, type: 'error' });
-                }
-            });
-        }
-    }
-
-    // Função: Toggle Status (Ativar/Inativar)
-    function toggleUserStatus(id, active) {
-        const formData = new FormData();
-        formData.append('id', id);
-        formData.append('status', active ? 1 : 0);
-        fetch('api/update_user_admin.php', { method: 'POST', body: withCsrf(formData) })
-        .then(r => r.json()).then(data => {
-            if(!data.success) alert(data.message);
-            else location.reload();
-        });
-    }
-
-    // Função: Salvar Mudanças (Senha)
-    // Controle do Pop-over de senha
-    let _openPopoverId = null;
-
-    function togglePassPopover(id, btn) {
-        if (_openPopoverId && _openPopoverId !== id) closePassPopover(_openPopoverId);
-        const pop = document.getElementById('passPopover_' + id);
-        if (!pop) return;
-        const isOpen = pop.style.display !== 'none';
-        if (isOpen) { closePassPopover(id); return; }
-        _positionPopover(pop, btn || document.querySelector(`[onclick*="togglePassPopover(${id}"]`));
-        _openPopoverId = id;
-        setTimeout(() => document.getElementById('pop_newpass_' + id)?.focus(), 50);
-        setTimeout(() => {
-            function outsideClick(e) {
-                if (!pop.contains(e.target) && !e.target.closest('[onclick*="togglePassPopover"]')) {
-                    closePassPopover(id);
-                    document.removeEventListener('click', outsideClick);
-                }
-            }
-            document.addEventListener('click', outsideClick);
-        }, 0);
-    }
-
-    function closePassPopover(id) {
-        const pop = document.getElementById('passPopover_' + id);
-        if (pop) pop.style.display = 'none';
-        const inp = document.getElementById('pop_newpass_' + id);
-        if (inp) inp.value = '';
-        if (_openPopoverId === id) _openPopoverId = null;
-    }
-
-    async function confirmPassChange(id) {
-        const newPass = document.getElementById('pop_newpass_' + id)?.value?.trim();
-        if (!newPass) {
-            showAlert({ title: 'Campo vazio', message: 'Informe a nova senha.', type: 'warning' });
-            return;
-        }
-        closePassPopover(id);
-        const formData = new FormData();
-        formData.append('id', id);
-        formData.append('password', newPass);
-        try {
-            const r = await fetch('api/update_user_admin.php', { method: 'POST', body: withCsrf(formData) });
-            const data = await r.json();
-            if (data.success) showAlert({ title: 'Sucesso', message: 'Senha atualizada com sucesso!', type: 'success' });
-            else showAlert({ title: 'Erro', message: data.message, type: 'error' });
-        } catch(e) {
-            showAlert({ title: 'Erro', message: 'Falha na comunicação com o servidor.', type: 'error' });
-        }
-    }
-
-    // Mantém alias de compatibilidade
-    async function saveUserChanges(id) { togglePassPopover(id); }
-
-    // Função: Edição Direta de Campo (Role, Login)
-    function setRowState(row, message, color = 'var(--text-muted)', dirty = false) {
-    const saveState = row.querySelector('.row-save-state');
-    if (saveState) {
-        saveState.textContent = message;
-        saveState.style.color = color;
-    }
-    row.dataset.dirty = dirty ? '1' : '0';
-}
-
-function markRowDirty(element) {
-    const row = element.closest('.user-row');
-    if (!row) return;
-    setRowState(row, 'Alteracoes pendentes', '#d97706', true);
-    const status = row.querySelector('.subdivision-save-status');
-    if (status) {
-        status.textContent = 'Alteracoes pendentes';
-        status.style.color = '#d97706';
-    }
-}
-
-async function saveRowAccount(id, button) {
-    const row = button.closest('.user-row');
-    if (!row) return;
-
-    const loginInput = row.querySelector('.row-login-input');
-    const roleSelect = row.querySelector('.row-role-select');
-    const editor = row.querySelector('[data-subdivision-editor]');
-    const status = row.querySelector('.subdivision-save-status');
-
-    const selectedSubdivisions = Array.from(editor.querySelectorAll('input[type="checkbox"]:checked'))
-        .map(input => input.value)
-        .filter(Boolean);
-
-    const formData = new FormData();
-    formData.append('id', id);
-    formData.append('login', (loginInput?.value || '').trim());
-    formData.append('phone', (row.querySelector('.row-phone-input')?.value || '').trim());
-    formData.append('role', roleSelect?.value || 'solicitante');
-    if (selectedSubdivisions.length === 0) {
-        formData.append('subdivisions[]', '');
-    } else {
-        selectedSubdivisions.forEach(value => formData.append('subdivisions[]', value));
-    }
-
-    setRowState(row, 'Salvando...', 'var(--text-muted)', false);
-    if (status) {
-        status.textContent = 'Salvando...';
-        status.style.color = 'var(--text-muted)';
-    }
-
-    button.disabled = true;
-    editor.querySelectorAll('input[type="checkbox"]').forEach(input => input.disabled = true);
-    if (loginInput) loginInput.disabled = true;
-    if (roleSelect) roleSelect.disabled = true;
-
-    try {
-        const response = await fetch('api/update_user_admin.php', { method: 'POST', body: withCsrf(formData) });
-        const data = await response.json();
-        if (!data.success) {
-            setRowState(row, 'Erro ao salvar', '#ef4444', true);
-            if (status) {
-                status.textContent = 'Erro ao salvar';
-                status.style.color = '#ef4444';
-            }
-            showAlert({ title: 'Erro', message: data.message, type: 'error' });
-            return;
-        }
-
-        row.dataset.role = roleSelect?.value || row.dataset.role || '';
-        row.dataset.subdivisions = selectedSubdivisions.join(',');
-        setRowState(row, 'Salvo', '#10b981', false);
-        if (status) {
-            status.textContent = 'Subdivisoes salvas';
-            status.style.color = '#10b981';
-        }
-        filterTable();
-    } catch (e) {
-        setRowState(row, 'Erro ao salvar', '#ef4444', true);
-        if (status) {
-            status.textContent = 'Erro ao salvar';
-            status.style.color = '#ef4444';
-        }
-        showAlert({ title: 'Erro', message: 'Nao foi possivel salvar os dados da linha.', type: 'error' });
-    } finally {
-        button.disabled = false;
-        editor.querySelectorAll('input[type="checkbox"]').forEach(input => input.disabled = false);
-        if (loginInput) loginInput.disabled = false;
-        if (roleSelect) roleSelect.disabled = false;
-    }
-}
-
-
-    // Função: Excluir Usuário
-    async function deleteUser(id) {
-        const confirm = await showConfirm({
-            title: 'Excluir Conta',
-            message: 'ATENÇÃO: Deseja realmente excluir permanentemente esta conta? Esta ação não pode ser desfeita.',
-            type: 'error',
-            isDanger: true,
-            confirmLabel: 'Excluir Permanentemente'
-        });
-        if(!confirm) return;
-
-        const formData = new FormData();
-        formData.append('id', id);
-        formData.append('action', 'delete');
-        fetch('api/update_user_admin.php', { method: 'POST', body: withCsrf(formData) })
-        .then(r => r.json()).then(data => {
-            if(data.success) location.reload();
-            else showAlert({ title: 'Erro', message: data.message, type: 'error' });
-        });
-    }
-
-    // Filtros e Busca
-    document.getElementById('userSearch').addEventListener('input', filterTable);
-    document.getElementById('roleFilter').addEventListener('change', filterTable);
-    document.getElementById('subdivisionFilter').addEventListener('change', filterTable);
-
-    function filterTable() {
-        const term = document.getElementById('userSearch').value.trim().toLowerCase();
-        const role = document.getElementById('roleFilter').value;
-        const subdivision = document.getElementById('subdivisionFilter').value;
-        const rows = document.querySelectorAll('.user-row');
-
-        rows.forEach(row => {
-            const loginInput = row.querySelector('.row-login-input');
-            const userRole = row.getAttribute('data-role');
-            const roleSelect = row.querySelector('.row-role-select');
-            const selectedRole = roleSelect?.selectedOptions?.[0]?.textContent || userRole;
-            const sectorText = row.querySelector('.sector-list')?.textContent || '';
-            const subdivisionText = Array.from(row.querySelectorAll('[data-subdivision-editor] input[type="checkbox"]:checked'))
-                .map(input => input.closest('label')?.textContent || '')
-                .join(' ');
-            const searchableText = [
-                row.querySelector('.user-name')?.textContent || '',
-                loginInput?.value || '',
-                userRole || '',
-                selectedRole || '',
-                sectorText,
-                subdivisionText
-            ].join(' ').toLowerCase();
-            const userSubdivisions = (row.dataset.subdivisions || '').split(',').filter(Boolean);
-
-            const matchesSearch = !term || searchableText.includes(term);
-            const matchesRole = role === 'all' || userRole === role;
-            const matchesSubdivision = subdivision === 'all' || userSubdivisions.includes(subdivision);
-
-            row.style.display = (matchesSearch && matchesRole && matchesSubdivision) ? '' : 'none';
-        });
-    }
-
-    // Função: Adicionar Campo de Subdivisão
-    function addSubdivisionField() {
-        const container = document.getElementById('subdivisionContainer');
-        const originalSelect = container.querySelector('select');
-        const newSelect = originalSelect.cloneNode(true);
-        newSelect.value = '';
-        newSelect.style.marginTop = '8px';
-
-        // Adicionar botão de remover
-        const div = document.createElement('div');
-        div.style.position = 'relative';
-        div.style.marginTop = '8px';
-
-        newSelect.style.marginTop = '0';
-        div.appendChild(newSelect);
-
-        const removeBtn = document.createElement('button');
-        removeBtn.type = 'button';
-        removeBtn.innerHTML = '<i class="fa-solid fa-times"></i>';
-        removeBtn.style = 'position: absolute; right: -25px; top: 50%; transform: translateY(-50%); background: transparent; border: none; color: #ef4444; cursor: pointer; font-size: 0.8rem;';
-        removeBtn.onclick = () => div.remove();
-
-        div.appendChild(removeBtn);
-        container.appendChild(div);
-    }
-</script>
+<script type="application/json" id="accData"><?= json_encode($accData, JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT | JSON_UNESCAPED_UNICODE) ?></script>

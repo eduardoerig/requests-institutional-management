@@ -16,7 +16,82 @@ class RequestManager {
      * @param array $excludeStatuses - Lista de status a excluir (ex: ['P', 'N'] para gestores)
      * @param int|null $subdivisionId - Filtra por subdivisão específica (para adm_sub)
      */
+    /** Cache dentro da mesma requisição HTTP (menu lateral e página pedem os mesmos dados) */
+    private static $requestCache = [];
+
+    /** Mapa id_user => [nomes, slugs] das subdivisões, carregado uma vez */
+    private static $userSubdivisionMap = null;
+
+    private static function userSubdivisionMap($pdo) {
+        if (self::$userSubdivisionMap === null) {
+            self::$userSubdivisionMap = [];
+            $rows = $pdo->query("
+                SELECT cus.id_user,
+                       GROUP_CONCAT(s.name ORDER BY s.id SEPARATOR ', ') AS names,
+                       GROUP_CONCAT(s.slug ORDER BY s.id SEPARATOR ',') AS slugs
+                FROM cfg_user_subdivision cus
+                JOIN ctd_subdivision s ON s.id = cus.id_subdivision
+                GROUP BY cus.id_user
+            ")->fetchAll(PDO::FETCH_ASSOC);
+            foreach ($rows as $row) {
+                self::$userSubdivisionMap[(int)$row['id_user']] = [$row['names'], $row['slugs']];
+            }
+        }
+        return self::$userSubdivisionMap;
+    }
+
+    /**
+     * Filtro de subdivisão (coordenação): pedidos da subdivisão ou de quem pertence a ela.
+     * null = sem filtro (admin geral); lista vazia = coordenação sem subdivisão, não vê nada.
+     * @return array{0: string, 1: array} trecho SQL (começa com " AND") e parâmetros
+     */
+    private static function subdivisionFilter($subdivisionId): array
+    {
+        if ($subdivisionId === null) {
+            return ['', []];
+        }
+        if (is_array($subdivisionId) && empty($subdivisionId)) {
+            return [' AND 1 = 0', []];
+        }
+        $ids = is_array($subdivisionId) ? array_values($subdivisionId) : [$subdivisionId];
+        $in = implode(',', array_fill(0, count($ids), '?'));
+        return [" AND (
+            r.subdivision_id IN ($in)
+            OR EXISTS (
+                SELECT 1
+                FROM cfg_user_subdivision cus
+                WHERE cus.id_user = r.created_by
+                  AND cus.id_subdivision IN ($in)
+            )
+        )", array_merge($ids, $ids)];
+    }
+
+    /** Quantos pedidos aguardam aprovação (contador do menu), numa consulta só e com o mesmo filtro de getRequests */
+    public static function countPending($pdo, $subdivisionId = null): int
+    {
+        $parts = [];
+        $params = [];
+        foreach (allowedRequestTables() as $sector) {
+            [$subSql, $subParams] = self::subdivisionFilter($subdivisionId);
+            $parts[] = "(SELECT COUNT(*) FROM `ctd_{$sector}_frm` r WHERE r.status = 'P'$subSql)";
+            $params = array_merge($params, $subParams);
+        }
+        $stmt = $pdo->prepare('SELECT ' . implode(' + ', $parts));
+        $stmt->execute($params);
+        return (int)$stmt->fetchColumn();
+    }
+
     public static function getRequests($pdo, $userId = null, $managingUserId = null, $status = null, $specificSector = null, $searchText = null, $order = 'DESC', $excludeStatuses = [], $dateStart = null, $dateEnd = null, $subdivisionId = null) {
+        $cacheKey = md5(serialize(func_get_args() ? array_slice(func_get_args(), 1) : []));
+        if (isset(self::$requestCache[$cacheKey])) {
+            return self::$requestCache[$cacheKey];
+        }
+        $result = self::fetchRequests($pdo, $userId, $managingUserId, $status, $specificSector, $searchText, $order, $excludeStatuses, $dateStart, $dateEnd, $subdivisionId);
+        self::$requestCache[$cacheKey] = $result;
+        return $result;
+    }
+
+    private static function fetchRequests($pdo, $userId, $managingUserId, $status, $specificSector, $searchText, $order, $excludeStatuses, $dateStart, $dateEnd, $subdivisionId) {
         $order = strtoupper($order) === 'ASC' ? 'ASC' : 'DESC';
         $allowedSectors = [];
         if ($managingUserId) {
@@ -28,7 +103,8 @@ class RequestManager {
         $tables = [];
         if ($specificSector && $specificSector !== 'all') {
             $normalizedSector = normalizeRequestTable((string)$specificSector);
-            if ($normalizedSector === null) {
+            // Gestor só filtra entre os próprios setores; outro setor no filtro não devolve nada
+            if ($normalizedSector === null || ($managingUserId && !in_array($normalizedSector, $allowedSectors, true))) {
                 return [
                     'requests' => [],
                     'stats' => [
@@ -38,20 +114,15 @@ class RequestManager {
                     ]
                 ];
             }
-            $tables[] = "ctd_" . $normalizedSector . "_frm";
+            $tables[] = requestTableName($normalizedSector);
         } else {
-            $stmtTables = $pdo->query("SHOW TABLES LIKE 'ctd_%_frm'");
-            while($row = $stmtTables->fetch(PDO::FETCH_NUM)) {
-                $tableName = $row[0];
-                $sectorName = str_replace(['ctd_', '_frm'], '', $tableName);
-                $sectorName = strtolower($sectorName);
-                
+            foreach (allowedRequestTables() as $sectorName) {
                 // Se estiver filtrando por gestor, ignora tabelas que não são da sua área
                 if ($managingUserId && !in_array($sectorName, $allowedSectors)) {
                     continue;
                 }
-                
-                $tables[] = $tableName;
+
+                $tables[] = requestTableName($sectorName);
             }
         }
 
@@ -65,28 +136,20 @@ class RequestManager {
 
         foreach ($tables as $t) {
             try {
-                $query = "SELECT r.*, u.name as solicitor_name, sub.name as subdivision_name, sub.slug as subdivision_slug,
-                    (SELECT GROUP_CONCAT(s2.name ORDER BY s2.id SEPARATOR ', ')
-                     FROM cfg_user_subdivision cus2
-                     JOIN ctd_subdivision s2 ON cus2.id_subdivision = s2.id
-                     WHERE cus2.id_user = r.created_by) as all_subdivision_names,
-                    (SELECT GROUP_CONCAT(s2.slug ORDER BY s2.id SEPARATOR ',')
-                     FROM cfg_user_subdivision cus2
-                     JOIN ctd_subdivision s2 ON cus2.id_subdivision = s2.id
-                     WHERE cus2.id_user = r.created_by) as all_subdivision_slugs
+                $query = "SELECT r.*, u.name as solicitor_name, sub.name as subdivision_name, sub.slug as subdivision_slug
                 FROM $t r LEFT JOIN ctd_users u ON r.created_by = u.id LEFT JOIN ctd_subdivision sub ON r.subdivision_id = sub.id WHERE 1=1";
                 $params = [];
                 
                 if ($userId !== null) {
-                    $query .= " AND created_by = ?";
+                    $query .= " AND r.created_by = ?";
                     $params[] = $userId;
                 }
 
                 if ($status === 'P') {
-                    $query .= " AND (TRIM(UPPER(r.status)) = 'P' OR r.status IS NULL OR r.status = '')";
+                    $query .= " AND r.status = 'P'";
                 } elseif ($status !== null) {
-                    $query .= " AND TRIM(UPPER(r.status)) = UPPER(?)";
-                    $params[] = $status;
+                    $query .= " AND r.status = ?";
+                    $params[] = strtoupper(trim((string)$status));
                 }
 
                 // Excluir status específicos (r.status)
@@ -103,62 +166,40 @@ class RequestManager {
                 }
 
                 if ($searchText !== null && trim($searchText) !== '') {
-                    $query .= " AND title LIKE ?";
+                    $query .= " AND r.title LIKE ?";
                     $params[] = "%$searchText%";
                 }
 
                 if ($dateStart) {
-                    $query .= " AND created_at >= ?";
+                    $query .= " AND r.created_at >= ?";
                     $params[] = $dateStart . " 00:00:00";
                 }
 
                 if ($dateEnd) {
-                    $query .= " AND created_at <= ?";
+                    $query .= " AND r.created_at <= ?";
                     $params[] = $dateEnd . " 23:59:59";
                 }
 
                 // Filtro por subdivisão
-                if ($subdivisionId !== null) {
-                    if (is_array($subdivisionId)) {
-                        if (!empty($subdivisionId)) {
-                            $placeholders = implode(',', array_fill(0, count($subdivisionId), '?'));
-                            $query .= " AND (
-                                r.subdivision_id IN ($placeholders)
-                                OR EXISTS (
-                                    SELECT 1
-                                    FROM cfg_user_subdivision cus
-                                    WHERE cus.id_user = r.created_by
-                                      AND cus.id_subdivision IN ($placeholders)
-                                )
-                            )";
-                            $params = array_merge($params, $subdivisionId, $subdivisionId);
-                        }
-                    } else {
-                        $query .= " AND (
-                            r.subdivision_id = ?
-                            OR EXISTS (
-                                SELECT 1
-                                FROM cfg_user_subdivision cus
-                                WHERE cus.id_user = r.created_by
-                                  AND cus.id_subdivision = ?
-                            )
-                        )";
-                        $params[] = $subdivisionId;
-                        $params[] = $subdivisionId;
-                    }
-                }
-                
+                [$subSql, $subParams] = self::subdivisionFilter($subdivisionId);
+                $query .= $subSql;
+                $params = array_merge($params, $subParams);
+
                 $stmt = $pdo->prepare($query);
                 $stmt->execute($params);
                 $res = $stmt->fetchAll(PDO::FETCH_ASSOC);
                 
-                $sectorName = str_replace(['ctd_', '_frm'], '', $t);
+                $sectorName = requestSlug($t);
                 
+                $subMap = self::userSubdivisionMap($pdo);
                 foreach ($res as $r) {
+                    [$r['all_subdivision_names'], $r['all_subdivision_slugs']] = $subMap[(int)($r['created_by'] ?? 0)] ?? [null, null];
                     $st = trim(strtoupper($r['status'] ?? 'P'));
-                    $createdAtStr = $r['created_at'] ?? '0';
-                    $createdAt = strtotime($createdAtStr);
-                    $isAtrasada = ($st !== 'C' && $st !== 'N' && $st !== 'R' && (time() - $createdAt) > (3 * 24 * 3600)); 
+                    // Atrasada = prazo pedido já passou e a requisição ainda não foi encerrada
+                    $deadline = $r['date'] ?? null;
+                    $isAtrasada = !in_array($st, ['C', 'N'], true)
+                        && !empty($deadline) && $deadline !== '0000-00-00'
+                        && $deadline < date('Y-m-d');
                     
                     // Padronização
                     $r['sector'] = $sectorName;
@@ -198,7 +239,7 @@ class RequestManager {
                     $stats['total']++;
                     
                     if ($isAtrasada) $stats['atrasadas']++;
-                    if (!empty($r['urgent'])) $stats['urgentes']++;
+                    if (!empty($r['urgent']) || (int)($r['priority'] ?? 2) >= 3) $stats['urgentes']++;
                     if (isset($r['priority']) && $r['priority'] == 4) $stats['criticas']++;
                     
                     $stMapped = $st;
@@ -216,35 +257,20 @@ class RequestManager {
             }
         }
 
-        // Ordenar as requisições por data de prazo (date) conforme solicitação do usuário
-        usort($all_requests, function($a, $b) use ($order) {
-            $rawA = $a['date'] ?? '';
-            $rawB = $b['date'] ?? '';
-            
-            $hasA = (!empty($rawA) && $rawA !== '0000-00-00' && $rawA !== '0000-00-00 00:00:00');
-            $hasB = (!empty($rawB) && $rawB !== '0000-00-00' && $rawB !== '0000-00-00 00:00:00');
-            
-            // Se um deles não tem prazo, colocamos no final
-            if ($hasA && !$hasB) return -1;
-            if (!$hasA && $hasB) return 1;
-            if (!$hasA && !$hasB) {
-                return strtotime($b['created_at'] ?? 0) - strtotime($a['created_at'] ?? 0);
+        // Ordenar por prazo (sem prazo vai para o fim; empate: mais recente primeiro).
+        // Datas ISO (AAAA-MM-DD) comparam corretamente como texto — evita strtotime a cada comparação.
+        $hasDeadline = fn($d) => !empty($d) && strpos((string)$d, '0000-00-00') !== 0;
+        usort($all_requests, function($a, $b) use ($order, $hasDeadline) {
+            $rawA = (string)($a['date'] ?? '');
+            $rawB = (string)($b['date'] ?? '');
+            $hasA = $hasDeadline($rawA);
+            $hasB = $hasDeadline($rawB);
+
+            if ($hasA !== $hasB) return $hasA ? -1 : 1;
+            if (!$hasA || $rawA === $rawB) {
+                return strcmp((string)($b['created_at'] ?? ''), (string)($a['created_at'] ?? ''));
             }
-            
-            $tsA = strtotime($rawA);
-            $tsB = strtotime($rawB);
-            
-            if ($tsA === $tsB) {
-                return strtotime($b['created_at'] ?? 0) - strtotime($a['created_at'] ?? 0);
-            }
-            
-            if ($order === 'ASC') {
-                // ASC (Seta para CIMA): Mais atrasadas (datas antigas) -> Mais de boas (datas futuras)
-                return ($tsA < $tsB) ? -1 : 1;
-            } else {
-                // DESC (Seta para BAIXO): Mais de boas (datas futuras) -> Mais atrasadas (datas antigas)
-                return ($tsA > $tsB) ? -1 : 1;
-            }
+            return $order === 'ASC' ? strcmp($rawA, $rawB) : strcmp($rawB, $rawA);
         });
 
         return [
@@ -323,8 +349,9 @@ class RequestManager {
         try {
             $stmt = $pdo->prepare("INSERT INTO notifications (user_id, title, message, link) VALUES (?, ?, ?, ?)");
             $stmt->execute([$userId, $title, $message, $link]);
-        } catch (Exception $e) {
-            // Silently fail
+        } catch (Throwable $e) {
+            // Aviso é acessório: não derruba a ação, mas fica no log
+            error_log("RequestManager::notify user=$userId \"$title\": " . $e->getMessage());
         }
     }
 
@@ -341,19 +368,37 @@ class RequestManager {
     /**
      * Registra uma ação no histórico da requisição.
      */
-    public static function addHistory($pdo, $reqId, $reqTable, $userId, $userName, $action, $oldValue = null, $newValue = null) {
+    /**
+     * Registra um evento do pedido. $eventCode diz o que aconteceu (created, approved, started...,
+     * ver migração 008); $oldValue/$newValue vão em código: situação P/Y/W/C/N/F, prioridade 1-4 e,
+     * nos encaminhamentos, o nome do setor. $action é o texto para leitura (impressão, registros antigos).
+     */
+    public static function addHistory($pdo, $reqId, $reqTable, $userId, $userName, $action, $oldValue = null, $newValue = null, ?string $eventCode = null) {
         try {
-            $stmt = $pdo->prepare("INSERT INTO request_history (request_id, request_table, user_id, user_name, action, old_value, new_value) VALUES (?, ?, ?, ?, ?, ?, ?)");
-            $stmt->execute([$reqId, $reqTable, $userId, $userName, $action, $oldValue, $newValue]);
-        } catch (Exception $e) {
-            // Silently fail
+            $stmt = $pdo->prepare("INSERT INTO request_history (request_id, request_table, user_id, user_name, action, event_code, old_value, new_value) VALUES (?, ?, ?, ?, ?, ?, ?, ?)");
+            $stmt->execute([$reqId, $reqTable, $userId, $userName, $action, $eventCode, $oldValue, $newValue]);
+        } catch (Throwable $e) {
+            error_log("RequestManager::addHistory $reqTable/$reqId \"$action\": " . $e->getMessage());
+            // Dentro de uma transação o histórico faz parte da operação: sem ele, desfaz tudo
+            if ($pdo->inTransaction()) {
+                throw $e;
+            }
         }
     }
 
     /**
      * Notifica todos os interessados em uma requisição (Solicitante, Gestores do Setor e Admins).
+     * Roda depois da ação já gravada: falha aqui vai para o log e não vira erro na tela.
      */
     public static function notifyStakeholders($pdo, $reqData, $sector, $title, $message, $link, $excludeUserId = null, $notifyAdmins = true) {
+        try {
+            self::sendStakeholderNotifications($pdo, $reqData, $sector, $title, $message, $link, $excludeUserId, $notifyAdmins);
+        } catch (Throwable $e) {
+            error_log("RequestManager::notifyStakeholders $sector/" . ($reqData['id'] ?? '?') . " \"$title\": " . $e->getMessage());
+        }
+    }
+
+    private static function sendStakeholderNotifications($pdo, $reqData, $sector, $title, $message, $link, $excludeUserId, $notifyAdmins) {
         $createdBy = (int)($reqData['created_by'] ?? 0);
         $subdivisionId = $reqData['subdivision_id'] ?? null;
         $notified = $excludeUserId ? [$excludeUserId] : [];

@@ -1,32 +1,27 @@
 <?php
-// pages/home.php - DASHBOARD ADMINISTRATIVO
+// pages/home.php - PAINEL DA COORDENAÇÃO / ADMINISTRAÇÃO (UI 2.0)
 
-$map = [
-    'mkt' => 'MKT',
-    'xerox' => 'Reprografia',
-    'shop' => 'Compras',
-    'service' => 'Manutenção',
-    'ti' => 'TI',
-];
+// Setores do Painel (config/sectors.php)
+$map = array_map(fn($s) => $s['label'], sectorRegistry());
 
 $role = $_SESSION['role'] ?? 'view';
 $user_id = $_SESSION['id'];
 
 // Definição de perfis com permissão de gestão
-$adminRoles = ['admin', 'adm', 'coord'];
-$gestorRoles = ['gestor', 'ti', 'xerox', 'service', 'shop', 'mkt', 'marketing'];
-
-$isAdmin = in_array($role, $adminRoles);
+$isAdmin = isGlobalAdminRole($role);
 $isAdmSub = ($role === 'adm_sub');
-$isGestor = in_array($role, $gestorRoles);
+$isGestor = isGestorRole($role);
 $canManage = $isAdmin || $isGestor || $isAdmSub;
 
 if (!$canManage) {
     echo "<script>location.href='myRequests';</script>";
-    exit;
+    return;
 }
 
 require_once __DIR__ . '/../classes/RequestManager.php';
+require_once __DIR__ . '/../classes/RequestForwardService.php';
+require_once __DIR__ . '/../components/request_card.php';
+require_once __DIR__ . '/../components/welcome_card.php';
 
 // Pegar setores permitidos para este usuário
 $allowedSectors = [];
@@ -34,8 +29,7 @@ if (!$isAdmin && !$isAdmSub) {
     $stmtSectors = $pdo->prepare("SELECT a.title FROM ctd_area a JOIN cfg_user_area cua ON a.id = cua.id_area WHERE cua.id_user = ?");
     $stmtSectors->execute([$user_id]);
     $allowedSectors = array_values(array_filter(array_map('areaTitleToSector', $stmtSectors->fetchAll(PDO::FETCH_COLUMN))));
-    
-    // Filtrar o $map para mostrar apenas os setores permitidos no dropdown
+
     $filteredMap = [];
     foreach ($map as $key => $label) {
         if (in_array(strtolower($key), $allowedSectors)) {
@@ -46,14 +40,7 @@ if (!$isAdmin && !$isAdmSub) {
 }
 
 $managingId = ($isAdmin || $isAdmSub) ? null : $user_id;
-$activeFilterStatus = isset($_GET['status']) && $_GET['status'] !== '' ? $_GET['status'] : null;
-
-$tableTitle = 'Atividade Recente';
-if ($activeFilterStatus === 'C') $tableTitle = 'Requisições Concluídas';
-elseif ($activeFilterStatus === 'P') $tableTitle = 'Requisições Pendentes';
-elseif ($activeFilterStatus === 'Y') $tableTitle = 'Requisições Aprovadas';
-elseif ($activeFilterStatus === 'W') $tableTitle = 'Requisições em Atendimento';
-elseif ($activeFilterStatus === 'N') $tableTitle = 'Requisições Recusadas';
+$activeFilterStatus = in_array($_GET['status'] ?? '', ['P', 'Y', 'N', 'W', 'C', 'F'], true) ? $_GET['status'] : null;
 
 // REGRA: Gestor só vê requisições aprovadas (Y), em andamento (W) e concluídas (C)
 $excludeStatuses = [];
@@ -64,454 +51,359 @@ if ($isGestor) {
 // Filtro de subdivisão para adm_sub
 $subdivisionFilter = $isAdmSub ? ($_SESSION['subdivision_ids'] ?? null) : null;
 
-$data = RequestManager::getRequests($pdo, null, $managingId, $activeFilterStatus ?: null, null, null, 'DESC', $excludeStatuses, null, null, $subdivisionFilter);
-$all_requests = $data['requests'];
+// Uma busca só (sem filtro de situação): os números do painel valem sempre para tudo;
+// o filtro de situação recorta só a lista, aqui no PHP.
+$data = RequestManager::getRequests($pdo, null, $managingId, null, null, null, 'DESC', $excludeStatuses, null, null, $subdivisionFilter);
+$everything = $data['requests'];
 $stats = $data['stats'];
 
-extract($stats); // Extracts variables like $total, $pendentes, $emAndamento, $repassadas, etc.
+extract($stats); // $total, $pendentes, $aprovadas, $emAndamento, $repassadas, $concluidas, $recusadas, $atrasadas, $urgentes, $criticas, $categoryCounts
 
-// Ajustar contagem para incluir repasses
-if ($isAdmin || $isAdmSub) {
-    // Admin vê todas as Repassadas (F - que são pendentes) no seu escopo como "Aprovadas" (Aguardando Aceite)
-    $aprovadas += ($repassadas ?? 0);
-} else {
-    require_once __DIR__ . '/../classes/RequestForwardService.php';
-    
-    // Repasses pendentes (aguardando aceite do gestor) vão para Aprovadas
-    $pendingFwds = RequestForwardService::getPendingForwards($pdo, $user_id, 'pending');
-    if ($pendingFwds['success']) {
-        $aprovadas += count($pendingFwds['data']);
-    }
-    
-    // Repasses aceitos (em atendimento pelo gestor) vão para Em Andamento
-    $acceptedFwds = RequestForwardService::getPendingForwards($pdo, $user_id, 'accepted');
-    if ($acceptedFwds['success']) {
-        $emAndamento += count($acceptedFwds['data']);
-    }
+$normStatus = static function (array $r): string {
+    $st = strtoupper(trim((string)($r['st_raw'] ?? $r['status'] ?? 'P')));
+    return $st === '' ? 'P' : $st;
+};
+$all_requests = $activeFilterStatus
+    ? array_values(array_filter($everything, fn($r) => $normStatus($r) === $activeFilterStatus))
+    : $everything;
+
+// Busca e data filtram no servidor (resultado vale para TODAS as requisições, não só as da tela)
+$searchTerm = mb_substr(trim((string)($_GET['q'] ?? '')), 0, 100);
+$searchDate = preg_match('/^\d{4}-\d{2}-\d{2}$/', (string)($_GET['data'] ?? '')) ? $_GET['data'] : '';
+$tableRequests = $all_requests;
+if ($searchTerm !== '' || $searchDate !== '') {
+    $filtered = RequestManager::getRequests($pdo, null, $managingId, $activeFilterStatus ?: null, null, null, 'DESC', $excludeStatuses, $searchDate ?: null, $searchDate ?: null, $subdivisionFilter);
+    $termLower = mb_strtolower($searchTerm);
+    $tableRequests = array_values(array_filter($filtered['requests'], function ($r) use ($termLower) {
+        if ($termLower === '') return true;
+        $haystack = mb_strtolower(($r['title'] ?? '') . ' #' . ($r['id'] ?? '') . ' ' . ($r['solicitor_name'] ?? ''));
+        return mb_strpos($haystack, $termLower) !== false;
+    }));
 }
 
-$recent_requests = $all_requests; // Mostrar todas para permitir filtro completo no Dashboard
+// Paginação: 50 por página
+$perPage = 50;
+$totalRows = count($tableRequests);
+$totalPages = max(1, (int)ceil($totalRows / $perPage));
+$currentPageNum = min($totalPages, max(1, (int)($_GET['p'] ?? 1)));
+$recent_requests = array_slice($tableRequests, ($currentPageNum - 1) * $perPage, $perPage);
+$pageLink = function (int $n) use ($activeFilterStatus, $searchTerm, $searchDate) {
+    return 'home?' . http_build_query(array_filter(['status' => $activeFilterStatus, 'q' => $searchTerm, 'data' => $searchDate, 'p' => $n > 1 ? $n : null]));
+};
 
-// Buscar notificações não lidas
-$unread_stmt = $pdo->prepare("SELECT COUNT(*) FROM notifications WHERE user_id = ? AND is_read = 0");
-$unread_stmt->execute([$_SESSION['id'] ?? 0]);
-$unread_count = $unread_stmt->fetchColumn();
+// ---------------------------------------------------------------------
+// Leitura do painel (tudo a partir dos pedidos já carregados acima)
+// ---------------------------------------------------------------------
+$today = date('Y-m-d');
+$daysSince = static function (?string $dt) use ($today): int {
+    if (!$dt || strpos($dt, '0000') === 0) return 0;
+    return max(0, (int)floor((strtotime($today) - strtotime(substr($dt, 0, 10))) / 86400));
+};
+$fmtDays = static function (float $d): string {
+    if ($d < 1) return 'menos de 1 dia';
+    $txt = rtrim(rtrim(number_format($d, 1, ',', ''), '0'), ',');
+    return $txt . ($txt === '1' ? ' dia' : ' dias');
+};
+$isOpen = static fn(string $st): bool => !in_array($st, ['C', 'N'], true);
+$isUrgent = static fn(array $r): bool => !empty($r['urgent']) || (int)($r['priority'] ?? 2) >= 3;
+$reqLink = static fn(array $r): string => 'request_detail?id=' . (int)$r['id'] . '&table=' . urlencode((string)$r['sector']);
 
-// Status stepper labels
-$stepperMap = ['P' => 0, 'Y' => 1, 'W' => 2, 'C' => 3, 'N' => -1];
-?>
-<style>
-/* === DASHBOARD COMPACTO === */
-.db-kpi-strip{display:flex;align-items:center;background:#fff;border:1px solid var(--border-color);border-radius:10px;padding:10px 16px;margin-bottom:18px;gap:0;overflow-x:auto;}
-.db-kpi{display:flex;align-items:center;gap:10px;flex:1;min-width:110px;text-decoration:none;color:inherit;padding:4px 14px;}
-.db-kpi--active .db-kpi__val{color:var(--primary);}
-.db-kpi__icon{width:32px;height:32px;border-radius:8px;display:flex;align-items:center;justify-content:center;font-size:0.82rem;flex-shrink:0;}
-.db-kpi__val{font-size:1.3rem;font-weight:800;color:var(--text-main);line-height:1;}
-.db-kpi__lbl{font-size:0.65rem;color:var(--text-muted);font-weight:600;text-transform:uppercase;letter-spacing:0.4px;margin-top:1px;}
-.db-kpi__bar{height:3px;background:#f1f5f9;border-radius:2px;margin-top:4px;width:80px;}
-.db-kpi__bar-fill{height:3px;background:#15803d;border-radius:2px;}
-.db-kpi__sep{width:1px;height:32px;background:var(--border-color);flex-shrink:0;margin:0 2px;}
-.db-charts{display:grid;grid-template-columns:repeat(auto-fit, minmax(280px, 1fr));gap:16px;margin-bottom:20px;}
-.db-chart-box{background:#fff;border:1px solid var(--border-color);border-radius:10px;padding:16px;display:flex;flex-direction:column;gap:10px;min-width:0;}
-.db-chart-head{font-size:0.76rem;font-weight:700;color:var(--text-main);display:flex;align-items:center;gap:7px;border-bottom:1px solid var(--border-color);padding-bottom:10px;}
-.db-canvas-wrap{position:relative;height:160px;width:100%;}
-.db-donut-center{position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);text-align:center;pointer-events:none;}
-.db-donut-center__val{font-size:1.5rem;font-weight:800;color:var(--text-main);line-height:1;}
-.db-donut-center__lbl{font-size:0.6rem;color:var(--text-muted);font-weight:600;text-transform:uppercase;}
-.db-legend{display:flex;flex-wrap:wrap;gap:4px 10px;}
-.db-legend__item{display:flex;align-items:center;gap:5px;font-size:0.67rem;color:var(--text-muted);font-weight:600;}
-.db-legend__dot{width:7px;height:7px;border-radius:50%;flex-shrink:0;}
-.db-health{display:flex;flex-direction:column;gap:9px;flex:1;justify-content:center;}
-.db-health__row{display:grid;grid-template-columns:85px 1fr 28px;align-items:center;gap:8px;}
-.db-health__lbl{font-size:0.7rem;color:var(--text-muted);font-weight:600;white-space:nowrap;}
-.db-health__bar{height:5px;background:#f1f5f9;border-radius:4px;overflow:hidden;}
-.db-health__fill{height:5px;border-radius:4px;}
-.db-health__num{font-size:0.72rem;font-weight:800;text-align:right;}
-@media(max-width:900px){.db-charts{grid-template-columns:1fr;}.db-kpi__sep{display:none;}.db-kpi-strip{flex-wrap:wrap;}}
-</style>
-<div class="main">
-
-    <div class="page-header">
-        <div>
-            <i class="fa-solid fa-chart-pie"></i>
-            <div>
-                <h3>Dashboard</h3>
-                <p style="font-size: 0.85rem; color: var(--text-muted); margin: 2px 0 0;">
-                    <?php if ($isGestor): ?>
-                        Visualizando requisições aprovadas dos seus setores
-                    <?php else: ?>
-                        Visão geral de todas as requisições
-                    <?php endif; ?>
-                </p>
-            </div>
-        </div>
-        <div>
-            <a href="new_request" class="btn-primary"><i class="fas fa-plus"></i> Nova Requisição</a>
-        </div>
-    </div>
-
-    <?php if (!$activeFilterStatus): ?>
-    <!-- Pipeline Visual (Fluxo) -->
-    <div class="flow-pipeline">
-        <?php if ($isAdmin): ?>
-        <a href="home?status=P" class="flow-step <?= $activeFilterStatus === 'P' ? 'active' : '' ?>">
-            <div class="flow-icon pending-bg"><i class="fa-solid fa-clock"></i></div>
-            <div class="flow-label">Pendentes</div>
-            <div class="flow-count"><?= $pendentes ?></div>
-        </a>
-        <div class="flow-arrow"><i class="fa-solid fa-arrow-right"></i></div>
-        <?php endif; ?>
-        <a href="home?status=Y" class="flow-step <?= $activeFilterStatus === 'Y' ? 'active' : '' ?>">
-            <div class="flow-icon approved-bg"><i class="fa-solid fa-check-circle"></i></div>
-            <div class="flow-label">Aprovadas</div>
-            <div class="flow-count"><?= $aprovadas ?></div>
-        </a>
-        <div class="flow-arrow"><i class="fa-solid fa-arrow-right"></i></div>
-        <a href="home?status=W" class="flow-step <?= $activeFilterStatus === 'W' ? 'active' : '' ?>">
-            <div class="flow-icon progress-bg"><i class="fa-solid fa-gears"></i></div>
-            <div class="flow-label">Em Andamento</div>
-            <div class="flow-count"><?= $emAndamento ?></div>
-        </a>
-        <div class="flow-arrow"><i class="fa-solid fa-arrow-right"></i></div>
-        <a href="home?status=C" class="flow-step <?= $activeFilterStatus === 'C' ? 'active' : '' ?>">
-            <div class="flow-icon completed-bg"><i class="fa-solid fa-check-double"></i></div>
-            <div class="flow-label">Concluídas</div>
-            <div class="flow-count"><?= $concluidas ?></div>
-        </a>
-        <?php if ($isAdmin): ?>
-        <div class="flow-divider"></div>
-        <a href="home?status=N" class="flow-step <?= $activeFilterStatus === 'N' ? 'active' : '' ?>">
-            <div class="flow-icon rejected-bg"><i class="fa-solid fa-circle-xmark"></i></div>
-            <div class="flow-label">Recusadas</div>
-            <div class="flow-count"><?= $recusadas ?></div>
-        </a>
-        <?php endif; ?>
-    </div>
-
-    <?php $taxa = ($total > 0) ? round(($concluidas / $total) * 100) : 0; ?>
-    <!-- KPI Strip Compacto -->
-    <div class="db-kpi-strip">
-        <a href="home" class="db-kpi <?= !$activeFilterStatus ? 'db-kpi--active' : '' ?>">
-            <span class="db-kpi__icon" style="background:#eff6ff;color:#2563eb"><i class="fa-solid fa-list-check"></i></span>
-            <div><div class="db-kpi__val"><?= $total ?></div><div class="db-kpi__lbl">Total</div></div>
-        </a>
-        <div class="db-kpi__sep"></div>
-        <div class="db-kpi"><span class="db-kpi__icon" style="background:#fffbeb;color:#d97706"><i class="fa-solid fa-fire-flame-curved"></i></span><div><div class="db-kpi__val"><?= $urgentes ?></div><div class="db-kpi__lbl">Urgentes</div></div></div>
-        <div class="db-kpi__sep"></div>
-        <div class="db-kpi"><span class="db-kpi__icon" style="background:#fef2f2;color:#dc2626"><i class="fa-solid fa-fire"></i></span><div><div class="db-kpi__val"><?= $criticas ?></div><div class="db-kpi__lbl">Críticas</div></div></div>
-        <div class="db-kpi__sep"></div>
-        <div class="db-kpi"><span class="db-kpi__icon" style="background:#fff1f2;color:#be123c"><i class="fa-solid fa-hourglass-end"></i></span><div><div class="db-kpi__val"><?= $atrasadas ?></div><div class="db-kpi__lbl">Atrasadas</div></div></div>
-        <div class="db-kpi__sep"></div>
-        <div class="db-kpi"><span class="db-kpi__icon" style="background:#f0fdf4;color:#15803d"><i class="fa-solid fa-chart-line"></i></span>
-            <div><div class="db-kpi__val"><?= $taxa ?>%</div><div class="db-kpi__lbl">Taxa Conclusão</div>
-            <div class="db-kpi__bar"><div class="db-kpi__bar-fill" style="width:<?= $taxa ?>%"></div></div></div>
-        </div>
-    </div>
-
-    <!-- Gráficos 3 colunas -->
-    <div class="db-charts">
-        <div class="db-chart-box">
-            <div class="db-chart-head"><i class="fa-solid fa-circle-half-stroke" style="color:var(--primary)"></i> Status</div>
-            <div class="db-canvas-wrap">
-                <canvas id="statusChart"></canvas>
-                <div class="db-donut-center"><div class="db-donut-center__val"><?= $total ?></div><div class="db-donut-center__lbl">Total</div></div>
-            </div>
-            <div class="db-legend" id="statusLegend"></div>
-        </div>
-        <div class="db-chart-box">
-            <div class="db-chart-head"><i class="fa-solid fa-layer-group" style="color:var(--primary)"></i> Por Setor</div>
-            <div class="db-canvas-wrap"><canvas id="categoryChart"></canvas></div>
-        </div>
-        <div class="db-chart-box">
-            <div class="db-chart-head"><i class="fa-solid fa-gauge-high" style="color:var(--primary)"></i> Saúde do Fluxo</div>
-            <div class="db-health">
-                <?php
-                $hi = [
-                    ['Pendentes',$pendentes,'#eab308'],['Aprovadas',$aprovadas,'#10b981'],
-                    ['Em Andamento',$emAndamento,'#3b82f6'],['Concluídas',$concluidas,'#15803d'],
-                    ['Recusadas',$recusadas,'#ef4444'],['Atrasadas',$atrasadas,'#be123c'],
-                ];
-                foreach($hi as $h):
-                    $p = $total>0 ? round($h[1]/$total*100) : 0;
-                ?>
-                <div class="db-health__row">
-                    <div class="db-health__lbl"><?= $h[0] ?></div>
-                    <div class="db-health__bar"><div class="db-health__fill" style="width:<?= $p ?>%;background:<?= $h[2] ?>"></div></div>
-                    <div class="db-health__num" style="color:<?= $h[2] ?>"><?= $h[1] ?></div>
-                </div>
-                <?php endforeach; ?>
-            </div>
-        </div>
-    </div>
-    <?php endif; ?>
-
-    <!-- Tabela Principal Unificada (Recentes) -->
-    <div class="dashboard-table-container">
-        <div class="table-header" style="flex-direction: column; align-items: stretch; gap: 16px;">
-            <div style="display: flex; justify-content: space-between; align-items: center;">
-                <h4><?= $tableTitle ?></h4>
-                <button onclick="exportToExcel()" class="btn-primary" title="Exportar dados atuais para CSV (Excel)" style="background: #f0fdf4; color: #15803d; border: 1px solid #86efac; padding: 8px 16px; font-size: 0.85rem; font-weight: 600; box-shadow: none; border-radius: 8px; display:inline-flex; align-items:center; gap:7px;">
-                    <i class="fa-solid fa-file-csv"></i> Exportar Dados
-                </button>
-            </div>
-            
-            <div style="display: flex; gap: 24px; align-items: center; flex-wrap: wrap; padding-bottom: 4px; width: 100%;">
-                <!-- Busca -->
-                <div style="flex: 1; min-width: 250px; background: #fff; border: 1px solid var(--border-color); border-radius: 8px; padding: 8px 14px; display: flex; align-items: center; gap: 10px; box-shadow: var(--shadow-sm);">
-                    <i class="fas fa-search" style="color: var(--text-muted); font-size: 0.9rem;"></i>
-                    <input type="text" placeholder="Buscar requisição..." id="dashSearch" style="border: none; outline: none; width: 100%; background: transparent; font-family: var(--font-sans); color: var(--text-main); font-size: 0.9rem;">
-                </div>
-                
-                <!-- Filtro de Data -->
-                <div style="display: flex; flex-direction: column; gap: 4px;">
-                    <span style="font-size: 0.7rem; color: var(--text-muted); font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px; margin-left: 2px;">Data</span>
-                    <input type="date" id="dateFilter" title="Filtrar por data" style="padding: 6px 12px; border-radius: 6px; border: 1px solid var(--border-color); outline: none; background: #fff; color: var(--text-muted); font-family: var(--font-sans); font-size: 0.85rem; cursor: pointer; width: 140px; height: 32px; box-shadow: var(--shadow-sm);">
-                </div>
-            </div>
-        </div>
-        <div class="table-responsive">
-            <table class="dash-table">
-                <thead>
-                    <tr>
-                        <th>Detalhes</th>
-                        <th>Solicitante</th>
-                        <th>Classificação</th>
-                        <th>Prazo</th>
-                        <th>Progresso</th>
-                        <th style="text-align: right;">Ações</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    <?php if (count($recent_requests) > 0): ?>
-                        <?php foreach($recent_requests as $req): ?>
-                            <?php
-                                // Formatação de data de criação
-                                $createdTs   = isset($req['created_at']) ? strtotime($req['created_at']) : 0;
-                                $createdFmt  = $createdTs ? date('d/m/Y', $createdTs) : '—';
-
-                                // Formatação robusta do prazo (date)
-                                $rawDate     = $req['date'] ?? '';
-                                $hasPrazo    = (!empty($rawDate) && $rawDate !== '0000-00-00');
-                                $prazoTs     = $hasPrazo ? strtotime($rawDate) : 0;
-                                $prazoFmt    = ($prazoTs && $prazoTs > 0) ? date('d/m/Y', $prazoTs) : null;
-
-                                // Determina se está atrasada com base na data de prazo
-                                $isAtrasada  = $req['is_atrasada'] ?? false;
-                                $isVencHoje  = ($prazoTs && date('Y-m-d', $prazoTs) === date('Y-m-d'));
-
-                                // Status atual
-                                $st          = strtoupper($req['status'] ?? 'P');
-                                $stepIndex   = $stepperMap[$st] ?? 0;
-                                $isRejected  = ($st === 'N');
-                                $steps = [
-                                    ['label' => 'Pendente',  'icon' => 'fa-clock'],
-                                    ['label' => 'Aprovada',  'icon' => 'fa-check'],
-                                    ['label' => 'Atendendo', 'icon' => 'fa-gears'],
-                                    ['label' => 'Concluída', 'icon' => 'fa-check-double'],
-                                ];
-                                $pri = $req['priority'] ?? 2;
-                            ?>
-                            <tr>
-                                <!-- COLUNA: Detalhes -->
-                                <td style="min-width: 200px;">
-                                    <div style="font-weight:600; color:var(--text-main); line-height:1.4; margin-bottom:4px;">
-                                        <?= htmlspecialchars($req['title']) ?>
-                                    </div>
-                                    <div style="display:flex; align-items:center; gap:8px;">
-                                        <span style="font-size:0.75rem; color:var(--text-muted); background:#f1f5f9; padding:1px 7px; border-radius:5px; font-weight:600;">#<?= $req['id'] ?></span>
-                                        <?php if (!empty($req['is_forwarded'])): ?>
-                                            <span style="font-size:0.68rem; background:#fef3c7; color:#d97706; padding:1px 7px; border-radius:5px; font-weight:700; border:1px solid #fde68a;">
-                                                <i class="fa-solid fa-share-nodes"></i> Repassada
-                                            </span>
-                                        <?php endif; ?>
-                                    </div>
-                                </td>
-
-                                <!-- COLUNA: Solicitante -->
-                                <td style="white-space: nowrap;">
-                                    <div style="font-weight:500; color:var(--text-sidebar); margin-bottom:4px;">
-                                        <?= htmlspecialchars($req['solicitor_name_formatted']) ?>
-                                    </div>
-                                    <div style="font-size:0.78rem; color:var(--text-muted);">
-                                        <i class="fa-regular fa-calendar" style="margin-right:4px;"></i><?= $createdFmt ?>
-                                    </div>
-                                </td>
-
-                                <!-- COLUNA: Classificação -->
-                                <td>
-                                    <div style="display:flex; flex-direction:column; gap:5px; align-items:flex-start;">
-                                        <span class="badge-cat badge-<?= $req['table'] ?>"><?= $map[$req['table']] ?? 'Outros' ?></span>
-                                        <?php if (!empty($req['subdivision_name'])): ?>
-                                            <span style="font-size:0.68rem; background:#e0e7ff; color:#4338ca; padding:2px 7px; border-radius:5px; font-weight:700; border:1px solid #c7d2fe; white-space:nowrap;">
-                                                <?= htmlspecialchars($req['subdivision_name']) ?>
-                                            </span>
-                                        <?php endif; ?>
-                                        <?php
-                                            if     ($pri == 4) echo '<span class="badge-status urgent" style="background:#fef2f2;color:#dc2626;"><i class="fa-solid fa-fire"></i> Crítica</span>';
-                                            elseif ($pri == 3) echo '<span class="badge-status urgent" style="background:#fff7ed;color:#ea580c;"><i class="fa-solid fa-angles-up"></i> Alta</span>';
-                                            elseif ($pri == 2) echo '<span class="badge-status pending"><i class="fa-solid fa-angle-up"></i> Média</span>';
-                                            else               echo '<span class="badge-status normal"><i class="fa-solid fa-angle-down"></i> Baixa</span>';
-                                        ?>
-                                    </div>
-                                </td>
-
-                                <!-- COLUNA: Prazo -->
-                                <td style="white-space: nowrap;">
-                                    <?= getPrazoBadge($rawDate, $st) ?>
-                                </td>
-
-                                <!-- COLUNA: Progresso (Mini-Stepper) -->
-                                <td>
-                                    <?php if ($isRejected): ?>
-                                        <span class="badge-status rejected"><i class="fa-solid fa-circle-xmark"></i> Recusada</span>
-                                    <?php else: ?>
-                                        <div class="mini-stepper">
-                                            <?php foreach ($steps as $i => $step): ?>
-                                                <div class="mini-step <?= $i <= $stepIndex ? 'active' : '' ?> <?= $i === $stepIndex ? 'current' : '' ?>">
-                                                    <div class="mini-step-dot" title="<?= $step['label'] ?>"><i class="fa-solid <?= $step['icon'] ?>"></i></div>
-                                                    <?php if ($i < count($steps) - 1): ?>
-                                                        <div class="mini-step-line <?= $i < $stepIndex ? 'filled' : '' ?>"></div>
-                                                    <?php endif; ?>
-                                                </div>
-                                            <?php endforeach; ?>
-                                        </div>
-                                        <div style="font-size:0.68rem; color:var(--text-muted); margin-top:5px; text-align:center; font-weight:500;">
-                                            <?= $steps[$stepIndex]['label'] ?? '' ?>
-                                        </div>
-                                    <?php endif; ?>
-                                </td>
-
-                                <!-- COLUNA: Ações -->
-                                <td style="text-align: right;">
-                                    <div style="display:flex; gap:6px; justify-content:flex-end;">
-                                        <a href="request_detail?id=<?= $req['id'] ?>&table=<?= $req['table'] ?>" class="btn-action btn-view" title="Ver detalhes">
-                                            <i class="fas fa-eye"></i>
-                                        </a>
-                                        <?php if (($st === 'Y' || $st === 'A') && $canManage): ?>
-                                            <button onclick="handleRequestAction('start_progress', '<?= $req['id'] ?>', 'ctd_<?= $req['table'] ?>_frm')" class="btn-action btn-start" title="Iniciar atendimento">
-                                                <i class="fa-solid fa-play"></i>
-                                            </button>
-                                        <?php endif; ?>
-                                        <?php if ($st === 'W' && $canManage): ?>
-                                            <button onclick="handleRequestAction('finish', '<?= $req['id'] ?>', 'ctd_<?= $req['table'] ?>_frm')" class="btn-action btn-finish" title="Marcar como concluída">
-                                                <i class="fa-solid fa-check-double"></i>
-                                            </button>
-                                        <?php endif; ?>
-                                    </div>
-                                </td>
-                            </tr>
-                        <?php endforeach; ?>
-                    <?php else: ?>
-                        <tr>
-                            <td colspan="6" style="padding: 56px 20px;">
-                                <div style="display:flex; flex-direction:column; align-items:center; gap:12px; color:var(--text-muted);">
-                                    <div style="width:56px; height:56px; background:#f1f5f9; border-radius:14px; display:flex; align-items:center; justify-content:center; font-size:1.6rem; color:#cbd5e1;">
-                                        <i class="fa-solid fa-inbox"></i>
-                                    </div>
-                                    <p style="font-weight:600; font-size:0.95rem; margin:0;">Nenhuma atividade encontrada</p>
-                                    <p style="font-size:0.82rem; margin:0;">Tente ajustar os filtros ou aguarde novas requisições.</p>
-                                </div>
-                            </td>
-                        </tr>
-                    <?php endif; ?>
-                </tbody>
-            </table>
-        </div>
-    </div>
-</div>
-
-<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-<script>
-<?php if (!$activeFilterStatus): ?>
-const statusLabels = ['Pendentes','Aprovadas','Recusadas','Em Andamento','Concluídas'];
-const statusColors = ['#eab308','#10b981','#ef4444','#3b82f6','#15803d'];
-const statusData   = [<?= $statusCounts['P']?>,<?= $statusCounts['Y']?>,<?= $statusCounts['N']?>,<?= $statusCounts['W']?>,<?= $statusCounts['C']?>];
-const catLabels    = <?= json_encode(array_map(fn($k)=>$map[$k]??$k, array_keys($categoryCounts))) ?>;
-const catData      = <?= json_encode(array_values($categoryCounts)) ?>;
-const catColors    = ['#8b5cf6','#10b981','#3b82f6','#eab308','#f97316'];
-
-// Donut de Status
-new Chart(document.getElementById('statusChart'), {
-    type: 'doughnut',
-    data: { labels: statusLabels, datasets: [{ data: statusData, backgroundColor: statusColors, borderWidth: 2, borderColor: '#fff', hoverOffset: 6 }] },
-    options: {
-        responsive: true, maintainAspectRatio: false, cutout: '68%',
-        plugins: {
-            legend: { display: false },
-            tooltip: { callbacks: { label: ctx => ` ${ctx.label}: ${ctx.parsed}` } }
-        },
-        animation: { animateRotate: true, duration: 700 }
+$pendingOld = 0;       // esperando aprovação há mais de 2 dias
+$inSectorsUrgent = 0;  // urgentes entre aprovados/em atendimento
+$sectorLoad = [];      // setor => [abertos, atrasados]
+foreach (array_keys($map) as $s) {
+    $sectorLoad[$s] = ['open' => 0, 'late' => 0];
+}
+$visibleKeys = [];
+$lateList = [];
+$urgentList = [];
+$urgentPending = [];  // urgentes esperando aprovação (só para quem aprova)
+foreach ($everything as $r) {
+    $st = $normStatus($r);
+    $sector = (string)($r['sector'] ?? '');
+    $visibleKeys[$sector . ':' . (int)$r['id']] = $r;
+    if ($st === 'P' && $daysSince($r['created_at'] ?? null) > 2) $pendingOld++;
+    if (in_array($st, ['Y', 'A', 'W'], true) && $isUrgent($r)) $inSectorsUrgent++;
+    if ($isOpen($st)) {
+        $sectorLoad[$sector] = $sectorLoad[$sector] ?? ['open' => 0, 'late' => 0];
+        $sectorLoad[$sector]['open']++;
+        if (!empty($r['is_atrasada'])) {
+            $sectorLoad[$sector]['late']++;
+            $lateList[] = $r;
+        } elseif ($isUrgent($r) && $st !== 'P') {
+            $urgentList[] = $r;
+        } elseif ($isUrgent($r) && !$isGestor) {
+            $urgentPending[] = $r;
+        }
     }
-});
+}
+uasort($sectorLoad, fn($a, $b) => $b['open'] <=> $a['open']);
+$loadMax = max(1, max(array_column($sectorLoad, 'open') ?: [0]));
 
-// Build legend
-const leg = document.getElementById('statusLegend');
-statusLabels.forEach((l,i) => {
-    if (!statusData[i]) return;
-    leg.innerHTML += `<div class="db-legend__item"><span class="db-legend__dot" style="background:${statusColors[i]}"></span>${l} <strong>${statusData[i]}</strong></div>`;
-});
-
-// Bar por Setor
-new Chart(document.getElementById('categoryChart'), {
-    type: 'bar',
-    data: { labels: catLabels, datasets: [{ data: catData, backgroundColor: catColors.slice(0,catData.length), borderRadius: 6, borderSkipped: false }] },
-    options: {
-        responsive: true, maintainAspectRatio: false,
-        plugins: { legend: { display: false }, tooltip: { callbacks: { label: ctx => ` ${ctx.parsed.y} requisições` } } },
-        scales: {
-            x: { grid: { display: false }, ticks: { font: { size: 11, weight: '600' } } },
-            y: { beginAtZero: true, ticks: { stepSize: 1, font: { size: 11 } }, grid: { color: '#f1f5f9' } }
-        },
-        animation: { duration: 700 }
-    }
-});
-<?php endif; ?>
-
-// Table Filters
-const dashSearch = document.getElementById('dashSearch');
-const dateFilter = document.getElementById('dateFilter');
-
-function filterTable() {
-    const term = dashSearch.value.toLowerCase();
-    const filterDate = dateFilter.value;
-    const rows = document.querySelectorAll('.dash-table tbody tr');
-    
-    rows.forEach(row => {
-        const text = row.textContent.toLowerCase();
-        
-        // Date check
-        let matchesDate = true;
-        if (filterDate) {
-            const dateStrMatches = row.cells[1]?.textContent.match(/(\d{2})\/(\d{2})\/(\d{4})/);
-            if (dateStrMatches) {
-                const rowDateISO = `${dateStrMatches[3]}-${dateStrMatches[2]}-${dateStrMatches[1]}`;
-                if (rowDateISO !== filterDate) matchesDate = false;
+// Encaminhamentos entre setores (últimos 30 dias + os que ainda estão em aberto)
+$pairs = [];
+$openForwards = [];
+try {
+    $since = date('Y-m-d H:i:s', strtotime('-30 days'));
+    $stmtFwd = $pdo->prepare("
+        SELECT request_id, request_table, from_area_id, to_area_id, mode, status, created_at, responded_at
+        FROM request_forwards
+        WHERE created_at >= ? OR status = 'pending' OR (mode = 'help' AND status = 'accepted')
+        ORDER BY id DESC
+        LIMIT 500
+    ");
+    $stmtFwd->execute([$since]);
+    foreach ($stmtFwd->fetchAll(PDO::FETCH_ASSOC) as $f) {
+        $key = $f['request_table'] . ':' . (int)$f['request_id'];
+        if (!isset($visibleKeys[$key])) continue; // só pedidos que este usuário enxerga
+        $isOpenFwd = RequestForwardService::isOpen($f);
+        if ($isOpenFwd) {
+            $openForwards[] = $f + ['req' => $visibleKeys[$key]];
+        }
+        if ($f['created_at'] >= $since) {
+            $pk = (int)$f['from_area_id'] . '>' . (int)$f['to_area_id'];
+            $pairs[$pk] = $pairs[$pk] ?? ['from' => (int)$f['from_area_id'], 'to' => (int)$f['to_area_id'], 'count' => 0, 'ret' => []];
+            $pairs[$pk]['count']++;
+            if ($f['mode'] === 'help' && $f['status'] === 'returned' && !empty($f['responded_at'])) {
+                $pairs[$pk]['ret'][] = max(0, (strtotime($f['responded_at']) - strtotime($f['created_at'])) / 86400);
             }
         }
+    }
+} catch (Throwable $e) {
+    error_log('home.php encaminhamentos: ' . $e->getMessage());
+}
+uasort($pairs, fn($a, $b) => $b['count'] <=> $a['count']);
+$pairs = array_slice($pairs, 0, 5, true);
+$forwardAges = array_map(fn($f) => $daysSince($f['created_at']), $openForwards);
+$forwardAvg = $forwardAges ? array_sum($forwardAges) / count($forwardAges) : null;
 
-        row.style.display = (text.includes(term) && matchesDate) ? '' : 'none';
-    });
+// "Precisa de atenção": urgentes esperando aprovação, atrasados (mais atrasado primeiro), urgentes, parados com outro setor
+usort($lateList, fn($a, $b) => strcmp((string)$a['date'], (string)$b['date']));
+$attention = [];
+foreach ($urgentPending as $r) {
+    $attention[] = [
+        'href' => $reqLink($r) . '&from=approve', 'title' => 'Nº ' . (int)$r['id'] . ' · ' . ($r['title'] ?? 'Sem título'),
+        'meta' => requestSectorName((string)$r['sector']) . ' · urgente · esperando sua aprovação',
+        'kind' => 'warn',
+    ];
+}
+foreach ($lateList as $r) {
+    $d = $daysSince($r['date']);
+    $attention[] = [
+        'href' => $reqLink($r), 'title' => 'Nº ' . (int)$r['id'] . ' · ' . ($r['title'] ?? 'Sem título'),
+        'meta' => requestSectorName((string)$r['sector']) . ' · atrasado ' . $d . ($d === 1 ? ' dia' : ' dias') . ($isUrgent($r) ? ' · urgente' : ''),
+        'kind' => 'bad',
+    ];
+}
+foreach ($urgentList as $r) {
+    $attention[] = [
+        'href' => $reqLink($r), 'title' => 'Nº ' . (int)$r['id'] . ' · ' . ($r['title'] ?? 'Sem título'),
+        'meta' => requestSectorName((string)$r['sector']) . ' · urgente · ' . statusLabel($normStatus($r)),
+        'kind' => 'warn',
+    ];
+}
+foreach ($openForwards as $f) {
+    $d = $daysSince($f['created_at']);
+    if ($d < 2) continue;
+    $attention[] = [
+        'href' => $reqLink($f['req']), 'title' => 'Nº ' . (int)$f['request_id'] . ' · ' . ($f['req']['title'] ?? 'Sem título'),
+        'meta' => 'Parado com ' . RequestForwardService::areaLabel($pdo, (int)$f['to_area_id']) . ' há ' . $d . ' dias',
+        'kind' => '',
+    ];
+}
+$attentionMore = max(0, count($attention) - 6);
+$attention = array_slice($attention, 0, 6);
+if (!$isGestor && $pendingOld > 0) {
+    $attention[] = [
+        'href' => 'approve', 'title' => $pendingOld . ($pendingOld === 1 ? ' pedido esperando' : ' pedidos esperando') . ' aprovação há mais de 2 dias',
+        'meta' => 'Abrir Aprovar', 'kind' => '',
+    ];
 }
 
-dashSearch.addEventListener('input', filterTable);
-if(dateFilter) dateFilter.addEventListener('change', filterTable);
+// Números por etapa
+$stages = [];
+if (!$isGestor) {
+    $stages[] = ['P', 'Esperando aprovação', (int)($pendentes ?? 0), $pendingOld > 0 ? $pendingOld . ' há +2 dias' : 'nenhum parado', $pendingOld > 0 ? 'warn' : ''];
+}
+$stages[] = [null, $isGestor ? 'Para atender' : 'Nos setores', (int)($aprovadas ?? 0) + (int)($emAndamento ?? 0),
+    $inSectorsUrgent > 0 ? $inSectorsUrgent . ($inSectorsUrgent === 1 ? ' urgente' : ' urgentes') : 'nenhum urgente', $inSectorsUrgent > 0 ? 'bad' : ''];
+$stages[] = ['F', 'Esperando outro setor', (int)($repassadas ?? 0), $forwardAvg !== null ? 'média: ' . $fmtDays($forwardAvg) : '', ''];
+$stages[] = ['C', 'Concluídos', (int)($concluidas ?? 0), 'desde o início', 'ok'];
 
+$tableTitle = [
+    'P' => 'Aguardando aprovação', 'Y' => 'Aprovadas', 'W' => 'Em atendimento',
+    'C' => 'Concluídas', 'N' => 'Recusadas', 'F' => 'Encaminhadas',
+][$activeFilterStatus] ?? 'Pedidos';
+
+// Filtros por situação (os mesmos de antes, agora em abas)
+$pipeline = [
+    'P' => ['Aguardando aprovação', $pendentes ?? 0],
+    'Y' => [$isGestor ? 'Para atender' : 'Aprovadas', $aprovadas ?? 0],
+    'W' => ['Em atendimento', $emAndamento ?? 0],
+    'F' => ['Encaminhadas', $repassadas ?? 0],
+    'C' => ['Concluídas', $concluidas ?? 0],
+    'N' => ['Recusadas', $recusadas ?? 0],
+];
+if ($isGestor) {
+    unset($pipeline['P'], $pipeline['N']);
+}
+$hasFilter = $activeFilterStatus || $searchTerm !== '' || $searchDate !== '';
+$scopeText = $isAdmSub ? 'Pedidos da sua subdivisão' : ($isGestor ? 'Pedidos do seu setor' : 'Todos os setores');
+?>
+<div class="dash">
+    <header class="dash-head">
+        <div>
+            <p class="dash-head__scope"><?= e($scopeText) ?></p>
+            <h1 class="dash-head__title">Painel</h1>
+        </div>
+        <button type="button" onclick="exportToExcel()" class="btn"><i class="fa-solid fa-download" aria-hidden="true"></i> Exportar planilha</button>
+    </header>
+
+    <?= renderWelcomeCard($role, (int)$_SESSION['id']) ?>
+
+    <section class="dash-card dash-attention<?= $attention ? '' : ' is-calm' ?>" aria-labelledby="atencaoTitulo">
+        <div class="dash-card__head"><h2 id="atencaoTitulo"><?= $attention ? 'Comece por aqui' : 'Tudo em dia' ?></h2></div>
+        <?php if ($attention): ?>
+            <ul class="attn-list">
+                <?php foreach ($attention as $item): ?>
+                    <li><a class="attn-item" href="<?= e($item['href']) ?>">
+                        <span class="attn-item__title"><?= e($item['title']) ?></span>
+                        <span class="attn-item__meta<?= $item['kind'] ? ' attn-item__meta--' . e($item['kind']) : '' ?>"><?= e($item['meta']) ?></span>
+                    </a></li>
+                <?php endforeach; ?>
+            </ul>
+            <?php if ($attentionMore > 0): ?><p class="dash-card__foot">E mais <?= (int)$attentionMore ?>. Veja a lista abaixo.</p><?php endif; ?>
+        <?php else: ?>
+            <p class="dash-card__empty"><i class="fa-solid fa-circle-check" aria-hidden="true"></i> Nada atrasado, urgente ou parado. Quando algo precisar de você, aparece aqui.</p>
+        <?php endif; ?>
+    </section>
+
+    <section class="dash-stages" aria-label="Pedidos por etapa">
+        <?php foreach ($stages as [$code, $label, $value, $note, $kind]):
+            $tag = $code ? 'a' : 'div';
+            $isOn = $code && $activeFilterStatus === $code;
+        ?>
+            <<?= $tag ?> class="dash-stage<?= $isOn ? ' is-active' : '' ?>"<?php if ($code): ?> href="<?= e($isOn ? 'home' : 'home?status=' . $code) ?>"<?= $isOn ? ' aria-current="true"' : '' ?><?php endif; ?>>
+                <span class="dash-stage__label"><?= e($label) ?></span>
+                <strong class="dash-stage__value"><?= (int)$value ?></strong>
+                <?php if ($note !== ''): ?><span class="dash-stage__note<?= $kind ? ' dash-stage__note--' . e($kind) : '' ?>"><?= e($note) ?></span><?php endif; ?>
+            </<?= $tag ?>>
+        <?php endforeach; ?>
+    </section>
+
+    <details class="dash-more">
+    <summary class="dash-more__toggle"><i class="fa-solid fa-chart-simple" aria-hidden="true"></i> Ver números da operação <i class="fa-solid fa-chevron-down dash-more__chev" aria-hidden="true"></i></summary>
+    <div class="dash-cols">
+        <section class="dash-card dash-load" aria-labelledby="cargaTitulo">
+            <div class="dash-card__head">
+                <h2 id="cargaTitulo">Carga por setor</h2>
+                <span>pedidos abertos</span>
+            </div>
+            <?php if (array_sum(array_column($sectorLoad, 'open')) === 0): ?>
+                <p class="dash-card__empty">Nenhum pedido aberto agora.</p>
+            <?php else: ?>
+                <ul class="load-list">
+                    <?php foreach ($sectorLoad as $sector => $load):
+                        $name = requestSectorName((string)$sector);
+                        $aria = $name . ': ' . $load['open'] . ($load['open'] === 1 ? ' aberto' : ' abertos')
+                            . ($load['late'] > 0 ? ', ' . $load['late'] . ($load['late'] === 1 ? ' atrasado' : ' atrasados') : '');
+                    ?>
+                        <li class="load-row<?= $load['late'] > 0 ? ' is-late' : '' ?>">
+                            <span class="load-row__name"><?= e($name) ?></span>
+                            <span class="load-row__meta"><?= (int)$load['open'] ?> <?= $load['open'] === 1 ? 'aberto' : 'abertos' ?><?php if ($load['late'] > 0): ?> · <?= (int)$load['late'] ?> <?= $load['late'] === 1 ? 'atrasado' : 'atrasados' ?><?php endif; ?></span>
+                            <span class="load-row__track" role="img" aria-label="<?= e($aria) ?>"><span class="load-row__fill" style="--w: <?= round($load['open'] / $loadMax * 100) ?>%"></span></span>
+                        </li>
+                    <?php endforeach; ?>
+                </ul>
+                <p class="dash-card__foot"><span class="load-key" aria-hidden="true"></span> Laranja: setor com pedido atrasado.</p>
+            <?php endif; ?>
+        </section>
+
+        <div class="dash-side">
+            <section class="dash-card" aria-labelledby="ajudaTitulo">
+                <div class="dash-card__head">
+                    <h2 id="ajudaTitulo">Quem pede ajuda a quem</h2>
+                    <span>30 dias</span>
+                </div>
+                <?php if ($pairs): ?>
+                    <ul class="pair-list">
+                        <?php foreach ($pairs as $p):
+                            $from = RequestForwardService::areaLabel($pdo, $p['from']);
+                            $to = RequestForwardService::areaLabel($pdo, $p['to']);
+                            $ret = $p['ret'] ? $fmtDays(array_sum($p['ret']) / count($p['ret'])) : null;
+                        ?>
+                            <li class="pair-row">
+                                <span><?= e($from) ?> <span class="pair-row__arrow" aria-label="pediu ajuda a">→</span> <?= e($to) ?></span>
+                                <span class="pair-row__info"><?= (int)$p['count'] ?><?= $ret ? ' · devolve em ' . e($ret) : '' ?></span>
+                            </li>
+                        <?php endforeach; ?>
+                    </ul>
+                <?php else: ?>
+                    <p class="dash-card__empty">Nenhum pedido passou de um setor a outro nos últimos 30 dias.</p>
+                <?php endif; ?>
+            </section>
+        </div>
+    </div>
+    </details>
+
+    <section class="dash-table" aria-labelledby="tabelaTitulo">
+        <div class="toolbar">
+            <h2 id="tabelaTitulo" class="toolbar__title"><?= e($tableTitle) ?> <span><?= $totalRows ?></span></h2>
+            <form method="get" action="home" class="toolbar__filters" role="search">
+                <?php if ($activeFilterStatus): ?><input type="hidden" name="status" value="<?= e($activeFilterStatus) ?>"><?php endif; ?>
+                <div class="search-box">
+                    <i class="fas fa-search" aria-hidden="true"></i>
+                    <input type="search" name="q" value="<?= e($searchTerm) ?>" placeholder="Título, número ou quem pediu" aria-label="Buscar por título, número ou quem pediu">
+                </div>
+                <input type="date" name="data" value="<?= e($searchDate) ?>" aria-label="Pedidos feitos neste dia" title="Pedidos feitos neste dia" onchange="this.form.submit()">
+                <?php if ($hasFilter): ?>
+                    <a class="btn btn--ghost" href="home">Limpar</a>
+                <?php endif; ?>
+            </form>
+        </div>
+
+        <nav class="tabs dash-tabs" aria-label="Filtrar por situação">
+            <a class="tab<?= !$activeFilterStatus ? ' is-active' : '' ?>" href="home"<?= !$activeFilterStatus ? ' aria-current="true"' : '' ?>>Todos <span><?= (int)($total ?? 0) ?></span></a>
+            <?php foreach ($pipeline as $code => [$label, $count]):
+                $isOn = $activeFilterStatus === $code;
+            ?>
+                <a class="tab<?= $isOn ? ' is-active' : '' ?>" href="<?= e($isOn ? 'home' : 'home?status=' . $code) ?>"<?= $isOn ? ' aria-current="true"' : '' ?>><?= e($label) ?> <span><?= (int)$count ?></span></a>
+            <?php endforeach; ?>
+        </nav>
+
+        <div class="queue queue--sector queue--dash">
+            <?php if ($recent_requests): ?>
+                <?= renderQueueHead(['sector' => true]) ?>
+                <ul class="queue-list">
+                    <?php foreach ($recent_requests as $req):
+                        $st = strtoupper($req['status'] ?? 'P') ?: 'P';
+                        $req['context'] = [statusLabel($st), ['C' => 'ok', 'N' => 'bad'][$st] ?? ''];
+                    ?>
+                        <?= renderQueueRow($req, ['sector' => true, 'due' => !in_array($st, ['C', 'N'], true)]) ?>
+                    <?php endforeach; ?>
+                </ul>
+            <?php else: ?>
+                <div class="empty-state"><i class="fa-regular fa-folder-open" aria-hidden="true"></i><p><?= $hasFilter ? 'Nenhum pedido com esses filtros.' : 'Ainda não há pedidos.' ?></p></div>
+            <?php endif; ?>
+        </div>
+
+        <?php if ($totalPages > 1): ?>
+            <nav class="pager" aria-label="Páginas">
+                <?php if ($currentPageNum > 1): ?><a href="<?= e($pageLink($currentPageNum - 1)) ?>">Anterior</a><?php endif; ?>
+                <span class="is-current"><?= $currentPageNum ?> de <?= $totalPages ?></span>
+                <?php if ($currentPageNum < $totalPages): ?><a href="<?= e($pageLink($currentPageNum + 1)) ?>">Próxima</a><?php endif; ?>
+            </nav>
+        <?php endif; ?>
+    </section>
+</div>
+
+<script>
 function exportToExcel() {
-    const term = document.getElementById('dashSearch').value;
-    const date = document.getElementById('dateFilter').value;
-    const status = '<?= $activeFilterStatus ?>';
-    
     const params = new URLSearchParams({
-        search: term,
-        status: status,
-        date: date
+        search: <?= json_encode($searchTerm, JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT) ?>,
+        status: <?= json_encode((string)$activeFilterStatus, JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT) ?>,
+        date: <?= json_encode($searchDate, JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT) ?>
     });
-    
     window.location.href = `api/export_requests.php?${params.toString()}`;
-}
-
-function handleRequestAction(action, id, table) {
-    // Agora chama a função global para aproveitar as confirmações e lógica centralizada
-    globalRequestAction(action, id, table);
 }
 </script>

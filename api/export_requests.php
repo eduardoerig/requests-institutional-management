@@ -3,15 +3,17 @@
  * api/export_requests.php
  * Gera um arquivo CSV real, formatado para Excel (ponto-e-vírgula e BOM UTF-8).
  */
-session_start();
-require_once dirname(__DIR__) . '/config/conn.php';
+require_once __DIR__ . '/../config/session.php';
+require_once __DIR__ . '/../config/conn.php';
+require_once __DIR__ . '/../config/security.php';
+requireLoginJson($pdo);
 require_once dirname(__DIR__) . '/classes/RequestManager.php';
 
 if (!isset($_SESSION['id'])) die("Acesso negado.");
 
 $role     = $_SESSION['role'] ?? 'solicitante';
-$isAdmin  = in_array($role, ['admin', 'adm', 'coord', 'adm_sub']);
-$isGestor = in_array($role, ['gestor', 'ti', 'xerox', 'service', 'shop', 'mkt', 'marketing']);
+$isAdmin  = isAdminRole($role);
+$isGestor = isGestorRole($role);
 if (!$isAdmin && !$isGestor) die("Sem permissão.");
 
 // --- Filtros ---
@@ -22,16 +24,17 @@ $filter_date   = $_GET['date']   ?? '';
 $filter_start  = $_GET['start']  ?? '';
 $filter_end    = $_GET['end']    ?? '';
 
-$map = [
-    'mkt' => 'Marketing', 
-    'shop' => 'Compras', 
-    'xerox' => 'Reprografia', 
-    'service' => 'Manutenção', 
-    'ti' => 'TI'
-];
+// Datas só no formato AAAA-MM-DD; "date" (dia único do painel) vira início e fim
+$validDate = fn($d) => preg_match('/^\d{4}-\d{2}-\d{2}$/', (string)$d) ? $d : '';
+$filter_date  = $validDate($filter_date);
+$filter_start = $validDate($filter_start) ?: $filter_date;
+$filter_end   = $validDate($filter_end) ?: $filter_date;
+$filter_status = in_array($filter_status, ['P', 'Y', 'N', 'W', 'C', 'F'], true) ? $filter_status : '';
+
+$map = array_map(fn($s) => $s['label'], sectorRegistry());
 
 $isAdmSub          = ($role === 'adm_sub');
-$managingId        = (in_array($role, ['admin', 'adm', 'coord']) || $isAdmSub) ? null : $_SESSION['id'];
+$managingId        = (isGlobalAdminRole($role) || $isAdmSub) ? null : $_SESSION['id'];
 $subdivisionFilter = $isAdmSub ? ($_SESSION['subdivision_ids'] ?? null) : null;
 
 $reqData = RequestManager::getRequests(
@@ -39,7 +42,8 @@ $reqData = RequestManager::getRequests(
     $filter_status ?: null,
     $filter_sector ?: null,
     $filter_search ?: null,
-    'DESC', [],
+    // Setor só vê aprovados em diante (mesma regra do pages/home.php e de userCanViewRequest)
+    'DESC', isGestorRole($role) ? ['P', 'N'] : [],
     $filter_start ?: null,
     $filter_end   ?: null,
     $subdivisionFilter
@@ -109,7 +113,7 @@ foreach ($data as $row) {
         str_replace(["\r", "\n"], ' ', strip_tags($row['descp'] ?? ''))
     ];
     
-    fputcsv($output, $line, ';');
+    fputcsv($output, array_map('csvSafe', $line), ';');
 }
 
 fclose($output);

@@ -1,42 +1,17 @@
 <?php
-session_start();
+/**
+ * Criar setor pela tela está desligado: cada setor precisa de formulário, tabela (ctd_<setor>_frm),
+ * perfil e caixa próprios no código. Um setor criado só no banco não aparecia no Encaminhar nem na
+ * Nova requisição (decisão de 2026-11-04). Os 5 setores continuam editáveis em Usuários e setores.
+ */
+require_once __DIR__ . '/../config/session.php';
 require_once __DIR__ . '/../config/conn.php';
 require_once __DIR__ . '/../config/security.php';
+requireLoginJson($pdo);
+requirePostJson();
 
-header('Content-Type: application/json');
-
-if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
-    echo json_encode(['success' => false, 'message' => 'Método inválido.']);
-    exit;
-}
-requireCsrfTokenFromRequest();
-
-if (!in_array($_SESSION['role'], ['admin', 'adm'])) {
-    echo json_encode(['success' => false, 'message' => 'Acesso negado.']);
-    exit;
+if (!isGlobalAdminRole($_SESSION['role'] ?? '')) {
+    jsonResponse(['success' => false, 'message' => 'Acesso negado.'], 403);
 }
 
-$title = trim($_POST['sector_title'] ?? '');
-
-if (empty($title)) {
-    echo json_encode(['success' => false, 'message' => 'O título do setor é obrigatório.']);
-    exit;
-}
-
-try {
-    // Verificar se já existe
-    $stmt = $pdo->prepare("SELECT id FROM ctd_area WHERE title = ?");
-    $stmt->execute([$title]);
-    if ($stmt->fetch()) {
-        echo json_encode(['success' => false, 'message' => 'Este setor já existe.']);
-        exit;
-    }
-
-    $stmt = $pdo->prepare("INSERT INTO ctd_area (title) VALUES (?)");
-    $stmt->execute([$title]);
-
-    echo json_encode(['success' => true, 'message' => 'Setor criado com sucesso!']);
-} catch (PDOException $e) {
-    error_log('create_sector.php: ' . $e->getMessage());
-    echo json_encode(['success' => false, 'message' => 'Erro interno ao criar setor.']);
-}
+jsonResponse(['success' => false, 'message' => 'Setores novos precisam de formulário e caixa próprios. Peça ao desenvolvedor para criar o setor.']);

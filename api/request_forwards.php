@@ -1,213 +1,73 @@
 <?php
 /**
- * API de Repasse de Requisições
- * 
- * Endpoints:
- *   POST action=forward    → Repassar requisição para outro setor
- *   POST action=accept     → Aceitar repasse recebido
- *   POST action=refuse     → Recusar repasse recebido
- *   POST action=complete   → Concluir atendimento do repasse
- *   GET  action=chain      → Cadeia de repasses de uma requisição
- *   GET  action=pending    → Repasses pendentes para o gestor logado
- *   GET  action=areas      → Lista setores disponíveis para repasse
+ * api/request_forwards.php
+ * Encaminhamento entre setores.
+ *
+ *  POST action=forward  id, table, to_area_id, mode (transfer|help), message
+ *  POST action=accept   forward_id
+ *  POST action=refuse   forward_id, reason
+ *  POST action=cancel   forward_id
+ *  POST action=return   forward_id, note
+ *  GET  action=areas    id, table   (setores para onde dá para encaminhar)
  */
-
-session_start();
+require_once __DIR__ . '/../config/session.php';
 require_once __DIR__ . '/../config/conn.php';
 require_once __DIR__ . '/../config/security.php';
+requireLoginJson($pdo);
 require_once __DIR__ . '/../classes/RequestForwardService.php';
 
-header('Content-Type: application/json');
-
-if (!isset($_SESSION['id'])) {
-    echo json_encode(['success' => false, 'message' => 'Sessão expirada. Por favor, faça login novamente.']);
-    exit;
-}
+header('Content-Type: application/json; charset=UTF-8');
 
 $role = $_SESSION['role'] ?? 'solicitante';
 $userId = (int)$_SESSION['id'];
 $userName = $_SESSION['name'] ?? 'Usuário';
 
-$adminRoles = ['admin', 'adm', 'coord'];
-$gestorRoles = ['gestor', 'ti', 'xerox', 'service', 'shop', 'mkt', 'marketing'];
-$isAdmin = in_array($role, $adminRoles);
-$isGestor = in_array($role, $gestorRoles);
-
-// Suporte para JSON body e POST tradicional
-$input = json_decode(file_get_contents('php://input'), true);
-if (!$input) {
-    $input = array_merge($_GET, $_POST);
+if (!isGlobalAdminRole($role) && !isGestorRole($role)) {
+    jsonResponse(['success' => false, 'message' => 'Só os setores e a administração encaminham pedidos.'], 403);
 }
 
-$action = $input['action'] ?? null;
+$action = (string)($_POST['action'] ?? $_GET['action'] ?? '');
 
-if ($_SERVER['REQUEST_METHOD'] === 'POST') {
-    requireCsrfTokenFromRequest();
+if ($action === 'areas') {
+    $sector = normalizeRequestTable((string)($_GET['table'] ?? ''));
+    $reqId = (int)($_GET['id'] ?? 0);
+    $exclude = ($sector && $reqId) ? RequestForwardService::ownerAreaId($pdo, $reqId, $sector) : null;
+    jsonResponse([
+        'success' => true,
+        'data' => RequestForwardService::availableAreas($pdo, $exclude),
+        'from' => $exclude ? RequestForwardService::areaLabel($pdo, $exclude) : '', // responsável atual, para as frases do assistente
+    ]);
 }
 
-if (!$action) {
-    echo json_encode(['success' => false, 'message' => 'Ação não especificada.']);
-    exit;
+requirePostJson();
+$forwardId = (int)($_POST['forward_id'] ?? 0);
+
+switch ($action) {
+    case 'forward':
+        $result = RequestForwardService::forward(
+            $pdo,
+            (string)($_POST['table'] ?? ''),
+            (int)($_POST['id'] ?? 0),
+            (int)($_POST['to_area_id'] ?? 0),
+            (string)($_POST['mode'] ?? ''),
+            (string)($_POST['message'] ?? ''),
+            $userId, $userName, $role
+        );
+        break;
+    case 'accept':
+        $result = RequestForwardService::accept($pdo, $forwardId, $userId, $userName, $role);
+        break;
+    case 'refuse':
+        $result = RequestForwardService::refuse($pdo, $forwardId, (string)($_POST['reason'] ?? ''), $userId, $userName, $role);
+        break;
+    case 'cancel':
+        $result = RequestForwardService::cancel($pdo, $forwardId, $userId, $userName, $role);
+        break;
+    case 'return':
+        $result = RequestForwardService::returnHelp($pdo, $forwardId, (string)($_POST['note'] ?? ''), $userId, $userName, $role);
+        break;
+    default:
+        $result = ['success' => false, 'message' => 'Ação inválida.'];
 }
 
-try {
-    switch ($action) {
-
-        // ==============================
-        // REPASSAR REQUISIÇÃO
-        // ==============================
-        case 'forward':
-            if (!$isAdmin && !$isGestor) {
-                echo json_encode(['success' => false, 'message' => 'Apenas gestores e administradores podem repassar requisições.']);
-                exit;
-            }
-
-            $reqId       = (int)($input['id'] ?? 0);
-            $reqTable    = $input['table'] ?? '';
-            $toAreaId    = (int)($input['to_area_id'] ?? 0);
-            $observation = trim($input['observation'] ?? '');
-
-            // Limpar prefixo da tabela se veio completo (ctd_ti_frm → ti)
-            $reqTable = normalizeRequestTable((string)$reqTable);
-
-            if (!$reqId || !$reqTable || !$toAreaId) {
-                echo json_encode(['success' => false, 'message' => 'Dados incompletos. Informe ID, tabela e setor de destino.']);
-                exit;
-            }
-
-            $reqData = getRequestRow($pdo, $reqTable, $reqId);
-            if (!$reqData) {
-                echo json_encode(['success' => false, 'message' => 'Requisição não encontrada.']);
-                exit;
-            }
-
-            $canForward = userCanActOnRequest($pdo, $reqData, $reqTable, $userId, $role);
-            if (!$canForward && $isGestor) {
-                // Permite repasse em cadeia apenas se o setor já aceitou formalmente o repasse anterior.
-                $activeForward = getActiveForwardForUser($pdo, $userId, $reqId, $reqTable, ['accepted']);
-                $canForward = $activeForward !== null;
-            }
-
-            if (!$canForward) {
-                echo json_encode(['success' => false, 'message' => 'Você não tem permissão para repassar esta requisição.']);
-                exit;
-            }
-
-            $result = RequestForwardService::forwardRequest($pdo, $reqId, $reqTable, $toAreaId, $observation, $userId, $userName);
-            echo json_encode($result);
-            break;
-
-        // ==============================
-        // ACEITAR REPASSE
-        // ==============================
-        case 'accept':
-            if (!$isAdmin && !$isGestor) {
-                echo json_encode(['success' => false, 'message' => 'Apenas gestores podem aceitar repasses.']);
-                exit;
-            }
-
-            $forwardId = (int)($input['forward_id'] ?? 0);
-            if (!$forwardId) {
-                echo json_encode(['success' => false, 'message' => 'ID do repasse não informado.']);
-                exit;
-            }
-
-            $result = RequestForwardService::acceptForward($pdo, $forwardId, $userId, $userName);
-            echo json_encode($result);
-            break;
-
-        // ==============================
-        // RECUSAR REPASSE
-        // ==============================
-        case 'refuse':
-            if (!$isAdmin && !$isGestor) {
-                echo json_encode(['success' => false, 'message' => 'Apenas gestores podem recusar repasses.']);
-                exit;
-            }
-
-            $forwardId = (int)($input['forward_id'] ?? 0);
-            if (!$forwardId) {
-                echo json_encode(['success' => false, 'message' => 'ID do repasse não informado.']);
-                exit;
-            }
-
-            $result = RequestForwardService::refuseForward($pdo, $forwardId, $userId, $userName);
-            echo json_encode($result);
-            break;
-
-        // ==============================
-        // CONCLUIR REPASSE
-        // ==============================
-        case 'complete':
-            if (!$isAdmin && !$isGestor) {
-                echo json_encode(['success' => false, 'message' => 'Apenas gestores podem concluir repasses.']);
-                exit;
-            }
-
-            $forwardId = (int)($input['forward_id'] ?? 0);
-            if (!$forwardId) {
-                echo json_encode(['success' => false, 'message' => 'ID do repasse não informado.']);
-                exit;
-            }
-
-            $result = RequestForwardService::completeForward($pdo, $forwardId, $userId, $userName);
-            echo json_encode($result);
-            break;
-
-        // ==============================
-        // CADEIA DE REPASSES
-        // ==============================
-        case 'chain':
-            $reqId    = (int)($input['id'] ?? 0);
-            $reqTable = $input['table'] ?? '';
-            $reqTable = normalizeRequestTable((string)$reqTable);
-
-            if (!$reqId || !$reqTable) {
-                echo json_encode(['success' => false, 'message' => 'ID e tabela são obrigatórios.']);
-                exit;
-            }
-
-            $reqData = getRequestRow($pdo, $reqTable, $reqId);
-            if (!$reqData || !userCanViewRequest($pdo, $reqData, $reqTable, $userId, $role)) {
-                echo json_encode(['success' => false, 'message' => 'Acesso negado.']);
-                exit;
-            }
-
-            $result = RequestForwardService::getForwardChain($pdo, $reqId, $reqTable);
-            echo json_encode($result);
-            break;
-
-        // ==============================
-        // REPASSES PENDENTES PARA O GESTOR
-        // ==============================
-        case 'pending':
-            if (!$isAdmin && !$isGestor) {
-                echo json_encode(['success' => false, 'message' => 'Acesso restrito.']);
-                exit;
-            }
-
-            $result = RequestForwardService::getPendingForwards($pdo, $userId);
-            echo json_encode($result);
-            break;
-
-        // ==============================
-        // LISTAR SETORES DISPONÍVEIS (para dropdown)
-        // ==============================
-        case 'areas':
-            if (!$isAdmin && !$isGestor) {
-                echo json_encode(['success' => false, 'message' => 'Acesso restrito.']);
-                exit;
-            }
-
-            $areas = RequestForwardService::getAvailableAreas($pdo);
-            echo json_encode(['success' => true, 'data' => $areas]);
-            break;
-
-        default:
-            echo json_encode(['success' => false, 'message' => 'Ação não reconhecida.']);
-    }
-
-} catch (Exception $e) {
-    error_log('request_forwards.php: ' . $e->getMessage());
-    echo json_encode(['success' => false, 'message' => 'Erro interno ao processar o repasse.']);
-}
+jsonResponse($result);

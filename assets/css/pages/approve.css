@@ -1,0 +1,296 @@
+/* =====================================================================
+   Aprovar pedidos — UI 2.0
+   Celular primeiro: um pedido por vez (cartão grande), progresso e
+   Recusar/Aprovar fixos acima da barra inferior (.bottom-nav).
+   ≥900px: grade de 3 colunas; cada cartão com faixa de urgência, Recusar | Aprovar
+   no rodapé e o Desfazer dentro do próprio cartão.
+   Marcação: components/request_card.php (renderApproveCard); comportamento: assets/js/pages/approve.js
+   ===================================================================== */
+
+/* ---------- Linha do topo: "N aguardando decisão · X enviando · urgentes primeiro" ---------- */
+.approve-summary { margin: 0; font-size: var(--t-sm); color: var(--texto-2); }
+.approve-summary strong { color: var(--texto); font-weight: 700; }
+.approve-summary__sending[hidden] { display: none; }
+
+/* ---------- Contêiner: cartões soltos, sem painel ---------- */
+.approve-deck {
+    background: transparent;
+    border: 0;
+    border-radius: 0;
+}
+.approve-deck > .empty-state {
+    padding: 48px 20px;
+    border: 1px solid var(--linha);
+    border-radius: var(--r-3);
+    background: var(--superficie);
+}
+.approve-deck > .queue__note {
+    margin-bottom: 12px;
+    padding: 12px 14px;
+    border: 1px solid var(--linha);
+    border-radius: var(--r-2);
+    background: var(--superficie);
+}
+
+/* ---------- Progresso (celular) ---------- */
+.approve-progress { display: grid; gap: 8px; margin-bottom: 14px; }
+.approve-progress__row { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.approve-progress__text { font-size: var(--t-sm); font-weight: 600; color: var(--texto-2); font-variant-numeric: tabular-nums; }
+.approve-progress__toggle { min-height: var(--h-md); }
+.approve-progress__track { height: 4px; border-radius: 2px; background: var(--linha); overflow: hidden; }
+.approve-progress__track > span { display: block; width: 0; height: 100%; background: var(--laranja); transition: width var(--dur-2) var(--ease-out); }
+@media (prefers-reduced-motion: reduce) { .approve-progress__track > span { transition: none; } }
+
+/* Selecionar todos (lote) */
+.approve-pickall {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 4px 10px;
+    margin-bottom: 8px;
+    font-size: var(--t-sm);
+}
+.approve-pickall label { display: inline-flex; align-items: center; gap: 10px; min-height: var(--h-md); font-weight: 600; cursor: pointer; }
+.approve-pickall input { width: 20px; height: 20px; margin: 0; }
+.approve-pickall__hint { color: var(--texto-2); }
+
+/* ---------- Cartão ---------- */
+.approve-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 12px; }
+.approve-card {
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+    border: 1px solid var(--linha);
+    border-radius: var(--r-2);
+    background: var(--superficie);
+    overflow: hidden;
+}
+.approve-card[hidden] { display: none; }
+.approve-card:has(input[data-pick]:checked) { border-color: var(--laranja); }
+/* Com pedidos marcados, decide-se pela barra de baixo: os botões de cada cartão saem */
+body.has-bulk .approve-card__actions { display: none; }
+
+/* Faixa de urgência: "Crítica · motivo" */
+.approve-card__urgent {
+    margin: 0;
+    padding: 9px 14px;
+    background: #FEF2F2;
+    border-bottom: 1px solid var(--perigo-claro);
+    color: var(--perigo);
+    font-size: var(--t-xs);
+    line-height: 1.4;
+    overflow-wrap: anywhere;
+}
+.approve-card__urgent strong { font-weight: 700; }
+
+.approve-card__body { display: flex; flex-direction: column; gap: 8px; flex: 1; padding: 14px 16px 16px; min-width: 0; }
+
+.approve-card__head { display: flex; align-items: center; gap: 8px; min-width: 0; }
+.approve-card__check {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    flex: none;
+    width: var(--h-md);
+    height: var(--h-md);
+    margin: -12px -6px -12px -12px;
+    cursor: pointer;
+}
+.approve-card__check input { width: 20px; height: 20px; margin: 0; cursor: pointer; }
+.approve-card__ref {
+    min-width: 0;
+    font-family: ui-monospace, SFMono-Regular, Consolas, monospace;
+    font-size: var(--t-xs);
+    font-weight: 700;
+    color: var(--texto);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+.approve-card__prio { margin-left: auto; flex: none; font-size: var(--t-xs); color: var(--texto-2); }
+
+.approve-card__title {
+    font-size: 1.25rem;
+    font-weight: 700;
+    line-height: 1.3;
+    color: var(--texto);
+    text-decoration: none;
+    overflow-wrap: anywhere;
+}
+.approve-card__title:hover { color: var(--laranja-escuro); text-decoration: underline; }
+.approve-card__title:focus-visible { outline: none; box-shadow: var(--anel); border-radius: 4px; }
+.approve-card__desc { margin: 0; font-size: 0.9375rem; line-height: 1.5; color: #3F3F46; overflow-wrap: anywhere; }
+
+.approve-card__by { margin: 0; font-size: var(--t-xs); color: var(--texto-2); overflow-wrap: anywhere; }
+.approve-card__by strong { color: var(--texto); font-weight: 700; }
+.approve-card__due--bad { color: var(--perigo); font-weight: 600; }
+.approve-card__due--warn { color: var(--laranja-escuro); font-weight: 600; }
+
+.approve-card__refuse { display: grid; gap: 6px; margin-top: 4px; }
+.approve-card__refuse[hidden] { display: none; }
+.approve-card__refuse label { font-size: var(--t-sm); font-weight: 600; }
+.approve-card__refuse label small { font-weight: 400; color: var(--texto-2); }
+.approve-card__refuse input { min-height: 50px; font-size: 16px; }
+
+/* Rodapé: Recusar | Aprovar colados ao cartão */
+.approve-card__actions {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    margin-top: auto;
+    border-top: 1px solid var(--linha);
+}
+.approve-card__btn {
+    min-height: 46px;
+    padding: 0 12px;
+    border: 0;
+    background: var(--superficie);
+    color: var(--texto);
+    font: inherit;
+    font-size: var(--t-sm);
+    font-weight: 600;
+    cursor: pointer;
+}
+.approve-card__btn--refuse { border-right: 1px solid var(--linha); }
+.approve-card__btn--refuse:hover { background: var(--fundo-2); }
+.approve-card__btn--approve { background: var(--laranja-claro); color: var(--laranja-escuro); font-weight: 700; }
+.approve-card__btn--approve:hover { background: #FFEDD5; }
+.approve-card__btn:focus-visible { outline: none; box-shadow: var(--anel-dentro); }
+.approve-card.is-refusing .approve-card__btn--refuse { background: var(--perigo); color: var(--texto-inv); }
+.approve-card.is-refusing .approve-card__btn--approve { background: var(--superficie); color: var(--texto); font-weight: 600; }
+
+/* Decidido, esperando o Desfazer: cartão apagado, selo, contagem e botão por cima */
+.approve-card.is-pending :is(.approve-card__urgent, .approve-card__body, .approve-card__actions) { opacity: .25; pointer-events: none; }
+.approve-card__undo {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    padding: 16px;
+    text-align: center;
+}
+.approve-card__undo[hidden] { display: none; }
+.approve-card__stamp {
+    padding: 2px 8px;
+    border-radius: 6px;
+    background: var(--ok-claro);
+    color: var(--ok);
+    font-size: var(--t-xs);
+    font-weight: 700;
+}
+.approve-card.is-pending--refuse .approve-card__stamp { background: var(--perigo-claro); color: var(--perigo); }
+.approve-card__sending { font-size: var(--t-sm); color: var(--texto); font-variant-numeric: tabular-nums; }
+.approve-card__sending strong { font-weight: 700; }
+.approve-card__undo-btn { min-height: 38px; padding: 0 16px; border-color: var(--grafite); font-weight: 700; background: var(--superficie); }
+
+.approve-next { margin: 10px 0 0; font-size: var(--t-xs); color: var(--texto-2); text-align: center; }
+.approve-next:empty { display: none; }
+.approve-done[hidden] { display: none; }
+.approve-done { padding: 48px 20px; border: 1px solid var(--linha); border-radius: var(--r-3); background: var(--superficie); }
+
+/* ---------- Celular, um por vez ---------- */
+.approve-dock { display: none; }
+@media (max-width: 899.98px) {
+    .approve-card { border-radius: 18px; }
+    /* Na lista ("Ver todos") o resumo fica em 2 linhas; um por vez mostra tudo */
+    .approve-deck:not(.is-deck) .approve-card__desc {
+        display: -webkit-box;
+        -webkit-line-clamp: 2;
+        -webkit-box-orient: vertical;
+        overflow: hidden;
+    }
+    .approve-deck.is-deck .approve-card:not(.is-current) { display: none; }
+    .approve-deck.is-deck .approve-card__actions,
+    .approve-deck.is-deck .approve-card__check,
+    .approve-deck.is-deck .approve-pickall { display: none; }
+    .approve-deck.is-deck .approve-card__body { padding: 18px; gap: 12px; }
+    .approve-deck.is-deck .approve-card__by { font-size: var(--t-sm); }
+    /* Espaço para a barra de decisão fixa */
+    .approve-deck.is-deck { margin-bottom: 96px; }
+
+    .approve-dock:not([hidden]) {
+        position: fixed;
+        left: 0;
+        right: 0;
+        bottom: calc(var(--bottomnav-h) + env(safe-area-inset-bottom));
+        z-index: 44;
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 10px;
+        padding: 12px 16px;
+        background: var(--superficie);
+        border-top: 1px solid var(--linha);
+    }
+    .approve-dock .btn { min-height: 56px; border-radius: 14px; font-size: var(--t-md); }
+    .approve-dock__approve.btn--primary { background: var(--laranja-claro); border-color: var(--laranja-borda); color: var(--laranja-escuro); font-weight: 700; }
+    .approve-dock__approve.btn--primary:hover { background: #FFEDD5; border-color: var(--laranja-borda); }
+    .approve-dock.is-refusing .approve-dock__refuse { background: var(--perigo); border-color: var(--perigo); color: var(--texto-inv); }
+    .approve-dock.is-refusing .approve-dock__approve { background: var(--superficie); border-color: var(--linha-forte); color: var(--texto); }
+    /* Barra de lote no lugar da barra de decisão */
+    body.has-bulk .approve-dock { display: none; }
+    body.has-bulk .approve-deck { margin-bottom: 150px; }
+}
+
+/* ---------- Aviso com Desfazer (só celular, um por vez) ---------- */
+.undo-toast {
+    position: fixed;
+    left: 16px;
+    right: 16px;
+    bottom: calc(var(--bottomnav-h) + env(safe-area-inset-bottom) + 92px);
+    z-index: 121;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    padding: 10px 10px 10px 16px;
+    border-radius: 14px;
+    background: var(--grafite);
+    color: var(--texto-inv);
+    box-shadow: var(--sombra-2);
+}
+.undo-toast[hidden] { display: none; }
+.undo-toast__text { font-size: var(--t-sm); font-weight: 600; }
+.undo-toast__btn {
+    flex: none;
+    min-height: var(--h-md);
+    padding: 0 14px;
+    border: 1px solid var(--linha-inv);
+    border-radius: 10px;
+    background: transparent;
+    color: var(--texto-inv);
+    font: inherit;
+    font-size: var(--t-sm);
+    font-weight: 700;
+    cursor: pointer;
+}
+.undo-toast__btn:hover { background: rgb(255 255 255 / .08); }
+.undo-toast__btn:focus-visible { outline: none; box-shadow: var(--anel); }
+/* Sem a barra de decisão (lista ou lote), o aviso desce */
+.undo-toast.is-low { bottom: calc(var(--bottomnav-h) + env(safe-area-inset-bottom) + 12px); }
+
+/* ---------- Computador: grade de 3 colunas ---------- */
+@media (min-width: 900px) {
+    .approve-progress { display: none; }
+    .approve-list { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 14px; }
+    .approve-card__body { gap: 6px; padding: 12px 14px 14px; }
+    .approve-card__title { font-size: 0.9375rem; line-height: 1.35; }
+    .approve-card__desc {
+        font-size: var(--t-xs);
+        line-height: 1.5;
+        display: -webkit-box;
+        -webkit-line-clamp: 2;
+        -webkit-box-orient: vertical;
+        overflow: hidden;
+    }
+    .approve-card__by { margin-top: 2px; }
+    .approve-card__refuse label { font-size: var(--t-xs); }
+    .approve-card__refuse input { min-height: 40px; font-size: var(--t-sm); }
+    .approve-card__btn { min-height: 36px; font-size: var(--t-xs); }
+    .approve-card__undo-btn { min-height: 36px; font-size: var(--t-sm); }
+    .approve-next { display: none; }
+    .undo-toast { display: none; }
+    .approve-deck .bulk-bar { margin-top: 14px; border-radius: var(--r-2); }
+}
