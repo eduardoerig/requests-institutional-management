@@ -641,7 +641,8 @@ select option { color: var(--texto); }
 @supports (appearance: base-select) {
     @media (hover: hover) and (pointer: fine) {
         select, ::picker(select) { appearance: base-select; }
-        select { white-space: nowrap; }
+        /* base-select vira inline-flex: sem isto o texto sobe quando o campo é mais alto que a linha */
+        select { align-items: center; white-space: nowrap; }
         select::picker-icon { display: none; }
         ::picker(select) {
             margin-block: 4px;
@@ -1279,6 +1280,7 @@ a.bar-list__row:hover { background: var(--fundo); }
     background: var(--veu);
 }
 .modal-overlay.active { display: flex; }
+.modal-overlay--top { z-index: 130; } /* "Entre de novo" fica por cima de qualquer outra janela */
 /* Ao aparecer: véu esmaece e o cartão sobe (folha no celular) ou cresce de leve (PC) */
 .modal-overlay { animation: veu-in var(--dur-2) var(--ease-out); }
 .modal-overlay > .modal-card { animation: modal-in var(--dur-2) var(--ease-out); }

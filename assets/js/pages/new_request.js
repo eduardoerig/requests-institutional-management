@@ -4,6 +4,8 @@
  * - Celular: passo a passo só de apresentação (mostra/oculta partes do mesmo <form>).
  * - Computador (≥900px): tudo visível numa página; a navegação de passos fica escondida pelo CSS.
  * Nada aqui muda nomes de campos nem o envio: quem envia é o listener de submit do script.js.
+ * Celular: cada passo entra no histórico, então o "voltar" do aparelho volta um passo em vez de sair.
+ * Com algo digitado e ainda não enviado, sair da página (F5, fechar, link) pede confirmação.
  */
 (function () {
     const root = document.querySelector('[data-new-request]');
@@ -29,6 +31,10 @@
     let chosen = null;
     let loading = null;
     let sendObserver = null;
+    let pushed = 0;        // passos empilhados no histórico (celular)
+    let ignorePop = 0;     // voltas no histórico feitas por nós mesmos (botão Voltar)
+    let dirty = false;     // a pessoa já escreveu algo
+    let submitting = false; // enviando: sair da página não pergunta
 
     const currentForm = () => holder.querySelector('.form_request');
     const stepPart = (n) => currentForm()?.querySelector(`[data-form-step="${n}"]`);
@@ -39,6 +45,17 @@
     // Passos (celular)
     // ---------------------------------------------------------------
     function setStep(n, opts = {}) {
+        // Celular: avançar empilha o passo; voltar pelo botão desempilha (o "voltar" do aparelho faz o mesmo)
+        if (!opts.fromPop && !desk.matches) {
+            if (n > step) {
+                try { history.pushState({ nrStep: n }, ''); pushed++; } catch (e) { /* sem histórico */ }
+            } else if (n < step && pushed > 0) {
+                const back = Math.min(pushed, step - n);
+                pushed -= back;
+                ignorePop++;
+                history.go(-back);
+            }
+        }
         step = n;
         root.dataset.step = String(n);
         stepCount.textContent = `Passo ${n} de 3`;
@@ -76,6 +93,26 @@
 
     btnNext.addEventListener('click', goNext);
     btnBack.addEventListener('click', () => { if (step > 1) setStep(step - 1); });
+
+    window.addEventListener('popstate', (e) => {
+        if (ignorePop) { ignorePop--; return; }
+        const target = (e.state && e.state.nrStep) || 1;
+        if (target < step) {
+            pushed = Math.max(0, pushed - (step - target));
+            setStep(target, { fromPop: true });
+        } else if (target > step) {
+            // "Avançar" do navegador pularia a validação: desfaz
+            ignorePop++;
+            history.back();
+        }
+    });
+
+    holder.addEventListener('input', () => { dirty = true; });
+    window.addEventListener('beforeunload', (e) => {
+        if (!dirty || submitting) return;
+        e.preventDefault();
+        e.returnValue = ''; // o navegador mostra o próprio aviso de "sair da página?"
+    });
 
     btnSend.addEventListener('click', () => {
         const form = currentForm();
@@ -165,6 +202,8 @@
         if (!inner) return;
         const original = btnSend.innerHTML;
         sendObserver = new MutationObserver(() => {
+            // Botão desabilitado = enviando (script.js): sair da página não pergunta; se falhar, ele volta
+            submitting = inner.disabled;
             btnSend.disabled = inner.disabled;
             btnSend.innerHTML = inner.disabled ? inner.innerHTML : original;
         });

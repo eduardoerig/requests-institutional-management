@@ -13,6 +13,9 @@
                 <h1>Entrar</h1>
                 <p>Peça, acompanhe cada etapa e converse com quem está resolvendo.</p>
             </div>
+            <?php if (!empty($sessionEndedReason)): // index.php: a sessão caiu (conta inativa, senha trocada) ?>
+                <div class="notice notice--warn" role="status"><i class="fa-solid fa-circle-info" aria-hidden="true"></i><span><?= e(sessionEndedMessage($sessionEndedReason)) ?></span></div>
+            <?php endif; ?>
 
             <form id="frm_login" class="auth-form form-auth form-login">
                 <div class="auth-form__fields">

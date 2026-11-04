@@ -12,25 +12,32 @@ if (($_POST['action'] ?? '') !== 'get') {
 requirePostJson();
 
 $login = trim((string)($_POST['login'] ?? ''));
-$password = (string)($_POST['password'] ?? '');
-$ip = $_SERVER['REMOTE_ADDR'] ?? '0.0.0.0';
+// Toda senha é gravada sem espaços nas pontas (update_user_admin/create_user): compara do mesmo jeito
+$password = trim((string)($_POST['password'] ?? ''));
+$ip = clientIp();
 
 if ($login === '' || $password === '') {
     jsonResponse(['success' => false, 'message' => 'Preencha usuário e senha.']);
 }
 
-const LOGIN_MAX_ATTEMPTS = 5;
+const LOGIN_MAX_ATTEMPTS = 5;        // mesmo login, mesmo IP
+const LOGIN_MAX_PER_IP = 20;         // um IP, somando todos os logins (senha comum testada em muitas contas)
+const LOGIN_MAX_PER_LOGIN = 10;      // um login, somando todos os IPs (ataque distribuído)
 const LOGIN_WINDOW_MINUTES = 15;
 
 /**
- * Limite de tentativas por login+IP. Se a tabela ainda não existir, o limite é ignorado
- * (não bloqueia o acesso), mas o restante do login segue normalmente.
+ * Tentativas erradas recentes: por login+IP, só por IP ou só por login (null = não filtra).
+ * Se a tabela ainda não existir, o limite é ignorado (não bloqueia o acesso).
  */
-function loginAttemptsCount(PDO $pdo, string $login, string $ip): int
+function loginAttemptsCount(PDO $pdo, ?string $login, ?string $ip): int
 {
+    $where = ['attempted_at > (NOW() - INTERVAL ' . LOGIN_WINDOW_MINUTES . ' MINUTE)'];
+    $params = [];
+    if ($login !== null) { $where[] = 'login = ?'; $params[] = $login; }
+    if ($ip !== null) { $where[] = 'ip = ?'; $params[] = $ip; }
     try {
-        $stmt = $pdo->prepare('SELECT COUNT(*) FROM login_attempts WHERE login = ? AND ip = ? AND attempted_at > (NOW() - INTERVAL ' . LOGIN_WINDOW_MINUTES . ' MINUTE)');
-        $stmt->execute([$login, $ip]);
+        $stmt = $pdo->prepare('SELECT COUNT(*) FROM login_attempts WHERE ' . implode(' AND ', $where));
+        $stmt->execute($params);
         return (int)$stmt->fetchColumn();
     } catch (PDOException $e) {
         return 0;
@@ -55,7 +62,9 @@ function clearLoginFailures(PDO $pdo, string $login, string $ip): void
     }
 }
 
-if (loginAttemptsCount($pdo, $login, $ip) >= LOGIN_MAX_ATTEMPTS) {
+if (loginAttemptsCount($pdo, $login, $ip) >= LOGIN_MAX_ATTEMPTS
+    || loginAttemptsCount($pdo, null, $ip) >= LOGIN_MAX_PER_IP
+    || loginAttemptsCount($pdo, $login, null) >= LOGIN_MAX_PER_LOGIN) {
     jsonResponse(['success' => false, 'message' => 'Muitas tentativas erradas. Aguarde ' . LOGIN_WINDOW_MINUTES . ' minutos e tente de novo.'], 429);
 }
 
@@ -87,33 +96,16 @@ session_regenerate_id(true);
 
 $_SESSION['id'] = $user['id'];
 $_SESSION['name'] = $user['name'];
+$_SESSION['login'] = $user['login'];
 $_SESSION['role'] = $user['role'];
 $_SESSION['force_reset'] = (int)($user['force_reset'] ?? 0);
-$_SESSION['checked_at'] = time();
-
-// Carregar subdivisões do usuário (Múltiplas)
-$_SESSION['subdivision_ids'] = [];
-$_SESSION['subdivision_names'] = [];
-
-$subStmt = $pdo->prepare("
-    SELECT s.id, s.name
-    FROM ctd_subdivision s
-    JOIN cfg_user_subdivision cus ON s.id = cus.id_subdivision
-    WHERE cus.id_user = ?
-");
-$subStmt->execute([$user['id']]);
-
-foreach ($subStmt->fetchAll(PDO::FETCH_ASSOC) as $s) {
-    $_SESSION['subdivision_ids'][] = $s['id'];
-    $_SESSION['subdivision_names'][] = $s['name'];
-}
-
-// Manter campos antigos para compatibilidade
-$_SESSION['subdivision_id'] = $_SESSION['subdivision_ids'][0] ?? null;
-$_SESSION['subdivision_name'] = $_SESSION['subdivision_names'][0] ?? null;
+// Trocar a senha sobe a versão no banco e derruba as sessões com a versão antiga (refreshSessionUser)
+$_SESSION['session_version'] = (int)($user['session_version'] ?? 0);
+loadSessionSubdivisions($pdo, (int)$user['id']);
 
 // Novo token CSRF para a sessão autenticada
 unset($_SESSION['csrf_token']);
-ensureCsrfToken();
+$csrf = ensureCsrfToken();
 
-jsonResponse(['success' => true, 'message' => 'Login realizado com sucesso!']);
+// csrf_token e user_id: a janela "Entrar de novo" (script.js) continua na mesma página com o token novo
+jsonResponse(['success' => true, 'message' => 'Login realizado com sucesso!', 'csrf_token' => $csrf, 'user_id' => (int)$user['id']]);

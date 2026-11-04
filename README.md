@@ -70,7 +70,11 @@ Desenvolvido com uma interface moderna, sofisticadamente clean e responsiva (Mob
 
 Requisitos: PHP 8.1+ (pdo_mysql, mbstring, curl), MySQL 5.7+ ou MariaDB 10.4+, Apache com `mod_rewrite` (e, de preferência, `mod_headers`).
 
-1. **Código**: copie o projeto para a pasta pública (raiz do domínio ou subpasta). **Não envie** `scratch/`, `database/backups/` nem `*.local.*`.
+1. **Código**: publique só o que está no git, nunca a pasta de trabalho inteira (ela tem `scratch/`, `database/backups/` e `*.local.*`, que o `.gitignore` deixa de fora e que não podem ir para o servidor):
+   ```bash
+   git archive --format=zip -o sisreq.zip HEAD    # pacote com exatamente o que está commitado
+   ```
+   Numa atualização, apague também no servidor os arquivos que a versão nova removeu (`git diff --name-status <versão-anterior> HEAD | grep ^D`). A proteção das pastas internas depende do `.htaccess`: confira que o Apache tem `AllowOverride All` e `mod_rewrite`.
 2. **Credenciais do banco** (nunca no git), uma das opções:
    * variáveis de ambiente `DB_HOST`, `DB_NAME`, `DB_USER`, `DB_PASS`; ou
    * `config/conn.local.php` a partir de `config/conn.local.example.php`.

@@ -249,8 +249,7 @@ check('Minhas requisições mostra o pedido novo em Em andamento, aguardando a c
 // ------------------------------------------------------------------
 section('6. Quem pode ver');
 $res = $ti->get("api/request_view.php?id=$reqId&table=ti");
-check('gestor TI vê a requisição no painel', $res['status'] === 200 && str_contains($res['body'], 'request-view'), 'HTTP ' . $res['status']);
-check('painel não contém hash de senha', !str_contains($res['body'], 'password') && !str_contains($res['body'], '$2y$'));
+check('setor não vê pedido ainda pendente (só depois de aprovado)', $res['status'] === 403, 'HTTP ' . $res['status']);
 $res = $shop->get("api/request_view.php?id=$reqId&table=ti");
 check('painel bloqueado para outro setor', $res['status'] === 403, 'HTTP ' . $res['status']);
 $res = $shop->get("print_request.php?id=$reqId&table=ti");
@@ -266,6 +265,9 @@ $res = $ti->post('api/request_actions.php', ['id' => $reqId, 'table' => 'ctd_ti_
 check('não inicia atendimento antes da aprovação', ($res['json']['success'] ?? true) === false);
 $res = $apr->post('api/approve_request.php', ['action' => 'post', 'id' => $reqId, 'table' => 'ti', 'value' => 'Y']);
 check('coordenação aprova', ($res['json']['success'] ?? false) === true, snippet($res));
+$res = $ti->get("api/request_view.php?id=$reqId&table=ti");
+check('gestor TI vê a requisição aprovada no painel', $res['status'] === 200 && str_contains($res['body'], 'request-view'), 'HTTP ' . $res['status']);
+check('painel não contém hash de senha', !str_contains($res['body'], 'password') && !str_contains($res['body'], '$2y$'));
 $res = $adm->post('api/approve_request.php', ['action' => 'post', 'id' => $reqId, 'table' => 'ti', 'value' => 'N', 'reason' => 'dup']);
 check('segunda decisão sobre o mesmo pedido é bloqueada', ($res['json']['success'] ?? true) === false);
 $res = $sol->post('api/request_actions.php', ['id' => $reqId, 'table' => 'ctd_ti_frm', 'action' => 'delete']);
@@ -304,6 +306,112 @@ $res = $sol->post('api/request_actions.php', ['id' => $cancelId, 'table' => 'ctd
 check('solicitante cancela o próprio pedido pendente', ($res['json']['success'] ?? false) === true, snippet($res));
 $left = $pdo->query("SELECT COUNT(*) FROM request_history WHERE request_id = $cancelId AND request_table = 'ti'")->fetchColumn();
 check('cancelamento não deixa histórico órfão', (int)$left === 0);
+
+// ------------------------------------------------------------------
+section('10b. Regras corrigidas na revisão de go-live');
+$sp = new Client($baseUrl);
+$res = $sp->login('teste_solicitante', ' ' . $password . ' ');
+check('senha com espaço nas pontas (colada) entra', ($res['json']['success'] ?? false) === true, snippet($res));
+$pdo->prepare('DELETE FROM login_attempts WHERE login = ?')->execute(['teste_solicitante']);
+
+$res = $apr->post('api/add_request.php', ['title' => 'Teste regra própria'] + $base);
+$ownId = (int)($res['json']['id'] ?? 0);
+$createdIds[] = ['ti', $ownId];
+$res = $apr->post('api/approve_request.php', ['action' => 'post', 'id' => $ownId, 'table' => 'ti', 'value' => 'Y']);
+check('coordenação não aprova o próprio pedido', $ownId > 0 && ($res['json']['success'] ?? true) === false && str_contains($res['json']['message'] ?? '', 'feito por você'), snippet($res));
+$res = $apr->get('approve');
+check('o próprio pedido não aparece na fila de Aprovar', !str_contains($res['body'], 'Teste regra própria'));
+
+$res = $sol->post('api/add_request.php', ['title' => 'Teste regra exclusão'] + $base);
+$delId = (int)($res['json']['id'] ?? 0);
+$createdIds[] = ['ti', $delId];
+$apr->post('api/approve_request.php', ['action' => 'post', 'id' => $delId, 'table' => 'ti', 'value' => 'Y']);
+$res = $apr->post('api/request_actions.php', ['id' => $delId, 'table' => 'ctd_ti_frm', 'action' => 'delete']);
+check('coordenação não apaga pedido já aprovado', ($res['json']['success'] ?? true) === false, snippet($res));
+check('pedido aprovado continua no banco', (int)$pdo->query("SELECT COUNT(*) FROM ctd_ti_frm WHERE id = $delId")->fetchColumn() === 1);
+
+// Gestor de TI pede a Compras: ali ele é só quem pediu e não escreve na conversa entre setores
+$res = $ti->post('api/add_request.php', ['type' => 'shopping', 'title' => 'Teste regra conversa', 'end' => $future, 'details' => 'Comprar canetas']);
+$chatId = (int)($res['json']['id'] ?? 0);
+$createdIds[] = ['shop', $chatId];
+$res = $ti->post('api/add_comment.php', ['id' => $chatId, 'table' => 'shop', 'comment' => 'tentando o canal interno', 'channel' => 'internal']);
+$chan = $chatId ? $pdo->query("SELECT channel FROM request_comments WHERE request_id = $chatId AND request_table = 'shop' ORDER BY id DESC LIMIT 1")->fetchColumn() : null;
+check('quem pediu (perfil de setor) não grava no canal interno', $chatId > 0 && ($res['json']['success'] ?? false) === true && $chan === 'public', snippet($res) . ' canal=' . var_export($chan, true));
+
+// ------------------------------------------------------------------
+section('10c. Sessão, login e regras de setor (itens 7 a 17 da revisão)');
+$res = $sol->post('api/add_request.php', ['urgent' => '1'] + $base); // sem o campo do motivo
+check('urgente SEM o campo do motivo é recusado', ($res['json']['success'] ?? true) === false && str_contains($res['json']['message'] ?? '', 'urgente'), snippet($res));
+
+$res = $adm->post('api/create_sector.php', ['sector_title' => 'Setor de teste automático']);
+check('criar setor pela tela está desligado', ($res['json']['success'] ?? true) === false && (int)$pdo->query("SELECT COUNT(*) FROM ctd_area WHERE title = 'Setor de teste automático'")->fetchColumn() === 0, snippet($res));
+
+// Setor não exporta pedidos pendentes
+$res = $sol->post('api/add_request.php', ['title' => 'Teste regra export pendente'] + $base);
+$pendId = (int)($res['json']['id'] ?? 0);
+$createdIds[] = ['ti', $pendId];
+$res = $ti->get('api/export_requests.php');
+check('setor não exporta pedido pendente', $pendId > 0 && !str_contains($res['body'], 'Teste regra export pendente'), 'HTTP ' . $res['status']);
+$res = $adm->get('api/export_requests.php');
+check('administração exporta o pendente', str_contains($res['body'], 'Teste regra export pendente'), 'HTTP ' . $res['status']);
+
+// Subdivisão tirada pelo admin vale na hora, sem sair do sistema
+$aprId = (int)$pdo->query("SELECT id FROM ctd_users WHERE login = 'teste_aprovador'")->fetchColumn();
+$aprSubs = $pdo->query("SELECT id_subdivision FROM cfg_user_subdivision WHERE id_user = $aprId")->fetchAll(PDO::FETCH_COLUMN);
+$pdo->prepare('DELETE FROM cfg_user_subdivision WHERE id_user = ?')->execute([$aprId]);
+$res = $apr->post('api/approve_request.php', ['action' => 'post', 'id' => $pendId, 'table' => 'ti', 'value' => 'Y']);
+check('coordenação tirada da subdivisão não aprova mais (sem sair do sistema)', $res['status'] === 403, snippet($res));
+$ins = $pdo->prepare('INSERT INTO cfg_user_subdivision (id_user, id_subdivision) VALUES (?, ?)');
+foreach ($aprSubs as $subId) {
+    $ins->execute([$aprId, (int)$subId]);
+}
+$res = $apr->get('api/get_notifications.php');
+check('coordenação devolvida à subdivisão continua com a sessão', $res['status'] === 200, 'HTTP ' . $res['status']);
+
+// Troca de senha derruba as outras sessões; redefinição pelo admin derruba todas
+$tmpLogin = 'tmp_teste_sessao';
+$pdo->prepare('DELETE FROM ctd_users WHERE login = ?')->execute([$tmpLogin]);
+$pdo->prepare("INSERT INTO ctd_users (name, login, password, role, status, force_reset) VALUES ('Teste Sessão', ?, ?, 'solicitante', 1, 0)")
+    ->execute([$tmpLogin, password_hash($password, PASSWORD_DEFAULT)]);
+$tmpId = (int)$pdo->lastInsertId();
+$ca = new Client($baseUrl);
+$cb = new Client($baseUrl);
+$okA = ($ca->login($tmpLogin, $password)['json']['success'] ?? false) === true;
+$okB = ($cb->login($tmpLogin, $password)['json']['success'] ?? false) === true;
+check('conta temporária entra em dois aparelhos', $okA && $okB);
+$res = $ca->request('POST', 'api/update_user_admin.php?self=1', ['password' => 'Outra#Senha9', 'currentPass' => $password, 'csrf_token' => $ca->csrf]);
+check('troca a própria senha', ($res['json']['success'] ?? false) === true, snippet($res));
+$res = $cb->get('api/get_notifications.php');
+check('a outra sessão cai depois da troca de senha', $res['status'] === 401 && ($res['json']['session_expired'] ?? false) === true, snippet($res));
+$res = $ca->get('api/get_notifications.php');
+check('a sessão que trocou a senha continua', $res['status'] === 200, 'HTTP ' . $res['status']);
+$res = $adm->post('api/update_user_admin.php', ['action' => 'reset_password', 'id' => $tmpId]);
+check('admin redefine a senha', ($res['json']['success'] ?? false) === true, snippet($res));
+$res = $ca->get('api/get_notifications.php');
+check('redefinição pelo admin derruba a sessão da pessoa', $res['status'] === 401, 'HTTP ' . $res['status']);
+$res = $ca->get('myRequests');
+check('página da sessão derrubada mostra a entrada com o motivo', str_contains($res['body'], 'frm_login') && str_contains($res['body'], 'Sua senha foi trocada'), 'HTTP ' . $res['status']);
+$pdo->prepare('DELETE FROM ctd_users WHERE id = ?')->execute([$tmpId]);
+
+// Sessão expirada: token novo e entrar de novo devolvem o token da sessão nova
+$cx = new Client($baseUrl);
+$res = $cx->get('api/csrf.php');
+check('api/csrf.php devolve um token sem login', $res['status'] === 200 && preg_match('/^[a-f0-9]{64}$/', (string)($res['json']['csrf_token'] ?? '')) === 1, snippet($res));
+$res = $cx->request('POST', 'api/login.php', ['action' => 'get', 'login' => 'teste_solicitante', 'password' => $password, 'csrf_token' => (string)($res['json']['csrf_token'] ?? '')]);
+check('login devolve o token novo e o id (janela "Entre de novo")', ($res['json']['success'] ?? false) === true && !empty($res['json']['csrf_token']) && (int)($res['json']['user_id'] ?? 0) === $solId, snippet($res));
+$res = $anon->post('api/add_comment.php', ['id' => $reqId, 'table' => 'ti', 'comment' => 'x']);
+check('sem sessão a API responde session_expired (o script.js abre a janela)', $res['status'] === 401 && ($res['json']['session_expired'] ?? false) === true, snippet($res));
+
+// Limite por IP somando logins diferentes
+$pdo->exec("DELETE FROM login_attempts WHERE login LIKE 'tmp_ip_%'");
+$pdo->exec("DELETE FROM login_attempts WHERE attempted_at > (NOW() - INTERVAL 15 MINUTE)");
+$cip = new Client($baseUrl);
+for ($i = 1; $i <= 20; $i++) {
+    $cip->login("tmp_ip_$i", 'senha-errada');
+}
+$res = $cip->login('tmp_ip_21', 'senha-errada');
+check('20 erros do mesmo IP em logins diferentes bloqueiam o IP (429)', $res['status'] === 429, snippet($res));
+$pdo->exec("DELETE FROM login_attempts WHERE login LIKE 'tmp_ip_%'");
 
 // ------------------------------------------------------------------
 section('11. Encaminhar: transferir');
@@ -586,7 +694,7 @@ section('13. Limpeza');
 // O banco remoto fecha conexões ociosas: reconecta antes de limpar
 require dirname(__DIR__) . '/config/conn.php';
 // Inclui sobras de rodadas anteriores interrompidas
-$leftovers = $pdo->query("SELECT 'ti' AS t, id FROM ctd_ti_frm WHERE created_by = $solId AND title IN ('Teste automático <script>x</script>', 'Para cancelar', 'Teste repasse', 'Teste ajuda')")->fetchAll(PDO::FETCH_NUM);
+$leftovers = $pdo->query("SELECT 'ti' AS t, id FROM ctd_ti_frm WHERE created_by = $solId AND title IN ('Teste automático <script>x</script>', 'Teste automático urgente', 'Teste regra export pendente', 'Para cancelar', 'Teste repasse', 'Teste ajuda')")->fetchAll(PDO::FETCH_NUM);
 foreach ($leftovers as $row) {
     $createdIds[] = [$row[0], (int)$row[1]];
 }

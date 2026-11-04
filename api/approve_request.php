@@ -54,6 +54,11 @@ if (!userCanManageOriginalRequest($pdo, $reqData, $table, $user_id, $role)) {
     jsonResponse(['success' => false, 'message' => 'Você não tem permissão para aprovar pedidos desta subdivisão.'], 403);
 }
 
+// Ninguém decide o próprio pedido: quem aprova precisa ser outra pessoa
+if ((int)($reqData['created_by'] ?? 0) === (int)$user_id) {
+    jsonResponse(['success' => false, 'message' => 'Você não pode aprovar nem recusar um pedido feito por você. Outra pessoa da coordenação ou da administração precisa decidir.'], 403);
+}
+
 try {
     $pdo->beginTransaction();
     // Guarda de estado: só sai de "Pendente" uma vez (evita duplo clique / dois aprovadores)

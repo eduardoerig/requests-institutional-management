@@ -24,7 +24,7 @@ if (!$isAdmin && !$isAdmSub) {
 $subdivisionFilter = $isAdmSub ? ($_SESSION['subdivision_ids'] ?? null) : null;
 $sector = (string)($_GET['setor'] ?? '');
 $q = mb_substr(trim((string)($_GET['q'] ?? '')), 0, 100);
-$approvals = RequestInbox::approvals($pdo, $subdivisionFilter, $sector, $q);
+$approvals = RequestInbox::approvals($pdo, $subdivisionFilter, $sector, $q, (int)($_SESSION['id'] ?? 0));
 $rows = $approvals['rows'];
 $total = count($approvals['all']);
 $urgentCount = count(array_filter($approvals['all'], fn($r) => !empty($r['is_urgent'])));

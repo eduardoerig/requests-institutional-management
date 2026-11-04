@@ -30,6 +30,8 @@ $role = $_SESSION['role'] ?? 'solicitante';
 if (!$req || !userCanViewRequest($pdo, $req, $sector, $userId, $role)) {
     jsonResponse(['success' => false, 'message' => 'Você não tem acesso a este pedido.'], 403);
 }
+// Quem pediu escreve como quem pediu, qualquer que seja o perfil (nunca no canal interno)
+$role = requestChatRole($pdo, $req, $sector, $userId, $role);
 
 // Canais: public (quem pediu × responsável), internal (responsável × quem ajuda) e
 // helper (quem pediu × um setor que ajuda, em helper_area_id; o responsável também lê). O servidor decide:

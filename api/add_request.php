@@ -56,7 +56,7 @@ if ($title === '') {
 if (!empty($_POST['urgent'])) {
     $priority = 3;
     $urgentReason = postText('urgent_reason', 255);
-    if ($urgentReason === '' && isset($_POST['urgent_reason'])) {
+    if ($urgentReason === '') {
         fail('Conte por que o pedido é urgente.');
     }
     if ($urgentReason !== '') {

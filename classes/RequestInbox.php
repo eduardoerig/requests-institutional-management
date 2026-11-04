@@ -499,9 +499,13 @@ class RequestInbox
      * $subdivisionIds: subdivisões da coordenação (null = todas, para o admin geral).
      * @return array{all: array, rows: array}
      */
-    public static function approvals(PDO $pdo, ?array $subdivisionIds, string $sector = '', string $q = ''): array
+    public static function approvals(PDO $pdo, ?array $subdivisionIds, string $sector = '', string $q = '', int $viewerId = 0): array
     {
         $all = RequestManager::getRequests($pdo, null, null, 'P', null, null, 'DESC', [], null, null, $subdivisionIds)['requests'] ?? [];
+        // Ninguém aprova o próprio pedido (mesma regra de api/approve_request.php)
+        if ($viewerId > 0) {
+            $all = array_values(array_filter($all, fn($r) => (int)($r['created_by'] ?? 0) !== $viewerId));
+        }
         $today = strtotime(date('Y-m-d'));
         foreach ($all as &$r) {
             $r['table'] = str_replace(['ctd_', '_frm'], '', strtolower((string)($r['table'] ?? '')));

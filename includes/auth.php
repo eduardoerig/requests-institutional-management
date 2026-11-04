@@ -285,6 +285,32 @@ function userIsRequestOwner(PDO $pdo, array $request, string $sector, int $userI
     return RequestForwardService::userInArea($pdo, $userId, $ownerArea);
 }
 
+/**
+ * Papel na conversa do pedido. Quem pediu nunca vê a conversa interna entre setores, mesmo que o
+ * perfil seja de setor ou de coordenação: se a pessoa só está no pedido porque o criou (não é do setor
+ * do formulário, não é o responsável, não está ajudando), conversa como 'solicitante'.
+ * Administração geral continua vendo tudo. Use no lugar do perfil em requestChatThreads,
+ * get_comments e add_comment.
+ */
+function requestChatRole(PDO $pdo, array $request, string $sector, int $userId, string $role): string
+{
+    if ($role === 'solicitante' || isGlobalAdminRole($role)) {
+        return $role;
+    }
+    if ($userId <= 0 || (int)($request['created_by'] ?? 0) !== $userId) {
+        return $role;
+    }
+    $normalizedSector = normalizeRequestTable($sector);
+    if ($normalizedSector !== null && isGestorRole($role) && (
+        isUserManagerOfSector($pdo, $userId, $normalizedSector)
+        || userIsRequestOwner($pdo, $request, $normalizedSector, $userId, $role)
+        || userSeesOnlyInternalChat($pdo, $request, $normalizedSector, $userId, $role)
+    )) {
+        return $role;
+    }
+    return 'solicitante';
+}
+
 function userCanViewRequest(PDO $pdo, array $request, string $sector, int $userId, string $role): bool
 {
     $requestId = (int)($request['id'] ?? 0);
@@ -305,6 +331,12 @@ function userCanViewRequest(PDO $pdo, array $request, string $sector, int $userI
     }
 
     if (isGestorRole($role)) {
+        // Setor só vê o pedido depois de aprovado: pendente e recusado são da coordenação e de quem pediu
+        // (quem criou já entrou pelo created_by acima)
+        $status = strtoupper(trim((string)($request['status'] ?? 'P'))) ?: 'P';
+        if (in_array($status, ['P', 'N'], true)) {
+            return false;
+        }
         return isUserManagerOfSector($pdo, $userId, normalizeRequestTable($sector) ?? $sector)
             || userIsRequestOwner($pdo, $request, $sector, $userId, $role)
             || userHasForwardAccess($pdo, $userId, $requestId, $sector);
@@ -334,8 +366,8 @@ function userCanManageOriginalRequest(PDO $pdo, array $request, string $sector, 
 }
 
 /**
- * Pode agir sobre o pedido (urgência, reabrir)? Responsável atual ou coordenação da subdivisão.
- * Começar e concluir exigem ser gestor do setor responsável (ver api/request_actions.php).
+ * Pode mudar a urgência do pedido? Responsável atual ou coordenação da subdivisão.
+ * Começar, concluir e reabrir exigem ser o setor responsável (userIsRequestOwner, api/request_actions.php).
  */
 function userCanActOnRequest(PDO $pdo, array $request, string $sector, int $userId, string $role): bool
 {

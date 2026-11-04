@@ -572,8 +572,10 @@ if (!function_exists('renderRequestView')) {
         $role = $_SESSION['role'] ?? 'solicitante';
         $reqId = (int)$req['id'];
         $status = strtoupper((string)($req['status'] ?? 'P')) ?: 'P';
-        $isStaff = $role !== 'solicitante';
         $isRequester = (int)($req['created_by'] ?? 0) === $viewerId;
+        // Quem pediu conversa como quem pediu, qualquer que seja o perfil (não vê a conversa interna)
+        $chatRole = requestChatRole($pdo, $req, $sector, $viewerId, $role);
+        $isStaff = $chatRole !== 'solicitante';
         $isGlobalAdmin = isGlobalAdminRole($role);
         $isGestor = isGestorRole($role);
         $sectorName = requestSectorName($sector);
@@ -594,7 +596,8 @@ if (!function_exists('renderRequestView')) {
         // O que esta pessoa pode fazer
         $isOwner = userIsRequestOwner($pdo, $req, $sector, $viewerId, $role);
         $canWork = $isGestor && $isOwner;
-        $canApprove = $status === 'P' && isAdminRole($role) && userCanManageOriginalRequest($pdo, $req, $sector, $viewerId, $role);
+        // Ninguém aprova o próprio pedido (api/approve_request.php recusa)
+        $canApprove = $status === 'P' && !$isRequester && isAdminRole($role) && userCanManageOriginalRequest($pdo, $req, $sector, $viewerId, $role);
         $canForward = ($canWork || $isGlobalAdmin) && in_array($status, ['Y', 'W'], true) && !$open;
         $canPriority = userCanActOnRequest($pdo, $req, $sector, $viewerId, $role) && !in_array($status, ['C', 'N'], true);
         $canReopen = $isOwner && $status === 'C';
@@ -603,7 +606,7 @@ if (!function_exists('renderRequestView')) {
         $openIsFromMe = $open && ($isGlobalAdmin || (int)$open['forwarded_by'] === $viewerId || in_array((int)$open['from_area_id'], $viewerAreas, true));
 
         // Conversas separadas (abas): quem pediu × responsável, responsável × quem ajuda, quem pediu × quem ajuda
-        $threads = requestChatThreads($pdo, $req, $sector, $viewerId, $role, $forwards, $ownerArea);
+        $threads = requestChatThreads($pdo, $req, $sector, $viewerId, $chatRole, $forwards, $ownerArea);
 
         // Datas de cada situação e quem está atendendo (do histórico, lido uma vez para tudo)
         $history = requestHistoryRows($pdo, $reqId, $sector);

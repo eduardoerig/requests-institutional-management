@@ -5,6 +5,14 @@ require_once 'config/security.php';
 header('Content-Type: text/html; charset=UTF-8');
 $url = isset($_GET['url']) ? explode('/', trim($_GET['url'], '/')) : [];
 $logged = $_SESSION['id'] ?? false;
+// Confere a conta no banco a cada página: inativa ou senha trocada em outro lugar volta ao login;
+// perfil e subdivisões mudados pelo admin valem na hora
+if ($logged && !refreshSessionUser($pdo)) {
+    $logged = false;
+}
+// Motivo de a sessão ter caído (aqui ou numa chamada da API antes): aparece uma vez na tela de entrada
+$sessionEndedReason = $logged ? null : ($_SESSION['ended_reason'] ?? null);
+unset($_SESSION['ended_reason']);
 $role = $_SESSION['role'] ?? 'view';
 $force_reset = (int)($_SESSION['force_reset'] ?? 0);
 $assetVersion = max(array_map(fn($f) => (int)@filemtime($f), glob(__DIR__ . '/assets/{js,css}/{,pages/}*.{js,css}', GLOB_BRACE) ?: [])) ?: time();
@@ -108,6 +116,8 @@ $useCombo = in_array($assetPage, $comboPages, true);
 <body class="<?= $logged ? 'role-' . e($roleClass) . ' page-' . e($pageClass) : 'page-login' ?>">
     <script>
         window.CSRF_TOKEN = "<?= htmlspecialchars($csrfToken, ENT_QUOTES, 'UTF-8') ?>";
+        // Quem está na página: a janela "Entrar de novo" (script.js) preenche o usuário e confere se é a mesma pessoa
+        window.SESSION_USER = <?= json_encode($logged ? ['id' => (int)$_SESSION['id'], 'login' => (string)($_SESSION['login'] ?? '')] : null, JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT) ?>;
     </script>
     <script>
         // Global Modal Functionality (Attached to window for global access)
@@ -572,6 +582,30 @@ $useCombo = in_array($assetPage, $comboPages, true);
             </div>
         </div>
     </div>
+
+    <?php if ($logged): ?>
+    <!-- Sessão expirou no meio do uso: entra de novo sem sair da página (ensureSession() no script.js) -->
+    <div id="reloginModal" class="modal-overlay modal-overlay--top" role="dialog" aria-modal="true" aria-labelledby="reloginTitle">
+        <form class="modal-card" id="reloginForm" novalidate>
+            <div class="modal-icon info"><i class="fa-solid fa-lock" aria-hidden="true"></i></div>
+            <h3 id="reloginTitle" class="modal-title" tabindex="-1">Entre de novo para continuar</h3>
+            <p class="modal-message" id="reloginMessage">Sua sessão expirou. O que você estava fazendo continua nesta tela.</p>
+            <div class="field">
+                <label for="reloginUser">Usuário</label>
+                <input type="text" id="reloginUser" autocomplete="username" autocapitalize="none" spellcheck="false" required>
+            </div>
+            <div class="field">
+                <label for="reloginPass">Senha</label>
+                <input type="password" id="reloginPass" autocomplete="current-password" required>
+            </div>
+            <p class="modal-input-error" id="reloginError" role="alert" hidden></p>
+            <div class="modal-actions">
+                <button type="submit" class="btn-modal btn-modal-confirm" id="reloginSubmit">Entrar e continuar</button>
+                <button type="button" class="btn-modal btn-modal-cancel" id="reloginLeave">Ir para a tela de entrada</button>
+            </div>
+        </form>
+    </div>
+    <?php endif; ?>
 
 </body>
 

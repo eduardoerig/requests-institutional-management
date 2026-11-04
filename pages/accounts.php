@@ -415,14 +415,6 @@ $accData = [
                 </article>
             <?php endforeach; ?>
 
-            <form class="card acc-sector acc-sector--new" data-acc-form="create-sector">
-                <h3><i class="fa-solid fa-plus" aria-hidden="true"></i> Novo setor</h3>
-                <label for="accNewSector">Nome do setor</label>
-                <input type="text" id="accNewSector" name="sector_title" maxlength="255" required placeholder="Ex.: Secretaria">
-                <label for="accNewSectorDesc">O que o setor faz <small>(opcional)</small></label>
-                <input type="text" id="accNewSectorDesc" name="sector_description" maxlength="160" placeholder="Ex.: Matrículas, declarações e documentos">
-                <button type="submit" class="btn btn--block"><i class="fa-solid fa-plus" aria-hidden="true"></i> Criar setor</button>
-            </form>
         </div>
     </section>
 </div>

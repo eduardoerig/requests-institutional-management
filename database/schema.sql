@@ -127,6 +127,7 @@ CREATE TABLE `ctd_users` (
   `role` varchar(30) COLLATE utf8mb4_unicode_ci NOT NULL DEFAULT 'solicitante',
   `status` tinyint(1) NOT NULL DEFAULT '1',
   `force_reset` tinyint(1) NOT NULL DEFAULT '0',
+  `session_version` int unsigned NOT NULL DEFAULT '0' COMMENT 'Sobe quando a senha muda: sessões antigas caem',
   `subdivision_id` int DEFAULT NULL,
   `last_login_at` datetime DEFAULT NULL COMMENT 'Último acesso (gravado no login)',
   PRIMARY KEY (`id`) USING BTREE,
@@ -160,7 +161,8 @@ CREATE TABLE `login_attempts` (
   `ip` varchar(45) COLLATE utf8mb4_unicode_ci NOT NULL,
   `attempted_at` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP,
   PRIMARY KEY (`id`),
-  KEY `idx_login_ip_time` (`login`,`ip`,`attempted_at`)
+  KEY `idx_login_ip_time` (`login`,`ip`,`attempted_at`),
+  KEY `idx_ip_time` (`ip`,`attempted_at`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 CREATE TABLE `notifications` (
   `id` int unsigned NOT NULL AUTO_INCREMENT,

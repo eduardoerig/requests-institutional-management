@@ -85,27 +85,101 @@ function jsonResponse(array $payload, int $status = 200): void
 }
 
 /**
+ * Subdivisões da pessoa na sessão (login e a cada requisição, em refreshSessionUser).
+ * subdivision_id/subdivision_name: campos antigos, a primeira da lista.
+ */
+function loadSessionSubdivisions(PDO $pdo, int $userId): void
+{
+    $stmt = $pdo->prepare('SELECT s.id, s.name FROM ctd_subdivision s JOIN cfg_user_subdivision cus ON s.id = cus.id_subdivision WHERE cus.id_user = ? ORDER BY s.id');
+    $stmt->execute([$userId]);
+    $_SESSION['subdivision_ids'] = [];
+    $_SESSION['subdivision_names'] = [];
+    foreach ($stmt->fetchAll(PDO::FETCH_ASSOC) as $s) {
+        $_SESSION['subdivision_ids'][] = $s['id'];
+        $_SESSION['subdivision_names'][] = $s['name'];
+    }
+    $_SESSION['subdivision_id'] = $_SESSION['subdivision_ids'][0] ?? null;
+    $_SESSION['subdivision_name'] = $_SESSION['subdivision_names'][0] ?? null;
+}
+
+/**
+ * Atualiza a sessão com o banco em toda requisição: perfil, troca de senha pendente e subdivisões
+ * (o admin muda e vale na hora, sem sair do sistema).
+ * false = a sessão não vale mais (conta inativa/apagada ou senha trocada em outro lugar:
+ * session_version mudou); a sessão é destruída e $_SESSION['ended_reason'] diz o motivo.
+ */
+function refreshSessionUser(PDO $pdo): bool
+{
+    $userId = (int)($_SESSION['id'] ?? 0);
+    if ($userId <= 0) {
+        return false;
+    }
+    $stmt = $pdo->prepare('SELECT status, role, force_reset, session_version FROM ctd_users WHERE id = ?');
+    $stmt->execute([$userId]);
+    $row = $stmt->fetch(PDO::FETCH_ASSOC);
+    $reason = null;
+    if (!$row || (int)$row['status'] !== 1) {
+        $reason = 'inactive';
+    } elseif ((int)$row['session_version'] !== (int)($_SESSION['session_version'] ?? 0)) {
+        $reason = 'password';
+    }
+    if ($reason !== null) {
+        session_unset();
+        session_destroy();
+        // Sessão nova e vazia (use_strict_mode dá outro id): a tela de login precisa de um token CSRF válido
+        if (!headers_sent()) {
+            session_start();
+        }
+        $_SESSION['ended_reason'] = $reason;
+        return false;
+    }
+    $_SESSION['role'] = $row['role'];
+    $_SESSION['force_reset'] = (int)$row['force_reset'];
+    loadSessionSubdivisions($pdo, $userId);
+    return true;
+}
+
+/** Mensagem para quem teve a sessão encerrada por refreshSessionUser() */
+function sessionEndedMessage(?string $reason): string
+{
+    return match ($reason) {
+        'inactive' => 'Sua conta está inativa. Fale com o administrador.',
+        'password' => 'Sua senha foi trocada. Entre de novo com a senha nova.',
+        default => 'Sua sessão expirou. Entre novamente.',
+    };
+}
+
+/**
+ * IP de quem chama. Atrás de proxy, só confia em X-Forwarded-For quando quem conectou está em
+ * TRUSTED_PROXIES (variável de ambiente, IPs separados por vírgula); senão vale REMOTE_ADDR.
+ */
+function clientIp(): string
+{
+    $remote = (string)($_SERVER['REMOTE_ADDR'] ?? '0.0.0.0');
+    $trusted = array_filter(array_map('trim', explode(',', (string)getenv('TRUSTED_PROXIES'))));
+    if ($trusted && in_array($remote, $trusted, true) && !empty($_SERVER['HTTP_X_FORWARDED_FOR'])) {
+        // O primeiro da lista é o cliente; os seguintes são os proxies pelo caminho
+        $first = trim(explode(',', (string)$_SERVER['HTTP_X_FORWARDED_FOR'])[0]);
+        if (filter_var($first, FILTER_VALIDATE_IP)) {
+            return $first;
+        }
+    }
+    return $remote;
+}
+
+/**
  * Exige usuário logado, ativo e sem troca de senha pendente.
- * Revalida no banco a cada 60s para derrubar sessões de contas desativadas.
+ * Confere no banco a cada requisição (refreshSessionUser): conta desativada, senha trocada em
+ * outro lugar e mudança de perfil ou subdivisão valem na hora.
  */
 function requireLoginJson(?PDO $pdo = null, bool $allowForceReset = false): void
 {
     if (empty($_SESSION['id'])) {
-        jsonResponse(['success' => false, 'message' => 'Sua sessão expirou. Entre novamente.', 'redirect' => 'login'], 401);
+        jsonResponse(['success' => false, 'message' => sessionEndedMessage(null), 'redirect' => 'login', 'session_expired' => true], 401);
     }
 
-    if ($pdo !== null && (time() - (int)($_SESSION['checked_at'] ?? 0)) > 60) {
-        $stmt = $pdo->prepare('SELECT status, role, force_reset FROM ctd_users WHERE id = ?');
-        $stmt->execute([(int)$_SESSION['id']]);
-        $row = $stmt->fetch(PDO::FETCH_ASSOC);
-        if (!$row || (int)($row['status'] ?? 1) !== 1) {
-            session_unset();
-            session_destroy();
-            jsonResponse(['success' => false, 'message' => 'Sua conta está inativa. Fale com o administrador.', 'redirect' => 'login'], 401);
-        }
-        $_SESSION['role'] = $row['role'];
-        $_SESSION['force_reset'] = (int)($row['force_reset'] ?? 0);
-        $_SESSION['checked_at'] = time();
+    if ($pdo !== null && !refreshSessionUser($pdo)) {
+        jsonResponse(['success' => false, 'message' => sessionEndedMessage($_SESSION['ended_reason'] ?? null), 'redirect' => 'login', 'session_expired' => true], 401);
     }
 
     if (!$allowForceReset && (int)($_SESSION['force_reset'] ?? 0) === 1) {
@@ -164,7 +238,8 @@ function requireCsrfTokenFromRequest(): void
         http_response_code(403);
         header('Content-Type: application/json');
         // Acontece com a página aberta há muito tempo (a sessão expirou e o token mudou)
-        echo json_encode(['success' => false, 'message' => 'Esta página ficou aberta por muito tempo. Recarregue a página e tente de novo.']);
+        // csrf_expired: o script.js busca um token novo (api/csrf.php) e repete o envio uma vez
+        echo json_encode(['success' => false, 'message' => 'Esta página ficou aberta por muito tempo. Recarregue a página e tente de novo.', 'csrf_expired' => true]);
         exit;
     }
 }

@@ -27,6 +27,113 @@ function requestErrorMessage(err) {
         : 'Sem conexão. Verifique a internet e tente de novo.';
 }
 
+// ---------------------------------------------------------------------
+// Sessão expirada no meio do uso: janela "Entre de novo" (#reloginModal, index.php)
+// A pessoa entra sem sair da página (o que digitou continua lá) e o envio que falhou é repetido.
+// O servidor responde 401 com session_expired antes de gravar qualquer coisa, então repetir é seguro.
+// ---------------------------------------------------------------------
+let sessionPromise = null;
+
+// Token novo da sessão atual (a página aberta há muito tempo ficou com um token velho)
+async function refreshCsrfToken() {
+    try {
+        const data = await readJson(await fetch('api/csrf.php', { cache: 'no-store' }));
+        if (data && data.csrf_token) { window.CSRF_TOKEN = data.csrf_token; return true; }
+    } catch (e) { /* sem conexão: quem chamou mostra o erro */ }
+    return false;
+}
+
+// Abre a janela uma vez só, mesmo que várias chamadas expirem juntas. Resolve true depois de entrar.
+function ensureSession(message) {
+    if (sessionPromise) return sessionPromise;
+    const modal = document.getElementById('reloginModal');
+    if (!modal) {
+        window.location.href = 'login';
+        return Promise.resolve(false);
+    }
+    const form = modal.querySelector('#reloginForm');
+    const user = modal.querySelector('#reloginUser');
+    const pass = modal.querySelector('#reloginPass');
+    const error = modal.querySelector('#reloginError');
+    const submit = modal.querySelector('#reloginSubmit');
+    const msg = modal.querySelector('#reloginMessage');
+    const me = window.SESSION_USER || null;
+
+    sessionPromise = new Promise((resolve) => {
+        const showError = (text) => { error.textContent = text; error.hidden = !text; };
+        if (message && msg) msg.textContent = message + ' O que você estava fazendo continua nesta tela.';
+        if (me && me.login) user.value = me.login;
+        pass.value = '';
+        showError('');
+        modal.classList.add('active');
+        setTimeout(() => (user.value ? pass : user).focus(), 50);
+
+        async function onSubmit(e) {
+            e.preventDefault();
+            if (!user.value.trim() || !pass.value) { showError('Preencha usuário e senha.'); return; }
+            submit.disabled = true;
+            submit.setAttribute('aria-busy', 'true');
+            try {
+                if (!(await refreshCsrfToken())) throw new Error('csrf');
+                const body = new URLSearchParams({ action: 'get', login: user.value.trim(), password: pass.value, csrf_token: window.CSRF_TOKEN });
+                const data = await readJson(await fetch('api/login.php', { method: 'POST', body }));
+                if (!data.success) { showError(data.message || 'Não foi possível entrar.'); return; }
+                // Entrou outra pessoa: a página é de quem estava antes, recarrega com os dados certos
+                if (me && data.user_id !== me.id) { window.location.reload(); return; }
+                if (data.csrf_token) window.CSRF_TOKEN = data.csrf_token;
+                form.removeEventListener('submit', onSubmit);
+                modal.classList.remove('active');
+                pass.value = '';
+                resolve(true);
+            } catch (err) {
+                showError(requestErrorMessage(err));
+            } finally {
+                submit.disabled = false;
+                submit.removeAttribute('aria-busy');
+            }
+        }
+        form.addEventListener('submit', onSubmit);
+        modal.querySelector('#reloginLeave').onclick = () => { window.location.href = 'login'; };
+    }).finally(() => { sessionPromise = null; });
+    return sessionPromise;
+}
+
+// Cópia do corpo sem o token antigo (cada tentativa leva o token atual)
+function cloneBody(payload) {
+    if (payload instanceof FormData) {
+        const copy = new FormData();
+        for (const [k, v] of payload.entries()) if (k !== 'csrf_token') copy.append(k, v);
+        return copy;
+    }
+    if (payload instanceof URLSearchParams) {
+        const copy = new URLSearchParams(payload);
+        copy.delete('csrf_token');
+        return copy;
+    }
+    return payload;
+}
+
+// POST à API com CSRF. Sessão expirada: pede para entrar de novo e repete uma vez.
+// Token velho (página aberta há muito tempo): busca outro e repete uma vez. Devolve o JSON.
+async function postWithSession(url, payload, init = {}) {
+    let triedLogin = false;
+    let triedCsrf = false;
+    for (;;) {
+        const resp = await fetch(url, { ...init, method: 'POST', body: attachCsrfToken(cloneBody(payload)) });
+        const data = await readJson(resp);
+        if (data && !data.success) {
+            if (data.session_expired && !triedLogin) {
+                triedLogin = true;
+                if (await ensureSession(data.message)) continue;
+            } else if (data.csrf_expired && !triedCsrf) {
+                triedCsrf = true;
+                if (await refreshCsrfToken()) continue;
+            }
+        }
+        return data;
+    }
+}
+
 /**
  * Envia um POST para a API e devolve o JSON se success = true; senão devolve false.
  * - Mostra o véu de carregamento enquanto espera.
@@ -40,8 +147,7 @@ async function fetchAjax(path, formData, { quiet = false } = {}) {
     let data = null;
     let failure = null; // erro de rede ou resposta que não é JSON
     try {
-        const resp = await fetch(path, { method: 'POST', body: attachCsrfToken(formData) });
-        data = await readJson(resp);
+        data = await postWithSession(path, formData);
     } catch (e) {
         failure = e;
     } finally {
@@ -176,7 +282,9 @@ async function updateNotifications() {
         const signal = typeof AbortSignal.timeout === 'function' ? AbortSignal.timeout(15000) : undefined;
         const response = await fetch('api/get_notifications.php', { cache: 'no-store', signal });
         if (response.status === 401) {
-            window.location.href = 'login';
+            // Sessão caiu: janela para entrar de novo, sem tirar a pessoa da página
+            const data = await response.json().catch(() => ({}));
+            ensureSession(data.message);
             return;
         }
         if (!response.ok) return;
@@ -506,7 +614,10 @@ if (btn_login) {
 
         const success = await fetchAjax("api/login.php", formData);
         if (success) {
-            window.location.href = 'home';
+            // A tela de entrada aparece no próprio endereço pedido (index.php): recarregar abre essa página
+            const onLoginUrl = /\/login\/?$/.test(window.location.pathname);
+            if (onLoginUrl) window.location.href = 'home';
+            else window.location.reload();
         } else {
             isSubmittingLogin = false;
             btn_login.innerHTML = originalText;
@@ -736,12 +847,7 @@ async function globalRequestAction(action, id, table, value = '') {
         formData.append('action', action);
         formData.append('value', value);
 
-        const response = await fetch('api/request_actions.php', {
-            method: 'POST',
-            body: attachCsrfToken(formData)
-        });
-
-        const data = await readJson(response);
+        const data = await postWithSession('api/request_actions.php', formData);
 
         if (!data.success && data.redirect) {
             window.location.href = data.redirect;
@@ -861,8 +967,7 @@ async function postForm(url, fields) {
     const body = new URLSearchParams();
     Object.entries(fields).forEach(([k, v]) => body.append(k, v ?? ''));
     try {
-        const response = await fetch(url, { method: 'POST', body: attachCsrfToken(body) });
-        const data = await readJson(response);
+        const data = await postWithSession(url, body);
         if (!data.success && data.redirect) {
             window.location.href = data.redirect;
             return null;
@@ -1024,7 +1129,34 @@ function printRequest(event, url) {
     return false;
 }
 
-async function decideRequest(value, id, table) {
+// Uma ação de pedido por vez (decidir, aceitar, recusar, devolver): o 2º clique enquanto a 1ª
+// ainda está na tela ou indo para o servidor é ignorado, em vez de mandar de novo
+let pedidoBusy = false;
+async function runPedidoAction(fn) {
+    if (pedidoBusy) return;
+    pedidoBusy = true;
+    try {
+        await fn();
+    } finally {
+        pedidoBusy = false;
+    }
+}
+
+// Envia com o véu de carregamento e o botão tocado marcado como ocupado (showLoading)
+async function postPedido(url, fields) {
+    const hideLoading = showLoading();
+    try {
+        return await postForm(url, fields);
+    } finally {
+        hideLoading();
+    }
+}
+
+function decideRequest(value, id, table) {
+    return runPedidoAction(() => decideRequestNow(value, id, table));
+}
+
+async function decideRequestNow(value, id, table) {
     let reason = '';
     if (value === 'N') {
         reason = await showConfirm({
@@ -1038,13 +1170,17 @@ async function decideRequest(value, id, table) {
         const ok = await showConfirm({ title: 'Aprovar pedido', message: 'O pedido vai para o setor responsável começar o atendimento.', type: 'success', confirmLabel: 'Aprovar' });
         if (!ok) return;
     }
-    const data = await postForm('api/approve_request.php', { action: 'post', id, table, value, reason });
+    const data = await postPedido('api/approve_request.php', { action: 'post', id, table, value, reason });
     if (!data) return;
     showToast(data.message, data.success ? 'success' : 'error');
-    if (data.success) refreshAfterChange({ advance: true, message: data.message });
+    if (data.success) await refreshAfterChange({ advance: true, message: data.message });
 }
 
-async function forwardAct(action, forwardId, mode = 'help') {
+function forwardAct(action, forwardId, mode = 'help') {
+    return runPedidoAction(() => forwardActNow(action, forwardId, mode));
+}
+
+async function forwardActNow(action, forwardId, mode = 'help') {
     const fields = { action, forward_id: forwardId };
     if (action === 'accept') {
         const ok = await showConfirm(mode === 'transfer'
@@ -1069,12 +1205,12 @@ async function forwardAct(action, forwardId, mode = 'help') {
         const ok = await showConfirm({ title: 'Cancelar envio', message: 'O outro setor deixa de ver este encaminhamento.', type: 'warning', confirmLabel: 'Cancelar envio', cancelLabel: 'Voltar' });
         if (!ok) return;
     }
-    const data = await postForm('api/request_forwards.php', fields);
+    const data = await postPedido('api/request_forwards.php', fields);
     if (!data) return;
     showToast(data.message, data.success ? 'success' : 'error');
     // Recusou: o pedido some para este setor, segue para o próximo. Devolveu: fica no pedido (agora só
     // consulta) para ver o que foi feito; não pula para outro com o botão de ação já pronto
-    if (data.success) refreshAfterChange({ advance: action === 'refuse', message: data.message });
+    if (data.success) await refreshAfterChange({ advance: action === 'refuse', message: data.message });
 }
 
 // ---------------------------------------------------------------------

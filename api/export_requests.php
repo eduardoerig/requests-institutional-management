@@ -48,7 +48,8 @@ $reqData = RequestManager::getRequests(
     $filter_status ?: null,
     $filter_sector ?: null,
     $filter_search ?: null,
-    'DESC', [],
+    // Setor só vê aprovados em diante (mesma regra do pages/home.php e de userCanViewRequest)
+    'DESC', isGestorRole($role) ? ['P', 'N'] : [],
     $filter_start ?: null,
     $filter_end   ?: null,
     $subdivisionFilter

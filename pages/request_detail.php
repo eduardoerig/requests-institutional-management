@@ -57,7 +57,7 @@ if ($from === 'inbox' && (isGestorRole($role) || isGlobalAdminRole($role))) {
     $sector = (string)($_GET['setor'] ?? '');
     $q = mb_substr(trim((string)($_GET['q'] ?? '')), 0, 100);
     $listParams = array_filter(['setor' => $sector !== '' ? $sector : null, 'q' => $q !== '' ? $q : null]);
-    $queue = RequestInbox::approvals($pdo, $role === 'adm_sub' ? ($_SESSION['subdivision_ids'] ?? null) : null, $sector, $q)['rows'];
+    $queue = RequestInbox::approvals($pdo, $role === 'adm_sub' ? ($_SESSION['subdivision_ids'] ?? null) : null, $sector, $q, (int)($_SESSION['id'] ?? 0))['rows'];
     $backHref = 'approve' . ($listParams ? '?' . http_build_query($listParams) : '');
     $backLabel = 'Aprovar pedidos';
 }

@@ -87,8 +87,7 @@
         const body = new URLSearchParams();
         pairs.forEach(([k, v]) => body.append(k, v ?? ''));
         try {
-            const resp = await fetch(url, { method: 'POST', body: attachCsrfToken(body) });
-            const data = await readJson(resp);
+            const data = await postWithSession(url, body);
             if (!data.success && data.redirect) {
                 location.href = data.redirect;
                 return null;
@@ -963,20 +962,6 @@
         reloadTo('setores', 'Setor excluído.');
     }
 
-    async function createSector(form) {
-        const input = form.querySelector('input[name="sector_title"]');
-        const title = input.value.trim();
-        if (!title) { input.focus(); return; }
-        const btn = form.querySelector('button[type="submit"]');
-        setBusy(btn, true);
-        const desc = form.querySelector('input[name="sector_description"]');
-        const data = await send('api/create_sector.php', [['sector_title', title], ['sector_description', desc ? desc.value.trim() : '']]);
-        setBusy(btn, false);
-        if (!data) return;
-        if (!data.success) { showToast(data.message || 'Não foi possível criar.', 'error'); return; }
-        reloadTo('setores', 'Setor criado.');
-    }
-
     // Descrição do setor: frase curta que aparece no passo "Para qual setor?" do Encaminhar
     function toggleDescForm(btn) {
         const card = btn.closest('.acc-sector');
@@ -1073,7 +1058,6 @@
         if (!form) return;
         e.preventDefault();
         if (form.dataset.accForm === 'add-resp') addResponsible(form);
-        if (form.dataset.accForm === 'create-sector') createSector(form);
         if (form.dataset.accForm === 'sector-desc') saveSectorDesc(form);
     });
 

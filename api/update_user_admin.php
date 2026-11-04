@@ -76,7 +76,8 @@ try {
         }
 
         $tempPassword = generateTempPassword();
-        $pdo->prepare('UPDATE ctd_users SET password = ?, force_reset = 1 WHERE id = ?')
+        // session_version + 1: as sessões abertas da pessoa caem na próxima requisição
+        $pdo->prepare('UPDATE ctd_users SET password = ?, force_reset = 1, session_version = session_version + 1 WHERE id = ?')
             ->execute([password_hash($tempPassword, PASSWORD_DEFAULT), $userId]);
         try {
             // Libera tentativas bloqueadas desse login (tabela opcional)
@@ -264,7 +265,7 @@ try {
     if (!empty($_POST['password'])) {
         // Se for auto-atualização, validar senha atual
         if ($is_self) {
-            $currentPass = $_POST['currentPass'] ?? '';
+            $currentPass = trim((string)($_POST['currentPass'] ?? '')); // gravada sem espaços nas pontas
             $checkPass = $pdo->prepare("SELECT password FROM ctd_users WHERE id = ?");
             $checkPass->execute([$userId]);
             $userRow = $checkPass->fetch();
@@ -287,6 +288,8 @@ try {
 
         // Troca feita pela própria pessoa libera o acesso; senha definida pelo admin é temporária
         $fields[] = $is_self ? "force_reset = 0" : "force_reset = 1";
+        // Senha nova derruba as outras sessões abertas (refreshSessionUser compara a versão)
+        $fields[] = "session_version = session_version + 1";
     }
 
     if (empty($fields)) {
@@ -320,6 +323,11 @@ try {
         $pdo->commit();
         if ($is_self && !empty($_POST['password'])) {
             $_SESSION['force_reset'] = 0;
+            // Esta sessão continua (id novo, versão nova); as outras sessões da pessoa caem
+            $ver = $pdo->prepare('SELECT session_version FROM ctd_users WHERE id = ?');
+            $ver->execute([(int)$userId]);
+            $_SESSION['session_version'] = (int)$ver->fetchColumn();
+            session_regenerate_id(true);
         }
         echo json_encode(['success' => true, 'message' => 'Alterações salvas com sucesso!']);
     } else {

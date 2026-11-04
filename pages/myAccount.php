@@ -117,13 +117,6 @@ $role_labels = [
 </div>
 
 <script>
-    function withCsrf(formData) {
-        if (!formData.has('csrf_token')) {
-            formData.append('csrf_token', window.CSRF_TOKEN || '');
-        }
-        return formData;
-    }
-
     (function () {
         const mustReset = <?= (int)$force_reset ?> === 1;
         const modal = document.getElementById('modalChangePass');
@@ -138,11 +131,12 @@ $role_labels = [
 
         // As mesmas regras de passwordProblems() em includes/helpers.php
         const rules = {
-            length: v => v.length >= 8,
+            // Como o servidor: sem espaços nas pontas e contando caracteres (emoji = 1, como mb_strlen)
+            length: v => [...v.trim()].length >= 8,
             upper: v => /\p{Lu}/u.test(v),
             number: v => /\d/.test(v),
             symbol: v => /[^\p{L}\p{N}\s]/u.test(v),
-            different: v => v !== '' && v !== current.value,
+            different: v => v.trim() !== '' && v.trim() !== current.value.trim(),
             match: v => v !== '' && v === confirmPass.value,
         };
 
@@ -196,8 +190,7 @@ $role_labels = [
             submit.disabled = true;
             submit.setAttribute('aria-busy', 'true');
             try {
-                const response = await fetch('api/update_user_admin.php?self=1', { method: 'POST', body: withCsrf(new FormData(this)) });
-                const data = await readJson(response);
+                const data = await postWithSession('api/update_user_admin.php?self=1', new FormData(this));
                 if (data.success) {
                     modal.classList.remove('active');
                     if (!mustReset) await showAlert({ title: 'Senha alterada', message: 'Pronto! Use a nova senha nos próximos acessos.', type: 'success' });

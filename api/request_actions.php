@@ -210,21 +210,31 @@ try {
             $currentStatus = trim(strtoupper($reqData['status'] ?? 'P'));
             if ($currentStatus === '') $currentStatus = 'P';
 
-            // Regra: Admin pode tudo. Solicitante apenas se for dono e estiver PENDENTE.
+            // Regra: admin geral pode tudo. Coordenação só apaga pedido da subdivisão ainda Pendente ou
+            // Recusado (nada que um setor já atendeu some com o histórico). Quem pediu, só o próprio em P.
             $canDelete = $isGlobalAdmin
-                || ($role === 'adm_sub' && userCanManageOriginalRequest($pdo, $reqData, $sector, (int)$user_id, $role))
+                || ($role === 'adm_sub' && in_array($currentStatus, ['P', 'N'], true)
+                    && userCanManageOriginalRequest($pdo, $reqData, $sector, (int)$user_id, $role))
                 || ($isOwner && ($currentStatus === 'P'));
 
             if (!$canDelete) {
                 if ($isOwner) {
                     throw new UserMessage('Você só pode excluir requisições que ainda estão Pendentes. Caso já tenha sido aprovada, entre em contato com o setor.');
+                } elseif ($role === 'adm_sub') {
+                    throw new UserMessage('A coordenação só pode excluir pedidos pendentes ou recusados. Este já foi aprovado e está com o setor.');
                 } else {
                     throw new UserMessage('Sem permissão para excluir esta requisição.');
                 }
             }
 
             $pdo->beginTransaction();
-            $pdo->prepare("DELETE FROM `$table` WHERE id = ?")->execute([$id]);
+            // Só apaga se a situação ainda é a que foi conferida acima (alguém pode ter aprovado no meio)
+            $del = $pdo->prepare("DELETE FROM `$table` WHERE id = ? AND COALESCE(NULLIF(TRIM(UPPER(`status`)), ''), 'P') = ?");
+            $del->execute([$id, $currentStatus]);
+            if ($del->rowCount() === 0) {
+                $pdo->rollBack();
+                throw new UserMessage('Esta requisição foi alterada por outra pessoa enquanto você excluía. Atualize a página.');
+            }
 
             // Limpeza de órfãos
             $pdo->prepare("DELETE FROM request_comments WHERE request_id = ? AND request_table = ?")->execute([$id, $sector]);
