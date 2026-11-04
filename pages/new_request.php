@@ -8,13 +8,10 @@
  */
 $qr = $pdo->query('SELECT * FROM ctd_requests_models WHERE `status` = "Y" ORDER BY id');
 // O usuário escolhe pelo exemplo, não pelo nome do setor
-$modelInfo = [
-    'form_chamado_ti.php'  => ['icon' => 'fa-computer',           'sector' => 'ti',      'label' => 'TI',                 'box' => 'TI',          'examples' => 'Computador, internet, projetor, senha'],
-    'form_servico.php'     => ['icon' => 'fa-screwdriver-wrench', 'sector' => 'service', 'label' => 'Manutenção',         'box' => 'Manutenção',  'examples' => 'Elétrica, móveis, ar, limpeza'],
-    'form_compra.php'      => ['icon' => 'fa-cart-shopping',      'sector' => 'shop',    'label' => 'Compras',            'box' => 'Compras',     'examples' => 'Materiais e orçamentos'],
-    'form_color_print.php' => ['icon' => 'fa-print',              'sector' => 'xerox',   'label' => 'Impressão colorida', 'box' => 'Reprografia', 'examples' => 'Certificados, cartazes coloridos'],
-    'form_mkt.php'         => ['icon' => 'fa-bullhorn',           'sector' => 'mkt',     'label' => 'Marketing',          'box' => 'Marketing',   'examples' => 'Posts, banners, convites'],
-];
+$modelInfo = [];
+foreach (sectorRegistry() as $slug => $s) {
+    $modelInfo[$s['form_file']] = ['icon' => $s['icon'], 'sector' => $slug, 'label' => $s['card_label'], 'box' => $s['label'], 'examples' => $s['examples']];
+}
 $backHref = 'myRequests';
 ?>
 <div class="nr" data-new-request data-step="1">

@@ -33,13 +33,7 @@ $accAreas = areaTitles($pdo);
 $accAreaDescriptions = areaDescriptions($pdo);
 
 // Setores de atendimento do sistema: o perfil (role) é o próprio setor. Ícones iguais aos de "Novo pedido".
-$accSectorMeta = [
-    'ti'      => ['label' => 'TI',          'icon' => 'fa-computer'],
-    'service' => ['label' => 'Manutenção',  'icon' => 'fa-screwdriver-wrench'],
-    'shop'    => ['label' => 'Compras',     'icon' => 'fa-cart-shopping'],
-    'xerox'   => ['label' => 'Reprografia', 'icon' => 'fa-print'],
-    'mkt'     => ['label' => 'Marketing',   'icon' => 'fa-bullhorn'],
-];
+$accSectorMeta = sectorRegistry(); // label e icon de cada setor (config/sectors.php)
 $accKindMeta = [
     'req'    => ['label' => 'Faz pedidos',     'icon' => 'fa-user',                'hint' => 'Professores e funcionários. Abrem e acompanham os próprios pedidos.'],
     'coord'  => ['label' => 'Coordenação',     'icon' => 'fa-user-check',          'hint' => 'Aprova os pedidos da sua área antes de irem para os setores.'],

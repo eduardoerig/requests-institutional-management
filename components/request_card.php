@@ -6,10 +6,7 @@
 if (!function_exists('renderQueueRow')) {
     function requestSectorName(string $sector): string
     {
-        return [
-            'mkt' => 'Marketing', 'xerox' => 'Reprografia', 'shop' => 'Compras',
-            'service' => 'Manutenção', 'ti' => 'TI',
-        ][$sector] ?? ucfirst($sector);
+        return sectorLabel($sector); // config/sectors.php
     }
 
     /** Aviso de prazo só quando importa: atrasada, vence hoje ou amanhã */
@@ -53,7 +50,7 @@ if (!function_exists('renderQueueRow')) {
     function renderQueueRow(array $row, array $opt = []): string
     {
         $id = (int)($row['id'] ?? 0);
-        $sector = str_replace(['ctd_', '_frm'], '', strtolower(trim((string)($row['table'] ?? ''))));
+        $sector = requestSlug((string)($row['table'] ?? ''));
         $who = trim((string)($row['solicitor_name_formatted'] ?? $row['solicitor_name'] ?? ''));
         $sub = trim((string)($row['subdivision_name'] ?? ''));
         [$context, $kind] = ($row['context'] ?? []) + ['', ''];
@@ -141,10 +138,7 @@ if (!function_exists('renderApproveCard')) {
     /** Setor com artigo, para "Enviando para a Manutenção" */
     function requestSectorTo(string $sector): string
     {
-        return [
-            'mkt' => 'o Marketing', 'xerox' => 'a Reprografia', 'shop' => 'Compras',
-            'service' => 'a Manutenção', 'ti' => 'a TI',
-        ][$sector] ?? requestSectorName($sector);
+        return sectorLabelTo($sector); // config/sectors.php
     }
 
     /**
@@ -157,7 +151,7 @@ if (!function_exists('renderApproveCard')) {
     function renderApproveCard(array $row, array $opt = []): string
     {
         $id = (int)($row['id'] ?? 0);
-        $sector = str_replace(['ctd_', '_frm'], '', strtolower(trim((string)($row['table'] ?? ''))));
+        $sector = requestSlug((string)($row['table'] ?? ''));
         $href = (string)($opt['href'] ?? ('request_detail?id=' . $id . '&table=' . urlencode($sector)));
         $urgent = !empty($row['is_urgent']);
         $priority = (int)($row['priority'] ?? 2);

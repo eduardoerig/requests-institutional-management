@@ -15,11 +15,9 @@ $role = $_SESSION['role'] ?? 'solicitante';
 $req_id    = isset($_GET['id'])    ? (int)$_GET['id'] : 0;
 $req_table = isset($_GET['table']) ? preg_replace('/[^a-z]/', '', $_GET['table']) : '';
 $embed     = ($_GET['embed'] ?? '') === '1';
-$allowed_tables = ['mkt', 'shop', 'xerox', 'service', 'ti'];
 
-if (!$req_id || !in_array($req_table, $allowed_tables, true)) die('Parâmetros inválidos.');
+if (!$req_id || !in_array($req_table, allowedRequestTables(), true)) die('Parâmetros inválidos.');
 
-$label_map = ['mkt' => 'Marketing', 'shop' => 'Compras', 'xerox' => 'Reprografia', 'service' => 'Manutenção', 'ti' => 'TI'];
 
 $stmt = $pdo->prepare("
     SELECT r.*, u.name as creator_name, s.name as subdivision_name
@@ -63,7 +61,7 @@ if ($req_table === 'xerox') {
 }
 
 $facts = [
-    'Setor' => $label_map[$req_table] ?? ucfirst($req_table),
+    'Setor' => sectorLabel($req_table),
     'Quem pediu' => trim(($req['creator_name'] ?? '—') . (!empty($req['subdivision_name']) ? ', ' . $req['subdivision_name'] : '')),
     'Pedido em' => $created,
     'Para quando' => $deadline,

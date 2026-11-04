@@ -114,7 +114,7 @@ class RequestManager {
                     ]
                 ];
             }
-            $tables[] = "ctd_" . $normalizedSector . "_frm";
+            $tables[] = requestTableName($normalizedSector);
         } else {
             foreach (allowedRequestTables() as $sectorName) {
                 // Se estiver filtrando por gestor, ignora tabelas que não são da sua área
@@ -122,7 +122,7 @@ class RequestManager {
                     continue;
                 }
 
-                $tables[] = 'ctd_' . $sectorName . '_frm';
+                $tables[] = requestTableName($sectorName);
             }
         }
 
@@ -189,7 +189,7 @@ class RequestManager {
                 $stmt->execute($params);
                 $res = $stmt->fetchAll(PDO::FETCH_ASSOC);
                 
-                $sectorName = str_replace(['ctd_', '_frm'], '', $t);
+                $sectorName = requestSlug($t);
                 
                 $subMap = self::userSubdivisionMap($pdo);
                 foreach ($res as $r) {

@@ -668,7 +668,7 @@ if (!function_exists('renderRequestView')) {
         }
 
         $data = 'data-id="' . $reqId . '" data-table="' . e($sector) . '"';
-        $fullTable = 'ctd_' . $sector . '_frm';
+        $fullTable = requestTableName($sector);
         $hasDeadline = !empty($req['date']) && strpos((string)$req['date'], '0000') !== 0;
         $priority = (int)($req['priority'] ?? 2);
         $isUrgent = $priority >= 3 || !empty($req['urgent']);

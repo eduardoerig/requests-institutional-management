@@ -26,7 +26,7 @@ if (!function_exists('renderMyRequestCard')) {
     function renderMyRequestCard(array $row, array $opt = []): string
     {
         $id = (int)($row['id'] ?? 0);
-        $table = str_replace(['ctd_', '_frm'], '', strtolower(trim((string)($row['table'] ?? ''))));
+        $table = requestSlug((string)($row['table'] ?? ''));
         $st = strtoupper(trim((string)($row['st_raw'] ?? 'P')));
         $st = match ($st) { '' => 'P', 'A' => 'Y', default => $st };
         $sector = trim((string)($row['subline'] ?? '')) ?: requestSectorName($table);

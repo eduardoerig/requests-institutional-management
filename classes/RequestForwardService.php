@@ -38,10 +38,7 @@ class RequestForwardService
 
     public static function sectorName(string $slug): string
     {
-        return [
-            'mkt' => 'Marketing', 'xerox' => 'Reprografia', 'shop' => 'Compras',
-            'service' => 'Manutenção', 'ti' => 'TI',
-        ][$slug] ?? ucfirst($slug);
+        return sectorLabel($slug); // config/sectors.php
     }
 
     public static function areaSlug(PDO $pdo, ?int $areaId): ?string

@@ -25,6 +25,7 @@ if (!$botEnabled) {
 }
 
 require_once dirname(__DIR__) . '/config/conn.php';
+require_once dirname(__DIR__) . '/includes/auth.php'; // sectorLabel() (config/sectors.php)
 
 // =========================================
 // 1. Verificar API Key
@@ -180,16 +181,7 @@ try {
             break;
     }
 
-    // Mapeamento de nomes amigáveis para resposta
-    $typeLabels = [
-        'ti'      => 'TI',
-        'shop'    => 'Compras',
-        'service' => 'Manutenção',
-        'xerox'   => 'Reprografia',
-        'mkt'     => 'Marketing',
-    ];
-
-    $label = $typeLabels[$type] ?? strtoupper($type);
+    $label = sectorLabel($type); // config/sectors.php
 
     echo json_encode([
         'success'    => true,

@@ -30,20 +30,13 @@ if ($value === 'N' && $reason === '') {
 }
 $reason = mb_substr($reason, 0, 1000);
 
-$fullTable = 'ctd_' . $table . '_frm';
+$fullTable = requestTableName($table);
 $response = $value === 'Y' ? 'Aprovada' : 'Recusada';
 $done = $value === 'Y' ? 'aprovado' : 'recusado'; // "o pedido foi …" (o $response acima vai para o histórico)
 $user_id = (int)$_SESSION['id'];
 $user_name = $_SESSION['name'] ?? 'Usuário';
 
-$sectorLabels = [
-    'mkt' => 'Marketing',
-    'xerox' => 'Reprografia',
-    'shop' => 'Compras',
-    'service' => 'Manutenção',
-    'ti' => 'TI',
-];
-$sectorLabel = $sectorLabels[$table] ?? strtoupper($table);
+$sectorLabel = sectorLabel($table);
 
 $reqData = getRequestRow($pdo, $table, $id);
 if (!$reqData) {

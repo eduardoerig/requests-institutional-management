@@ -4,9 +4,42 @@
  * Carregado por config/security.php.
  */
 
+/** Setores que atendem pedidos (config/sectors.php): slug => label, label_to, icon, form_type... */
+function sectorRegistry(): array
+{
+    static $sectors = null;
+    return $sectors ??= require __DIR__ . '/../config/sectors.php';
+}
+
 function allowedRequestTables(): array
 {
-    return ['mkt', 'shop', 'xerox', 'service', 'ti'];
+    return array_keys(sectorRegistry());
+}
+
+/** Nome do setor ("Manutenção"); slug desconhecido volta com a primeira letra maiúscula */
+function sectorLabel(string $slug): string
+{
+    return sectorRegistry()[$slug]['label'] ?? ucfirst($slug);
+}
+
+/** Setor com artigo, para "Enviando para a Manutenção" */
+function sectorLabelTo(string $slug): string
+{
+    return sectorRegistry()[$slug]['label_to'] ?? sectorLabel($slug);
+}
+
+/** Tabela de pedidos do setor: ti => ctd_ti_frm (slug já validado; null se não for um setor) */
+function requestTableName(string $slug): ?string
+{
+    $slug = normalizeRequestTable($slug);
+    return $slug === null ? null : 'ctd_' . $slug . '_frm';
+}
+
+/** Slug a partir do nome da tabela ou do próprio slug: ctd_ti_frm => ti */
+function requestSlug(string $table): string
+{
+    $raw = strtolower(trim($table));
+    return normalizeRequestTable($raw) ?? preg_replace(['/^ctd_/', '/_frm$/'], '', $raw);
 }
 
 function normalizeRequestTable(string $table): ?string
@@ -21,34 +54,19 @@ function normalizeRequestTable(string $table): ?string
 function sectorAreaAliases(string $sector): array
 {
     $normalized = normalizeRequestTable($sector) ?? strtolower(trim($sector));
-    $aliases = [
-        'mkt' => ['mkt', 'marketing'],
-        'shop' => ['shop', 'compras'],
-        'xerox' => ['xerox', 'reprografia'],
-        'service' => ['service', 'manutencao', 'manutenção'],
-        'ti' => ['ti'],
-    ];
-
-    return $aliases[$normalized] ?? [$normalized];
+    return sectorRegistry()[$normalized]['aliases'] ?? [$normalized];
 }
 
 function areaTitleToSector(string $areaTitle): ?string
 {
-    $raw = strtolower(trim($areaTitle));
-    $raw = strtr($raw, ['ç' => 'c', 'ã' => 'a', 'á' => 'a', 'é' => 'e', 'í' => 'i', 'ó' => 'o', 'ú' => 'u']);
-    $map = [
-        'mkt' => 'mkt',
-        'marketing' => 'mkt',
-        'shop' => 'shop',
-        'compras' => 'shop',
-        'xerox' => 'xerox',
-        'reprografia' => 'xerox',
-        'service' => 'service',
-        'manutencao' => 'service',
-        'ti' => 'ti',
-    ];
-
-    return $map[$raw] ?? normalizeRequestTable($raw);
+    $raw = mb_strtolower(trim($areaTitle));
+    $plain = strtr($raw, ['ç' => 'c', 'ã' => 'a', 'á' => 'a', 'é' => 'e', 'í' => 'i', 'ó' => 'o', 'ú' => 'u']);
+    foreach (sectorRegistry() as $slug => $sector) {
+        if (in_array($raw, $sector['aliases'], true) || in_array($plain, $sector['aliases'], true)) {
+            return $slug;
+        }
+    }
+    return normalizeRequestTable($plain);
 }
 
 function isUserManagerOfSector(PDO $pdo, int $userId, string $sector): bool

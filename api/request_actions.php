@@ -49,13 +49,9 @@ if ($normalizedTable === null) {
     echo json_encode(['success' => false, 'message' => 'Tabela de requisicao invalida.']);
     exit;
 }
-$table = 'ctd_' . $normalizedTable . '_frm';
+$table = requestTableName($normalizedTable);
 $sector = $normalizedTable;
-$sectorLabels = [
-    'mkt' => 'Marketing', 'xerox' => 'Reprografia', 'shop' => 'Compras',
-    'service' => 'Manutenção', 'ti' => 'TI',
-];
-$sectorLabel = $sectorLabels[$sector] ?? strtoupper($sector);
+$sectorLabel = sectorLabel($sector);
 
 // Helper: Buscar dados da requisição
 function getRequestData($pdo, $table, $id) {

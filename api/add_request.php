@@ -40,14 +40,11 @@ function postLongText(string $key, int $maxLength, string $what): string
     return $value;
 }
 
-// Tipo do formulário => setor (tabela) e rótulo amigável
-$types = [
-    'service'    => ['table' => 'service', 'label' => 'Manutenção'],
-    'shopping'   => ['table' => 'shop',    'label' => 'Compras'],
-    'colorPrint' => ['table' => 'xerox',   'label' => 'Reprografia'],
-    'mkt'        => ['table' => 'mkt',     'label' => 'Marketing'],
-    'ti'         => ['table' => 'ti',      'label' => 'TI'],
-];
+// Tipo do formulário => setor (tabela) e rótulo amigável (config/sectors.php)
+$types = [];
+foreach (sectorRegistry() as $slug => $s) {
+    $types[$s['form_type']] = ['table' => $slug, 'label' => $s['label']];
+}
 
 $typeKey = (string)($_POST['type'] ?? '');
 if (!isset($types[$typeKey])) {

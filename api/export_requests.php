@@ -31,13 +31,7 @@ $filter_start = $validDate($filter_start) ?: $filter_date;
 $filter_end   = $validDate($filter_end) ?: $filter_date;
 $filter_status = in_array($filter_status, ['P', 'Y', 'N', 'W', 'C', 'F'], true) ? $filter_status : '';
 
-$map = [
-    'mkt' => 'Marketing', 
-    'shop' => 'Compras', 
-    'xerox' => 'Reprografia', 
-    'service' => 'Manutenção', 
-    'ti' => 'TI'
-];
+$map = array_map(fn($s) => $s['label'], sectorRegistry());
 
 $isAdmSub          = ($role === 'adm_sub');
 $managingId        = (isGlobalAdminRole($role) || $isAdmSub) ? null : $_SESSION['id'];

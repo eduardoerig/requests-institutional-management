@@ -1,13 +1,8 @@
 <?php
 // pages/home.php - PAINEL DA COORDENAÇÃO / ADMINISTRAÇÃO (UI 2.0)
 
-$map = [
-    'mkt' => 'MKT',
-    'xerox' => 'Reprografia',
-    'shop' => 'Compras',
-    'service' => 'Manutenção',
-    'ti' => 'TI',
-];
+// Setores do Painel (config/sectors.php)
+$map = array_map(fn($s) => $s['label'], sectorRegistry());
 
 $role = $_SESSION['role'] ?? 'view';
 $user_id = $_SESSION['id'];

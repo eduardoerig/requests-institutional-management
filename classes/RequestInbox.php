@@ -508,7 +508,7 @@ class RequestInbox
         }
         $today = strtotime(date('Y-m-d'));
         foreach ($all as &$r) {
-            $r['table'] = str_replace(['ctd_', '_frm'], '', strtolower((string)($r['table'] ?? '')));
+            $r['table'] = requestSlug((string)($r['table'] ?? ''));
             // Há quanto tempo o pedido espera a decisão
             $days = (int)round(($today - strtotime(date('Y-m-d', strtotime((string)$r['created_at'])))) / 86400);
             $r['context'] = [$days <= 0 ? 'Hoje' : ($days === 1 ? 'Ontem' : 'Há ' . $days . ' dias'), $days >= 3 ? 'in' : ''];
