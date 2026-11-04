@@ -22,6 +22,59 @@ class RequestForwardService
 {
     public const MIN_MESSAGE = 10;
 
+    // Situações de um encaminhamento (request_forwards.status)
+    public const ST_PENDING = 'pending';
+    public const ST_ACCEPTED = 'accepted';
+    public const ST_REFUSED = 'refused';
+    public const ST_CANCELLED = 'cancelled';
+    public const ST_RETURNED = 'returned';
+    public const ST_COMPLETED = 'completed';
+
+    /** Transferência que valeu (aceita ou concluída): o destino virou o responsável. Em SQL e em PHP. */
+    public const EFFECTIVE_TRANSFER_SQL = "mode = 'transfer' AND status IN ('accepted', 'completed')";
+
+    /** Encaminhamento em aberto: pendente, ou ajuda aceita e ainda não devolvida. Em SQL (alias rf.) e em PHP. */
+    public const OPEN_SQL = "(rf.status = 'pending' OR (rf.mode = 'help' AND rf.status = 'accepted'))";
+
+    public static function isOpen(array $f): bool
+    {
+        return ($f['status'] ?? '') === self::ST_PENDING || (($f['mode'] ?? '') === 'help' && ($f['status'] ?? '') === self::ST_ACCEPTED);
+    }
+
+    public static function isEffectiveTransfer(array $f): bool
+    {
+        return ($f['mode'] ?? '') === 'transfer' && in_array($f['status'] ?? '', [self::ST_ACCEPTED, self::ST_COMPLETED], true);
+    }
+
+    /**
+     * Responsável por transferência aceita, em lote: "tabela:id" => área de destino da última.
+     * Pedido sem transferência aceita não aparece (o responsável é o setor do formulário).
+     * $where/$params filtram os pedidos (ex.: "(request_table = ? AND request_id IN (...))").
+     */
+    public static function ownerAreaIdsFor(PDO $pdo, string $where = '1 = 1', array $params = []): array
+    {
+        $stmt = $pdo->prepare('SELECT request_table, request_id, to_area_id FROM request_forwards WHERE '
+            . self::EFFECTIVE_TRANSFER_SQL . " AND ($where) ORDER BY id ASC");
+        $stmt->execute($params);
+        $owner = [];
+        foreach ($stmt->fetchAll(PDO::FETCH_ASSOC) as $f) {
+            $owner[$f['request_table'] . ':' . $f['request_id']] = (int)$f['to_area_id'];
+        }
+        return $owner;
+    }
+
+    /** Responsável a partir dos encaminhamentos já carregados do pedido (sem nova consulta) */
+    public static function ownerFromForwards(PDO $pdo, array $forwards, string $sector): ?int
+    {
+        $owner = null;
+        foreach ($forwards as $f) {
+            if (self::isEffectiveTransfer($f)) {
+                $owner = (int)$f['to_area_id'];
+            }
+        }
+        return $owner ?? self::originAreaId($pdo, $sector);
+    }
+
     // ------------------------------------------------------------------
     // Setores
     // ------------------------------------------------------------------
@@ -127,7 +180,7 @@ class RequestForwardService
             SELECT rf.*, uf.name AS forwarded_by_name FROM request_forwards rf
             LEFT JOIN ctd_users uf ON uf.id = rf.forwarded_by
             WHERE rf.request_id = ? AND rf.request_table = ?
-              AND (rf.status = 'pending' OR (rf.mode = 'help' AND rf.status = 'accepted'))
+              AND " . self::OPEN_SQL . "
             ORDER BY rf.id DESC LIMIT 1
         ");
         $stmt->execute([$reqId, $sector]);
@@ -143,11 +196,8 @@ class RequestForwardService
     /** Setor responsável agora: destino da última transferência aceita, senão o setor original */
     public static function ownerAreaId(PDO $pdo, int $reqId, string $sector): ?int
     {
-        $stmt = $pdo->prepare("
-            SELECT to_area_id FROM request_forwards
-            WHERE request_id = ? AND request_table = ? AND mode = 'transfer' AND status IN ('accepted', 'completed')
-            ORDER BY id DESC LIMIT 1
-        ");
+        $stmt = $pdo->prepare('SELECT to_area_id FROM request_forwards WHERE request_id = ? AND request_table = ? AND '
+            . self::EFFECTIVE_TRANSFER_SQL . ' ORDER BY id DESC LIMIT 1');
         $stmt->execute([$reqId, $sector]);
         $areaId = $stmt->fetchColumn();
         return $areaId ? (int)$areaId : self::originAreaId($pdo, $sector);

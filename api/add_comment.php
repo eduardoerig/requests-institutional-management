@@ -62,7 +62,7 @@ if ($role === 'solicitante') {
         $myAreas = RequestForwardService::userAreaIds($pdo, $userId);
         if (!in_array(RequestForwardService::ownerAreaId($pdo, $reqId, $sector), $myAreas, true)) {
             foreach (RequestForwardService::forRequest($pdo, $reqId, $sector) as $f) {
-                if ($f['mode'] === 'transfer' && in_array($f['status'], ['accepted', 'completed'], true) && in_array((int)$f['from_area_id'], $myAreas, true)) {
+                if (RequestForwardService::isEffectiveTransfer($f) && in_array((int)$f['from_area_id'], $myAreas, true)) {
                     jsonResponse(['success' => false, 'message' => 'O pedido foi transferido. Fale com o setor que assumiu na conversa entre setores.'], 403);
                 }
             }

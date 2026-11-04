@@ -109,13 +109,7 @@ class RequestInbox
         $stmt->execute(array_merge($areaIds, $areaIds));
         $myForwards = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
-        $owner = [];      // "tabela:id" => área responsável por transferência aceita
-        foreach ($pdo->query("
-            SELECT request_table, request_id, to_area_id FROM request_forwards
-            WHERE mode = 'transfer' AND status IN ('accepted', 'completed') ORDER BY id ASC
-        ")->fetchAll(PDO::FETCH_ASSOC) as $t) {
-            $owner[$t['request_table'] . ':' . $t['request_id']] = (int)$t['to_area_id'];
-        }
+        $owner = RequestForwardService::ownerAreaIdsFor($pdo); // "tabela:id" => área responsável por transferência aceita
 
         // 2) Pedidos candidatos: dos setores de origem + os citados em encaminhamentos
         $originSlugs = [];
@@ -178,7 +172,7 @@ class RequestInbox
             $key = $f['request_table'] . ':' . $f['request_id'];
             $f['from_label'] = RequestForwardService::areaLabel($pdo, (int)$f['from_area_id']);
             $f['to_label'] = RequestForwardService::areaLabel($pdo, (int)$f['to_area_id']);
-            if ($f['status'] === 'pending' || ($f['mode'] === 'help' && $f['status'] === 'accepted')) {
+            if (RequestForwardService::isOpen($f)) {
                 $open[$key] = $f;
             }
             if (in_array((int)$f['from_area_id'], $areaIds, true)) {
@@ -245,7 +239,7 @@ class RequestInbox
                     . ($closer !== '' ? ' por ' . self::firstName($closer) : '')
                     . ($closedAt !== '' ? ' em ' . date('d/m', strtotime($closedAt)) : ''), ''];
                 $tabs['historico'][] = $row;
-            } elseif (!$isMine && $sent && $sent['mode'] === 'transfer' && in_array($sent['status'], ['accepted', 'completed'], true)) {
+            } elseif (!$isMine && $sent && RequestForwardService::isEffectiveTransfer($sent)) {
                 $when = (string)($sent['responded_at'] ?: $sent['created_at']);
                 $row['group'] = 'historico';
                 $row['closed_at'] = $when;
@@ -485,13 +479,7 @@ class RequestInbox
             $last[$c['request_table'] . ':' . $c['request_id']] = $c;
         }
 
-        $owner = [];
-        $stmt = $pdo->prepare("SELECT request_table, request_id, to_area_id FROM request_forwards WHERE mode = 'transfer' AND status IN ('accepted', 'completed') AND ($where) ORDER BY id ASC");
-        $stmt->execute($params);
-        foreach ($stmt->fetchAll(PDO::FETCH_ASSOC) as $f) {
-            $owner[$f['request_table'] . ':' . $f['request_id']] = (int)$f['to_area_id'];
-        }
-        return [$last, $owner];
+        return [$last, RequestForwardService::ownerAreaIdsFor($pdo, $where, $params)];
     }
 
     /**

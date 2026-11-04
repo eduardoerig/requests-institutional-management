@@ -59,13 +59,7 @@ if (!function_exists('renderRequestView')) {
     /** Setor responsável agora: destino da última transferência aceita; sem ela, o setor do formulário */
     function requestOwnerFromForwards(PDO $pdo, array $forwards, string $sector): ?int
     {
-        $owner = null;
-        foreach ($forwards as $f) {
-            if ($f['mode'] === 'transfer' && in_array($f['status'], ['accepted', 'completed'], true)) {
-                $owner = (int)$f['to_area_id'];
-            }
-        }
-        return $owner ?? RequestForwardService::originAreaId($pdo, $sector);
+        return RequestForwardService::ownerFromForwards($pdo, $forwards, $sector);
     }
 
     /**
@@ -584,7 +578,7 @@ if (!function_exists('renderRequestView')) {
         $forwards = RequestForwardService::forRequest($pdo, $reqId, $sector);
         $open = null;
         foreach ($forwards as $f) { // do mais antigo ao mais novo: fica o último
-            if ($f['status'] === 'pending' || ($f['mode'] === 'help' && $f['status'] === 'accepted')) {
+            if (RequestForwardService::isOpen($f)) {
                 $open = $f;
             }
         }
@@ -636,7 +630,7 @@ if (!function_exists('renderRequestView')) {
         }
         // Quem começou antes de uma transferência aceita era do setor anterior
         foreach ($forwards as $f) {
-            if ($f['mode'] === 'transfer' && in_array($f['status'], ['accepted', 'completed'], true)
+            if (RequestForwardService::isEffectiveTransfer($f)
                 && strcmp((string)($f['responded_at'] ?? $f['created_at']), $workerAt) > 0) {
                 $worker = '';
             }

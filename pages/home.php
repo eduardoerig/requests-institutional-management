@@ -156,7 +156,7 @@ try {
     foreach ($stmtFwd->fetchAll(PDO::FETCH_ASSOC) as $f) {
         $key = $f['request_table'] . ':' . (int)$f['request_id'];
         if (!isset($visibleKeys[$key])) continue; // só pedidos que este usuário enxerga
-        $isOpenFwd = $f['status'] === 'pending' || ($f['mode'] === 'help' && $f['status'] === 'accepted');
+        $isOpenFwd = RequestForwardService::isOpen($f);
         if ($isOpenFwd) {
             $openForwards[] = $f + ['req' => $visibleKeys[$key]];
         }
