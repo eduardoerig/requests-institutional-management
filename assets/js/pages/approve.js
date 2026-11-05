@@ -103,7 +103,8 @@
         const hint = $('[data-next-hint]', d);
         if (hint) hint.textContent = deckOn && open.length ? (open.length > 1 ? `Depois deste: mais ${open.length - 1}` : 'Este é o último') : '';
         const done = $('[data-approve-done]', d);
-        if (done) done.hidden = open.length > 0 || all.length === 0;
+        // Enquanto há decisão esperando o Desfazer, o pedido ainda pode voltar: a fila não está "em dia"
+        if (done) done.hidden = open.length > 0 || pending.size > 0 || all.length === 0;
         const pickAll = $('.approve-pickall', d);
         if (pickAll) pickAll.hidden = open.length === 0;
 
