@@ -87,14 +87,16 @@ $present = function (array $row) use ($cut, $fmtDay, $canBulk): array {
         case 'aceitar':
             $isHelp = $fwd && $fwd['mode'] === 'help';
             $from = $fwd['from_label'] ?? '';
-            $out['next'] = [$isHelp ? 'Aceitar ajuda' : 'Aceitar e assumir', 'go'];
+            $isPartner = $fwd && RequestForwardService::isPartner($fwd);
+            $acceptLabel = $isPartner ? 'Aceitar a parte' : ($isHelp ? 'Aceitar ajuda' : 'Aceitar e assumir');
+            $out['next'] = [$acceptLabel, 'go'];
             $out['status'] = ['aguardando', 'Aguardando aceite'];
-            $out['badge'] = ($isHelp ? 'Ajuda para ' : 'Transferência de ') . $from;
+            $out['badge'] = $isPartner ? 'Parceiro de ' . $from : ($isHelp ? 'Ajuda para ' : 'Transferência de ') . $from;
             if ($msg !== '') {
-                array_unshift($out['notes'], $from . ' pede: “' . $cut($msg) . '”');
+                array_unshift($out['notes'], ($isPartner ? 'A coordenação' : $from) . ' pede: “' . $cut($msg) . '”');
             }
             if ($fwd) {
-                $out['action'] = [$isHelp ? 'Aceitar ajuda' : 'Aceitar e assumir', $isHelp ? 'accept' : 'assume', (int)$fwd['id'], true];
+                $out['action'] = [$acceptLabel, $isPartner ? 'partner' : ($isHelp ? 'accept' : 'assume'), (int)$fwd['id'], true];
             }
             break;
         case 'comecar':
@@ -110,15 +112,22 @@ $present = function (array $row) use ($cut, $fmtDay, $canBulk): array {
         case 'andamento':
             if ($group === 'ajudando') {
                 $from = $fwd['from_label'] ?? '';
-                $out['next'] = ['Ajudando · devolver', 'go'];
-                $out['status'] = ['ajuda', 'Ajudando'];
-                $out['badge'] = 'Ajuda para ' . $from;
+                $isPartner = $fwd && RequestForwardService::isPartner($fwd);
+                $out['next'] = [$isPartner ? 'Sua parte · devolver' : 'Ajudando · devolver', 'go'];
+                $out['status'] = ['ajuda', $isPartner ? 'Fazendo a parte' : 'Ajudando'];
+                $out['badge'] = $isPartner ? 'Parceiro de ' . $from : 'Ajuda para ' . $from;
                 if ($msg !== '') {
-                    array_unshift($out['notes'], $from . ' pede: “' . $cut($msg) . '”');
+                    array_unshift($out['notes'], ($isPartner ? 'A coordenação' : $from) . ' pede: “' . $cut($msg) . '”');
                 }
                 if ($fwd) {
-                    $out['action'] = ['Devolver ajuda', 'return', (int)$fwd['id'], false];
+                    $out['action'] = [$isPartner ? 'Devolver a parte' : 'Devolver ajuda', 'return', (int)$fwd['id'], false];
                 }
+                $out['check'] = $canBulk ? 'none' : '';
+            } elseif ($fwd && RequestForwardService::isPartner($fwd)) {
+                // O principal só conclui depois que o parceiro devolver: sem botão que daria erro
+                $out['next'] = ['Aguardar ' . $fwd['to_label'] . ' para concluir', 'wait'];
+                $out['status'] = ['andamento', 'Em atendimento'];
+                $out['badge'] = 'Com ' . $fwd['to_label'];
                 $out['check'] = $canBulk ? 'none' : '';
             } else {
                 $out['next'] = ['Concluir', 'go'];

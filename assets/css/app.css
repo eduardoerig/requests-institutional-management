@@ -1514,3 +1514,20 @@ details.panel[open] > summary::after { transform: rotate(180deg); }
 @media (prefers-reduced-motion: reduce) {
     @view-transition { navigation: none; }
 }
+
+/* Setor parceiro (components/partner_picker.php): cartão de Aprovar e página do pedido */
+.partner-picker { display: grid; gap: 10px; }
+.partner-picker__more { display: grid; gap: 10px; }
+.partner-picker__more[hidden] { display: none; }
+.partner-picker__field { display: grid; gap: 4px; min-width: 0; }
+.partner-picker__field label { font-size: var(--t-sm); font-weight: 600; }
+.partner-picker__field label small { font-weight: 400; color: var(--texto-2); }
+.partner-picker select, .partner-picker input { width: 100%; }
+.approve-card__partner, .rv-partner details { font-size: var(--t-sm); }
+.approve-card__partner { margin-top: 4px; }
+.approve-card__partner summary, .rv-partner summary { cursor: pointer; font-weight: 600; color: var(--texto-2); padding: 4px 0; }
+.approve-card__partner[open] summary, .rv-partner details[open] summary { margin-bottom: 8px; }
+.rv-partner__add { margin-top: 12px; }
+@media (min-width: 900px) {
+    .rv-partner .partner-picker__more { grid-template-columns: minmax(0, 170px) minmax(0, 1fr); }
+}

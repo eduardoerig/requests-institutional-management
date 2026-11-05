@@ -36,6 +36,7 @@
     const beaconed = new Map();  // enviados por sendBeacon (sem resposta): "tabela:id" -> nº do pedido
     const refusing = new Set();  // cartões com o campo do motivo aberto
     const drafts = new Map();    // motivo de recusa sendo escrito: "tabela:id" -> texto
+    const partnerDrafts = new Map(); // setor parceiro mudado no cartão: "tabela:id" -> { area, due, note }
     const BEACON_KEY = 'sisreq-approve-beacon';
     const BEACON_SETTLE_MS = 1500; // espera o envio de saída chegar antes de conferir a lista
     let decided = 0;             // decisões tomadas nesta visita (inclui as pendentes)
@@ -207,7 +208,7 @@
             if (typeof updateBulkBar === 'function') updateBulkBar();
         }
 
-        const fields = { action: 'post', id: card.dataset.id, table: card.dataset.table, value: kind === 'approve' ? 'Y' : 'N', reason };
+        const fields = { action: 'post', id: card.dataset.id, table: card.dataset.table, value: kind === 'approve' ? 'Y' : 'N', reason, ...(kind === 'approve' ? partnerFields(card) : {}) };
         pending.set(key, { fields, kind, id: card.dataset.id, timer: setTimeout(() => commit(key), UNDO_MS), until: Date.now() + UNDO_MS });
         decided++;
         lastKey = key;
@@ -319,6 +320,22 @@
         });
     }
 
+    // Lista redesenhada: a escolha do setor parceiro ainda não enviada volta ao cartão
+    function restorePartners() {
+        cards().forEach(card => {
+            const draft = partnerDrafts.get(keyOf(card));
+            const box = $('[data-partner-picker]', card);
+            if (!draft || !box) return;
+            $('[data-partner-area]', box).value = draft.area;
+            $('[data-partner-due]', box).value = draft.due;
+            $('[data-partner-note]', box).value = draft.note;
+            const more = $('[data-partner-more]', box);
+            if (more) more.hidden = !draft.area;
+            const details = box.closest('details');
+            if (details) details.open = true;
+        });
+    }
+
     // Depois de enviar tudo, atualiza lista, contadores e menu (sem atrapalhar uma seleção em lote)
     function maybeRefresh() {
         if (pending.size || document.body.classList.contains('has-bulk')) return;
@@ -408,6 +425,14 @@
     });
 
     document.addEventListener('input', (e) => {
+        const picker = e.target.closest('[data-approve-card] [data-partner-picker]');
+        if (picker) {
+            partnerDrafts.set(keyOf(picker.closest('[data-approve-card]')), {
+                area: $('[data-partner-area]', picker).value,
+                due: $('[data-partner-due]', picker).value,
+                note: $('[data-partner-note]', picker).value,
+            });
+        }
         const input = e.target.closest('[data-refuse-reason]');
         const owner = input && input.closest('[data-approve-card]');
         if (owner) drafts.set(keyOf(owner), input.value);
@@ -433,7 +458,7 @@
     if (main) {
         new MutationObserver(() => {
             const d = deck();
-            if (d && !d.dataset.bound) { d.dataset.bound = '1'; render(); restoreRefusing(); }
+            if (d && !d.dataset.bound) { d.dataset.bound = '1'; render(); restoreRefusing(); restorePartners(); }
         }).observe(main, { childList: true });
     }
     if (mq.addEventListener) mq.addEventListener('change', render);

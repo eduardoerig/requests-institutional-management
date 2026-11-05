@@ -146,7 +146,7 @@ $openForwards = [];
 try {
     $since = date('Y-m-d H:i:s', strtotime('-30 days'));
     $stmtFwd = $pdo->prepare("
-        SELECT request_id, request_table, from_area_id, to_area_id, mode, status, created_at, responded_at
+        SELECT request_id, request_table, from_area_id, to_area_id, mode, is_partner, due_date, status, created_at, responded_at
         FROM request_forwards
         WHERE created_at >= ? OR status = 'pending' OR (mode = 'help' AND status = 'accepted')
         ORDER BY id DESC
@@ -187,6 +187,17 @@ foreach ($urgentPending as $r) {
         'kind' => 'warn',
     ];
 }
+// Parte do setor parceiro fora do prazo: o atraso aparece no nome de quem está com ela. Vem antes dos
+// pedidos atrasados porque a lista é curta e o pedido em si pode nem estar atrasado.
+foreach ($openForwards as $f) {
+    if (!RequestForwardService::partnerIsLate($f)) continue;
+    $d = $daysSince($f['due_date']);
+    $attention[] = [
+        'href' => $reqLink($f['req']), 'title' => 'Nº ' . (int)$f['request_id'] . ' · ' . ($f['req']['title'] ?? 'Sem título'),
+        'meta' => 'Parte de ' . RequestForwardService::areaLabel($pdo, (int)$f['to_area_id']) . ' atrasada há ' . $d . ($d === 1 ? ' dia' : ' dias'),
+        'kind' => 'bad',
+    ];
+}
 foreach ($lateList as $r) {
     $d = $daysSince($r['date']);
     $attention[] = [
@@ -203,6 +214,7 @@ foreach ($urgentList as $r) {
     ];
 }
 foreach ($openForwards as $f) {
+    if (RequestForwardService::partnerIsLate($f)) continue; // já está acima, como atraso
     $d = $daysSince($f['created_at']);
     if ($d < 2) continue;
     $attention[] = [

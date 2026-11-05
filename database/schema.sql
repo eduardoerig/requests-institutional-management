@@ -199,6 +199,8 @@ CREATE TABLE `request_forwards` (
   `forwarded_by` int unsigned NOT NULL COMMENT 'FK ctd_users.id — gestor que repassou',
   `to_area_id` int unsigned NOT NULL COMMENT 'FK ctd_area.id — setor de destino',
   `mode` enum('transfer','help') COLLATE utf8mb4_unicode_ci NOT NULL DEFAULT 'transfer',
+  `is_partner` tinyint(1) NOT NULL DEFAULT '0' COMMENT '1 = setor parceiro incluído pela coordenação',
+  `due_date` date DEFAULT NULL COMMENT 'Prazo da parte do setor parceiro',
   `received_by` int unsigned DEFAULT NULL COMMENT 'FK ctd_users.id — gestor que aceitou o repasse',
   `observation` text CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci COMMENT 'Observação do gestor sobre o motivo do repasse',
   `response_note` text COLLATE utf8mb4_unicode_ci,
@@ -215,6 +217,13 @@ CREATE TABLE `request_forwards` (
   KEY `idx_forwarded_by` (`forwarded_by`),
   KEY `idx_status` (`status`),
   KEY `idx_req_status` (`request_table`,`request_id`,`status`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+CREATE TABLE `request_partner_suggestions` (
+  `request_id` int unsigned NOT NULL COMMENT 'ID do pedido na tabela _frm',
+  `request_table` varchar(20) COLLATE utf8mb4_unicode_ci NOT NULL COMMENT 'mkt, shop, xerox, service, ti',
+  `area_id` int unsigned NOT NULL COMMENT 'FK ctd_area.id — setor sugerido',
+  `created_at` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (`request_table`,`request_id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 CREATE TABLE `request_history` (
   `id` int unsigned NOT NULL AUTO_INCREMENT,

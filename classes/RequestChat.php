@@ -47,7 +47,7 @@ class RequestChat
         } elseif (userSeesOnlyInternalChat($pdo, $req, $sector, $viewerId, $role)) {
             $threads[] = ['key' => 'internal', 'label' => 'Com ' . $ownerLabel, 'events' => true, 'sources' => [['internal', 0, '', false]],
                 'target' => $target('internal', 0, "Quem lê: só os setores. $who não vê esta conversa.", 'Mensagem para ' . $ownerLabel),
-                'empty' => "Nenhuma mensagem com $ownerLabel ainda. Use o campo abaixo para falar com o setor que pediu ajuda.", 'readHint' => ''];
+                'empty' => "Nenhuma mensagem com $ownerLabel ainda. Use o campo abaixo para falar com o setor responsável.", 'readHint' => ''];
             foreach (array_intersect($helperAreas, RequestForwardService::userAreaIds($pdo, $viewerId)) as $a) {
                 $open = in_array($a, $openAreas, true);
                 $threads[] = ['key' => 'helper-' . $a, 'label' => 'Com ' . $who, 'events' => false, 'sources' => [['helper', $a, '', false]],

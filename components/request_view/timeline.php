@@ -27,13 +27,16 @@ function requestEventText(string $action, ?string $old, ?string $new, ?string $c
         'forward_refused' => "recusou o encaminhamento ($area)",
         'forward_cancelled' => "cancelou o encaminhamento para $area",
         'help_returned' => "devolveu a ajuda ($area)",
+        'partner_suggested' => "sugeriu $area como setor parceiro",
+        'partner_added' => "incluiu $area como setor parceiro",
+        'partner_refused' => "recusou ser parceiro ($area)",
     ];
     if ($code === 'priority') {
         // Número (1-4) desde a migração 008; rótulo nos registros que ela não converteu
         $label = fn(?string $v) => ctype_digit((string)$v) ? priorityLabel((int)$v) : (string)$v;
         return 'mudou a urgência' . ($old && $new ? ' de ' . $label($old) . ' para ' . $label($new) : '');
     }
-    $needsArea = in_array($code, ['forward_transfer', 'forward_help', 'accepted_transfer', 'accepted_help', 'forward_refused', 'forward_cancelled', 'help_returned'], true);
+    $needsArea = in_array($code, ['forward_transfer', 'forward_help', 'accepted_transfer', 'accepted_help', 'forward_refused', 'forward_cancelled', 'help_returned', 'partner_suggested', 'partner_added', 'partner_refused'], true);
     if ($code !== null && array_key_exists($code, $byCode) && (!$needsArea || $area !== '')) {
         return $byCode[$code];
     }
@@ -153,7 +156,7 @@ function renderRequestFeed(PDO $pdo, array $req, string $sector, int $viewerId, 
             $history = requestHistoryRows($pdo, $reqId, $sector);
         }
         // Eventos de encaminhamento: para o setor vêm dos cartões de encaminhamento, com a mensagem
-        $fwdCodes = array_merge(['forward_transfer', 'forward_help', 'accepted_transfer', 'accepted_help', 'forward_refused', 'forward_cancelled', 'help_returned'],
+        $fwdCodes = array_merge(['forward_transfer', 'forward_help', 'accepted_transfer', 'accepted_help', 'forward_refused', 'forward_cancelled', 'help_returned', 'partner_added', 'partner_refused'],
             $forwards ? ['legacy_forward', 'legacy_forward_accepted'] : []);
         foreach ($thread['events'] ? $history : [] as $h) {
             $code = $h['event_code'] ?? null;
@@ -168,10 +171,12 @@ function renderRequestFeed(PDO $pdo, array $req, string $sector, int $viewerId, 
         $responses = ['accepted' => 'aceitou', 'refused' => 'recusou', 'returned' => 'devolveu a ajuda', 'cancelled' => 'cancelou o envio', 'completed' => 'concluiu'];
         foreach ($forwards as $f) {
             $by = (string)($f['forwarded_by_name'] ?? '');
+            $partner = RequestForwardService::isPartner($f);
+            $byArea = $partner ? 'Coordenação' : (string)$f['from_label'];
             $items[] = [
                 'at' => (string)$f['created_at'], 'type' => 'event',
-                'who' => $by !== '' ? $by . ' (' . $f['from_label'] . ')' : (string)$f['from_label'],
-                'text' => ($f['mode'] === 'help' ? 'pediu ajuda a ' : 'encaminhou para ') . $f['to_label'],
+                'who' => $by !== '' ? $by . ' (' . $byArea . ')' : $byArea,
+                'text' => $partner ? 'incluiu ' . $f['to_label'] . ' como setor parceiro' : ($f['mode'] === 'help' ? 'pediu ajuda a ' : 'encaminhou para ') . $f['to_label'],
                 // Pendente: o recado está no cartão acima da conversa; não repete aqui
                 'note' => $f['status'] === 'pending' ? '' : (string)($f['observation'] ?? ''), 'bad' => false,
             ];
@@ -179,7 +184,7 @@ function renderRequestFeed(PDO $pdo, array $req, string $sector, int $viewerId, 
                 $items[] = [
                     'at' => (string)$f['responded_at'], 'type' => 'event',
                     'who' => (string)(($f['responded_by_name'] ?? '') ?: $f['to_label']),
-                    'text' => $responses[$f['status']] . ($f['status'] === 'cancelled' ? '' : ' (' . $f['to_label'] . ')'),
+                    'text' => $partner && $f['status'] === 'cancelled' ? 'tirou ' . $f['to_label'] . ' como setor parceiro' : $responses[$f['status']] . ($f['status'] === 'cancelled' ? '' : ' (' . $f['to_label'] . ')'),
                     'note' => (string)($f['response_note'] ?? ''), 'bad' => $f['status'] === 'refused',
                 ];
             }

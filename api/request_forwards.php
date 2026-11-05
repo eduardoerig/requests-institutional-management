@@ -8,6 +8,7 @@
  *  POST action=refuse   forward_id, reason
  *  POST action=cancel   forward_id
  *  POST action=return   forward_id, note
+ *  POST action=add_partner  id, table, partner_area_id, partner_due, partner_note (coordenação)
  *  GET  action=areas    id, table   (setores para onde dá para encaminhar)
  */
 require_once __DIR__ . '/../config/session.php';
@@ -22,11 +23,13 @@ $role = $_SESSION['role'] ?? 'solicitante';
 $userId = (int)$_SESSION['id'];
 $userName = $_SESSION['name'] ?? 'Usuário';
 
-if (!isGlobalAdminRole($role) && !isGestorRole($role)) {
+$action = (string)($_POST['action'] ?? $_GET['action'] ?? '');
+
+// A coordenação só entra para incluir ou tirar o setor parceiro: as demais ações são dos setores e do admin geral
+$coordinationAction = $role === 'adm_sub' && in_array($action, ['add_partner', 'cancel'], true);
+if (!isGlobalAdminRole($role) && !isGestorRole($role) && !$coordinationAction) {
     jsonResponse(['success' => false, 'message' => 'Só os setores e a administração encaminham pedidos.'], 403);
 }
-
-$action = (string)($_POST['action'] ?? $_GET['action'] ?? '');
 
 if ($action === 'areas') {
     $sector = normalizeRequestTable((string)($_GET['table'] ?? ''));
@@ -65,6 +68,15 @@ switch ($action) {
         break;
     case 'return':
         $result = RequestForwardService::returnHelp($pdo, $forwardId, (string)($_POST['note'] ?? ''), $userId, $userName, $role);
+        break;
+    case 'add_partner':
+        $result = RequestForwardService::addPartner(
+            $pdo,
+            (string)($_POST['table'] ?? ''),
+            (int)($_POST['id'] ?? 0),
+            array_intersect_key($_POST, array_flip(['partner_area_id', 'partner_due', 'partner_note'])),
+            $userId, $userName, $role
+        );
         break;
     default:
         $result = ['success' => false, 'message' => 'Ação inválida.'];

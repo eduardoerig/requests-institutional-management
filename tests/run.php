@@ -688,6 +688,167 @@ $res = $ti->get('approved');
 check('rota antiga leva para a Caixa', $res['status'] === 302 && str_contains($res['headers'] ?? '', 'inbox'), 'HTTP ' . $res['status']);
 
 // ------------------------------------------------------------------
+section('11d. Setor parceiro');
+$mktAreaId = (int)$pdo->query("SELECT id FROM ctd_area WHERE LOWER(TRIM(title)) IN ('mkt', 'marketing') LIMIT 1")->fetchColumn();
+$newPartnerReq = function (array $extra = []) use ($sol, $base, &$createdIds): array {
+    $res = $sol->post('api/add_request.php', ['title' => 'Teste parceiro'] + $extra + $base);
+    $id = (int)($res['json']['id'] ?? 0);
+    if ($id > 0) {
+        $createdIds[] = ['ti', $id];
+    }
+    return [$id, $res];
+};
+$partnerRow = function (int $id) use ($pdo): ?array {
+    $st = $pdo->prepare("SELECT * FROM request_forwards WHERE request_id = ? AND request_table = 'ti' AND is_partner = 1 ORDER BY id DESC LIMIT 1");
+    $st->execute([$id]);
+    return $st->fetch(PDO::FETCH_ASSOC) ?: null;
+};
+$suggestion = function (int $id) use ($pdo): int {
+    return (int)$pdo->query("SELECT COUNT(*) FROM request_partner_suggestions WHERE request_table = 'ti' AND request_id = $id")->fetchColumn();
+};
+$later = date('Y-m-d', strtotime('+2 days'));
+$yesterday = date('Y-m-d', strtotime('-1 day'));
+
+$tiModel = (int)$pdo->query("SELECT id FROM ctd_requests_models WHERE form_name = 'form_chamado_ti.php' LIMIT 1")->fetchColumn();
+$res = $sol->post('api/get_form.php', ['action' => 'get', 'id' => $tiModel]);
+$formHtml = (string)($res['json']['form'] ?? '');
+check('formulário traz o campo de parceiro, sem o próprio setor', str_contains($formHtml, 'name="partner_area_id"')
+    && str_contains($formHtml, 'value="' . $shopAreaId . '"') && !str_contains($formHtml, 'value="' . $tiAreaId . '"'), snippet($res));
+
+[, $res] = $newPartnerReq(['partner_area_id' => $tiAreaId]);
+check('quem pede não sugere o próprio setor do pedido', ($res['json']['success'] ?? true) === false, snippet($res));
+
+// Sugestão não abre o pedido para o setor antes da aprovação
+[$pId] = $newPartnerReq(['partner_area_id' => $shopAreaId]);
+check('sugestão gravada, sem encaminhamento ainda', $suggestion($pId) === 1 && $partnerRow($pId) === null);
+$res = $shop->get("api/request_view.php?id=$pId&table=ti");
+check('setor sugerido não vê o pedido antes da aprovação', $res['status'] === 403, 'HTTP ' . $res['status']);
+$res = $apr->get('approve');
+check('Aprovar mostra a sugestão no cartão', str_contains($res['body'], 'como parceiro') && str_contains($res['body'], 'data-partner-picker'), 'HTTP ' . $res['status']);
+
+// Dados inválidos não aprovam
+$res = $apr->post('api/approve_request.php', ['action' => 'post', 'id' => $pId, 'table' => 'ti', 'value' => 'Y', 'partner_area_id' => $tiAreaId]);
+check('parceiro igual ao responsável é recusado', ($res['json']['success'] ?? true) === false, snippet($res));
+$res = $apr->post('api/approve_request.php', ['action' => 'post', 'id' => $pId, 'table' => 'ti', 'value' => 'Y', 'partner_area_id' => $shopAreaId, 'partner_due' => $yesterday]);
+check('prazo da parte no passado é recusado', ($res['json']['success'] ?? true) === false, snippet($res));
+check('recusas acima não aprovam o pedido', (string)$pdo->query("SELECT status FROM ctd_ti_frm WHERE id = $pId")->fetchColumn() === 'P');
+
+// Confirma, com prazo próprio
+$res = $apr->post('api/approve_request.php', ['action' => 'post', 'id' => $pId, 'table' => 'ti', 'value' => 'Y', 'partner_area_id' => $shopAreaId, 'partner_due' => $later, 'partner_note' => 'Decidam juntos a compra da peca']);
+$pFwd = $partnerRow($pId);
+check('aprovar confirma o parceiro', ($res['json']['success'] ?? false) === true && $pFwd && (int)$pFwd['to_area_id'] === $shopAreaId && $pFwd['status'] === 'pending' && $pFwd['mode'] === 'help', snippet($res));
+check('prazo e recado da parte gravados', $pFwd && $pFwd['due_date'] === $later && str_contains((string)$pFwd['observation'], 'Decidam juntos'));
+check('decidido: a sugestão sai da fila', $suggestion($pId) === 0);
+$res = $shop->get("api/request_view.php?id=$pId&table=ti");
+check('parceiro vê o pedido depois da aprovação', $res['status'] === 200, 'HTTP ' . $res['status']);
+$res = $shop->get('api/get_notifications.php');
+check('parceiro recebe aviso com título reescrito', str_contains((string)json_encode($res['json'], JSON_UNESCAPED_UNICODE), 'Coordenação chamou vocês em'), mb_substr($res['body'], 0, 200));
+
+$inboxRow = function (int $areaId, int $id) use ($pdo): array {
+    RequestInbox::clearCache();
+    foreach (RequestInbox::build($pdo, [$areaId])['tabs'] as $tab => $rows) {
+        foreach ($rows as $r) {
+            if ($r['table'] === 'ti' && (int)$r['id'] === $id) return ['tab' => $tab] + $r;
+        }
+    }
+    return ['tab' => null];
+};
+$row = $inboxRow($tiAreaId, $pId);
+check('principal continua em Começar, não em Esperando', $row['tab'] === 'comecar' && str_contains((string)$row['context'][0], 'Compras'), json_encode($row['tab'], JSON_UNESCAPED_UNICODE));
+$row = $inboxRow($shopAreaId, $pId);
+check('parceiro em Aceitar, com o prazo da parte', $row['tab'] === 'aceitar' && substr((string)$row['date'], 0, 10) === $later, json_encode([$row['tab'], $row['date'] ?? null]));
+
+// O principal trabalha, mas não conclui nem tira o parceiro
+$res = $ti->post('api/request_actions.php', ['id' => $pId, 'table' => 'ctd_ti_frm', 'action' => 'start_progress']);
+check('principal começa sem esperar o parceiro aceitar', ($res['json']['success'] ?? false) === true, snippet($res));
+$res = $ti->post('api/request_forwards.php', ['action' => 'cancel', 'forward_id' => (int)$pFwd['id']]);
+check('principal não tira o parceiro', ($res['json']['success'] ?? true) === false, snippet($res));
+$res = $ti->post('api/request_actions.php', ['id' => $pId, 'table' => 'ctd_ti_frm', 'action' => 'finish']);
+check('principal não conclui com a parte em aberto', ($res['json']['success'] ?? true) === false, snippet($res));
+$res = $shop->post('api/request_forwards.php', ['action' => 'accept', 'forward_id' => (int)$pFwd['id']]);
+check('parceiro aceita a parte', ($res['json']['success'] ?? false) === true, snippet($res));
+
+// Atraso no nome de quem está com a parte
+$pdo->exec("UPDATE request_forwards SET due_date = '$yesterday' WHERE id = " . (int)$pFwd['id']);
+$row = $inboxRow($tiAreaId, $pId);
+check('parte vencida: a linha do principal nomeia o parceiro', $row['tab'] === 'andamento' && str_contains((string)$row['context'][0], 'Compras atrasado') && $row['context'][1] === 'bad', json_encode($row['context'] ?? null, JSON_UNESCAPED_UNICODE));
+$row = $inboxRow($shopAreaId, $pId);
+check('parte vencida: entra em Atrasados do parceiro', $row['tab'] === 'andamento' && $row['due_group'] === 'atrasados', json_encode($row['due_group'] ?? null));
+$res = $adm->get('home');
+check('Painel mostra a parte atrasada', str_contains($res['body'], 'Parte de Compras atrasada'), 'HTTP ' . $res['status']);
+$res = $ti->get("request_detail?id=$pId&table=ti");
+check('página mostra o prazo da parte', str_contains($res['body'], 'Prazo de Compras') && str_contains($res['body'], 'Parte de Compras'), 'HTTP ' . $res['status']);
+
+$res = $shop->post('api/request_forwards.php', ['action' => 'return', 'forward_id' => (int)$pFwd['id'], 'note' => 'Compra feita, peca entregue']);
+check('parceiro devolve a parte', ($res['json']['success'] ?? false) === true, snippet($res));
+$res = $ti->post('api/request_actions.php', ['id' => $pId, 'table' => 'ctd_ti_frm', 'action' => 'finish']);
+check('depois de devolver, o principal conclui', ($res['json']['success'] ?? false) === true, snippet($res));
+
+// Trocar, tirar e aprovar sem dizer nada (lote)
+[$pSwap] = $newPartnerReq(['partner_area_id' => $shopAreaId]);
+$apr->post('api/approve_request.php', ['action' => 'post', 'id' => $pSwap, 'table' => 'ti', 'value' => 'Y', 'partner_area_id' => $mktAreaId]);
+check('aprovar troca o setor sugerido', (int)($partnerRow($pSwap)['to_area_id'] ?? 0) === $mktAreaId);
+[$pOff] = $newPartnerReq(['partner_area_id' => $shopAreaId]);
+$apr->post('api/approve_request.php', ['action' => 'post', 'id' => $pOff, 'table' => 'ti', 'value' => 'Y', 'partner_area_id' => '0']);
+check('aprovar tira o parceiro sugerido', $partnerRow($pOff) === null && $suggestion($pOff) === 0);
+[$pBulk] = $newPartnerReq(['partner_area_id' => $shopAreaId]);
+$apr->post('api/approve_request.php', ['action' => 'post', 'id' => $pBulk, 'table' => 'ti', 'value' => 'Y']);
+$bulkFwd = $partnerRow($pBulk);
+check('sem escolha no envio, vale a sugestão com o prazo do pedido', $bulkFwd && (int)$bulkFwd['to_area_id'] === $shopAreaId && $bulkFwd['due_date'] === $future, json_encode($bulkFwd['due_date'] ?? null));
+[$pNo] = $newPartnerReq(['partner_area_id' => $shopAreaId]);
+$apr->post('api/approve_request.php', ['action' => 'post', 'id' => $pNo, 'table' => 'ti', 'value' => 'N', 'reason' => 'Falta informacao']);
+check('recusar o pedido apaga a sugestão, sem parceiro', $partnerRow($pNo) === null && $suggestion($pNo) === 0);
+[$pDel] = $newPartnerReq(['partner_area_id' => $shopAreaId]);
+$sol->post('api/request_actions.php', ['id' => $pDel, 'table' => 'ctd_ti_frm', 'action' => 'delete']);
+check('excluir o pedido apaga a sugestão', $suggestion($pDel) === 0);
+
+// Recusa avisa a coordenação; a coordenação inclui de novo durante o atendimento
+$res = $shop->post('api/request_forwards.php', ['action' => 'refuse', 'forward_id' => (int)$bulkFwd['id'], 'reason' => 'Isso nao passa por Compras']);
+check('parceiro recusa com motivo', ($res['json']['success'] ?? false) === true && str_contains((string)$res['json']['message'], 'coordenação'), snippet($res));
+$res = $apr->get('api/get_notifications.php');
+check('coordenação é avisada da recusa', str_contains((string)json_encode($res['json'], JSON_UNESCAPED_UNICODE), 'recusou ser parceiro em'), mb_substr($res['body'], 0, 200));
+$res = $ti->post('api/request_forwards.php', ['action' => 'add_partner', 'id' => $pBulk, 'table' => 'ti', 'partner_area_id' => $shopAreaId]);
+check('setor responsável não inclui parceiro', ($res['json']['success'] ?? true) === false, snippet($res));
+$res = $sol->post('api/request_forwards.php', ['action' => 'add_partner', 'id' => $pBulk, 'table' => 'ti', 'partner_area_id' => $shopAreaId]);
+check('quem pede não inclui parceiro', $res['status'] === 403, snippet($res));
+$aprSubs = $pdo->query("SELECT id_subdivision FROM cfg_user_subdivision WHERE id_user = $aprId")->fetchAll(PDO::FETCH_COLUMN);
+$pdo->prepare('DELETE FROM cfg_user_subdivision WHERE id_user = ?')->execute([$aprId]);
+$res = $apr->post('api/request_forwards.php', ['action' => 'add_partner', 'id' => $pBulk, 'table' => 'ti', 'partner_area_id' => $shopAreaId]);
+check('coordenação fora da subdivisão não inclui', ($res['json']['success'] ?? true) === false || $res['status'] === 403, snippet($res));
+$ins = $pdo->prepare('INSERT INTO cfg_user_subdivision (id_user, id_subdivision) VALUES (?, ?)');
+foreach ($aprSubs as $subId) {
+    $ins->execute([$aprId, (int)$subId]);
+}
+$res = $apr->post('api/request_forwards.php', ['action' => 'add_partner', 'id' => $pBulk, 'table' => 'ti', 'partner_area_id' => $mktAreaId, 'partner_due' => $later]);
+check('coordenação inclui durante o atendimento', ($res['json']['success'] ?? false) === true && (int)($partnerRow($pBulk)['to_area_id'] ?? 0) === $mktAreaId, snippet($res));
+$res = $apr->post('api/request_forwards.php', ['action' => 'add_partner', 'id' => $pBulk, 'table' => 'ti', 'partner_area_id' => $shopAreaId]);
+check('não inclui com outra parte em aberto', ($res['json']['success'] ?? true) === false, snippet($res));
+$res = $apr->post('api/request_forwards.php', ['action' => 'cancel', 'forward_id' => (int)$partnerRow($pBulk)['id']]);
+check('coordenação tira o parceiro pendente', ($res['json']['success'] ?? false) === true, snippet($res));
+
+// Parceiro que aceitou e não devolve: a coordenação destrava; o principal não
+$res = $apr->post('api/request_forwards.php', ['action' => 'add_partner', 'id' => $pBulk, 'table' => 'ti', 'partner_area_id' => $shopAreaId]);
+$stuck = (int)($partnerRow($pBulk)['id'] ?? 0);
+$shop->post('api/request_forwards.php', ['action' => 'accept', 'forward_id' => $stuck]);
+$ti->post('api/request_actions.php', ['id' => $pBulk, 'table' => 'ctd_ti_frm', 'action' => 'start_progress']);
+$res = $ti->post('api/request_actions.php', ['id' => $pBulk, 'table' => 'ctd_ti_frm', 'action' => 'finish']);
+check('ao concluir, a mensagem diz quem precisa devolver', ($res['json']['success'] ?? true) === false && str_contains((string)($res['json']['message'] ?? ''), 'devolver a parte'), snippet($res));
+$res = $ti->post('api/request_forwards.php', ['action' => 'cancel', 'forward_id' => $stuck]);
+check('principal não tira o parceiro que já aceitou', ($res['json']['success'] ?? true) === false, snippet($res));
+$res = $apr->post('api/request_forwards.php', ['action' => 'cancel', 'forward_id' => $stuck]);
+check('coordenação tira o parceiro que aceitou e não devolve', ($res['json']['success'] ?? false) === true, snippet($res));
+$res = $ti->post('api/request_actions.php', ['id' => $pBulk, 'table' => 'ctd_ti_frm', 'action' => 'finish']);
+check('sem o parceiro, o principal conclui', ($res['json']['success'] ?? false) === true, snippet($res));
+
+// Coordenação só alcança as ações do parceiro, mesmo ligada a um setor
+$res = $apr->post('api/request_forwards.php', ['action' => 'accept', 'forward_id' => $stuck]);
+check('coordenação não aceita parte no lugar do setor', $res['status'] === 403, snippet($res));
+$res = $apr->post('api/request_forwards.php', ['action' => 'forward', 'id' => $pBulk, 'table' => 'ti', 'to_area_id' => $shopAreaId, 'mode' => 'help', 'message' => 'Mensagem de teste suficiente']);
+check('coordenação não encaminha pedido', $res['status'] === 403, snippet($res));
+$res = $apr->get("api/request_forwards.php?action=areas&id=$pBulk&table=ti");
+check('coordenação não consulta o responsável pelos setores do encaminhar', $res['status'] === 403, 'HTTP ' . $res['status']);
+
+// ------------------------------------------------------------------
 section('12. Todas as páginas abrem para cada perfil');
 $pages = ['home', 'new_request', 'myRequests', 'myRequests?tab=concluidas', 'myRequests?q=teste', 'approve', 'approve?q=teste', 'inbox', 'inbox?tab=esperando', 'inbox?tab=historico', 'inbox?q=teste', 'myAccount', 'accounts', 'ajuda', "request_detail?id=$reqId&table=ti", "request_detail?id=$reqId&table=ti&from=inbox&tab=historico", "request_detail?id=$reqId&table=ti&from=approve", 'home?status=C', 'home?q=teste'];
 foreach (['solicitante' => $sol, 'coordenação' => $apr, 'gestor TI' => $ti, 'admin' => $adm] as $who => $client) {
@@ -708,7 +869,7 @@ section('13. Limpeza');
 // O banco remoto fecha conexões ociosas: reconecta antes de limpar
 require dirname(__DIR__) . '/config/conn.php';
 // Inclui sobras de rodadas anteriores interrompidas
-$leftovers = $pdo->query("SELECT 'ti' AS t, id FROM ctd_ti_frm WHERE created_by = $solId AND title IN ('Teste automático <script>x</script>', 'Teste automático urgente', 'Teste regra export pendente', 'Para cancelar', 'Teste repasse', 'Teste ajuda')")->fetchAll(PDO::FETCH_NUM);
+$leftovers = $pdo->query("SELECT 'ti' AS t, id FROM ctd_ti_frm WHERE created_by = $solId AND title IN ('Teste automático <script>x</script>', 'Teste automático urgente', 'Teste regra export pendente', 'Para cancelar', 'Teste repasse', 'Teste ajuda', 'Teste parceiro')")->fetchAll(PDO::FETCH_NUM);
 foreach ($leftovers as $row) {
     $createdIds[] = [$row[0], (int)$row[1]];
 }
@@ -717,7 +878,7 @@ foreach ($createdIds as [$t, $id]) {
         continue;
     }
     $pdo->prepare("DELETE FROM ctd_{$t}_frm WHERE id = ?")->execute([$id]);
-    foreach (['request_comments', 'request_history', 'request_forwards'] as $tbl) {
+    foreach (['request_comments', 'request_history', 'request_forwards', 'request_partner_suggestions'] as $tbl) {
         $pdo->prepare("DELETE FROM $tbl WHERE request_id = ? AND request_table = ?")->execute([$id, $t]);
     }
     $pdo->prepare('DELETE FROM notifications WHERE link = ?')->execute(["request_detail?id=$id&table=$t"]);

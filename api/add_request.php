@@ -3,6 +3,7 @@ require_once __DIR__ . '/../config/session.php';
 require_once __DIR__ . '/../config/conn.php';
 require_once __DIR__ . '/../config/security.php';
 require_once __DIR__ . '/../classes/RequestManager.php';
+require_once __DIR__ . '/../classes/RequestForwardService.php';
 requireLoginJson($pdo);
 requirePostJson();
 
@@ -89,6 +90,12 @@ if ($endDate < new DateTime('today')) {
     fail('A data de entrega não pode ser no passado.');
 }
 
+// Sugestão de setor parceiro (opcional): a coordenação confirma, troca ou tira ao aprovar
+$partnerAreaId = (int)($_POST['partner_area_id'] ?? 0);
+if ($partnerAreaId > 0 && !RequestForwardService::canSuggestPartner($pdo, $sector, $partnerAreaId)) {
+    fail('Escolha como parceiro um setor diferente do que vai atender o pedido.');
+}
+
 // ---- Campos específicos por setor ----
 switch ($sector) {
     case 'service':
@@ -162,6 +169,9 @@ try {
     $userId = (int)$_SESSION['id'];
     $userName = $_SESSION['name'] ?? 'Usuário';
     RequestManager::addHistory($pdo, $newId, $sector, $userId, $userName, 'Requisição criada', null, 'P', 'created');
+    if ($partnerAreaId > 0) {
+        RequestForwardService::saveSuggestion($pdo, $sector, $newId, $partnerAreaId, $userId, $userName);
+    }
     $pdo->commit();
 } catch (Throwable $e) {
     if ($pdo->inTransaction()) {

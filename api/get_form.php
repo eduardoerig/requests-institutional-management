@@ -2,6 +2,7 @@
 require_once __DIR__ . '/../config/session.php';
 require_once __DIR__ . '/../config/conn.php';
 require_once __DIR__ . '/../config/security.php';
+require_once __DIR__ . '/../classes/RequestForwardService.php';
 requireLoginJson($pdo);
 requirePostJson();
 
@@ -37,6 +38,30 @@ $priorityHtml = '
         </div>
     </div>
 ';
+
+// Quem pede pode sugerir um setor parceiro; a coordenação decide ao aprovar
+$formSector = '';
+foreach (sectorRegistry() as $slug => $s) {
+    if ($s['form_file'] === $formName) {
+        $formSector = $slug;
+    }
+}
+$partnerOptions = '';
+foreach (RequestForwardService::availableAreas($pdo, getAreaIdBySector($pdo, $formSector)) as $area) {
+    $partnerOptions .= '<option value="' . (int)$area['id'] . '">' . e($area['label']) . '</option>';
+}
+if ($partnerOptions !== '') {
+    $priorityHtml .= '
+    <details class="form-more">
+        <summary>Outro setor também precisa participar? <small>(opcional)</small></summary>
+        <div class="form-group">
+            <label for="partner_area_id">Qual setor?</label>
+            <select name="partner_area_id" id="partner_area_id"><option value="">Não, só este setor</option>' . $partnerOptions . '</select>
+            <small>A coordenação confirma ou muda quando aprovar o pedido.</small>
+        </div>
+    </details>
+';
+}
 
 if (strpos($formHtml, '<!--PRIORIDADE-->') !== false) {
     $formHtml = str_replace('<!--PRIORIDADE-->', $priorityHtml, $formHtml);

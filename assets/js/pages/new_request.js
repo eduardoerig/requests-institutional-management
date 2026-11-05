@@ -145,11 +145,14 @@
         const due = formatDate(form.querySelector('[name="end"]')?.value);
         const urgent = !!form.querySelector('[name="urgent"]')?.checked;
         const sectorName = chosen.dataset.sectorName || chosen.dataset.label || '';
+        const partner = form.querySelector('[name="partner_area_id"]');
+        const partnerName = partner?.value ? partner.selectedOptions[0]?.textContent || '' : '';
         box.innerHTML =
             '<span class="nr-review__label">Revisão</span>' +
             `<strong class="nr-review__title">Pedido para ${escapeHtml(chosen.dataset.label || sectorName)}</strong>` +
             (title ? `<span class="nr-review__line">${escapeHtml(title)}</span>` : '') +
             (due ? `<span class="nr-review__line">Para ${escapeHtml(due)}${urgent ? ' · <b>urgente</b>' : ''}</span>` : '') +
+            (partnerName ? `<span class="nr-review__line">Sugestão de parceiro: ${escapeHtml(partnerName)}</span>` : '') +
             `<span class="nr-review__text">A coordenação aprova, depois entra na Caixa de ${escapeHtml(sectorName)}. Você recebe um aviso a cada etapa.</span>`;
     }
 

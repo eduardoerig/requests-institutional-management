@@ -148,7 +148,9 @@ try {
             }
             $openForward = RequestForwardService::openForward($pdo, (int)$id, $sector);
             if ($openForward) {
-                throw new UserMessage('Há um encaminhamento em aberto com ' . $openForward['to_label'] . '. Aguarde a resposta ou cancele antes de concluir.');
+                throw new UserMessage(RequestForwardService::isPartner($openForward)
+                    ? 'Aguarde ' . $openForward['to_label'] . ' devolver a parte para concluir. Só a coordenação pode tirar o setor parceiro.'
+                    : 'Há um encaminhamento em aberto com ' . $openForward['to_label'] . '. Aguarde a resposta ou cancele antes de concluir.');
             }
 
             $pdo->beginTransaction();
@@ -236,6 +238,7 @@ try {
             $pdo->prepare("DELETE FROM request_comments WHERE request_id = ? AND request_table = ?")->execute([$id, $sector]);
             $pdo->prepare("DELETE FROM request_history WHERE request_id = ? AND request_table = ?")->execute([$id, $sector]);
             $pdo->prepare("DELETE FROM request_forwards WHERE request_id = ? AND request_table = ?")->execute([$id, $sector]);
+            $pdo->prepare("DELETE FROM request_partner_suggestions WHERE request_id = ? AND request_table = ?")->execute([$id, $sector]);
             $pdo->prepare("DELETE FROM notifications WHERE link = ?")->execute(["request_detail?id=$id&table=$sector"]);
             $pdo->commit();
 
