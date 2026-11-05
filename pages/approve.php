@@ -1,16 +1,15 @@
 <?php
 /**
- * Aprovar pedidos (UI 2.0).
- * Celular: um pedido por vez em cartão grande (urgentes primeiro), progresso "X de Y decididos"
- * e Recusar/Aprovar fixos acima da barra inferior. Computador (≥900px): grade de 3 colunas, faixa
- * vermelha com prioridade e motivo nos urgentes e Recusar | Aprovar no rodapé do cartão.
- * A decisão espera ~5 s com "Desfazer" antes de ir para api/approve_request.php (assets/js/pages/approve.js):
- * no próprio cartão (computador e lista) ou no aviso fixo (celular, um por vez).
- * A aprovação em lote (caixas de seleção + barra de lote do script.js) continua igual.
+ * Aprovar pedidos (UI 2.0, feita para quem aprova sem prática com o sistema).
+ * Lista + painel, como a Caixa do setor: no computador, a lista fica à esquerda e o pedido escolhido
+ * aberto à direita; no celular, o painel é a tela principal (um pedido por vez) e "Ver lista" mostra
+ * todos. O painel diz o que é, quem pediu, quem vai fazer e para quando, e tem Perguntar, Recusar e
+ * Aprovar. Não há decisão em lote: cada pedido é decidido sozinho.
+ * A decisão espera ~5 s com "Desfazer" antes de ir para api/approve_request.php (assets/js/pages/approve.js).
+ * Peças: components/approve_item.php · estilos: assets/css/pages/approve.css
  */
 require_once __DIR__ . '/../classes/RequestInbox.php';
-require_once __DIR__ . '/../components/request_card.php';
-require_once __DIR__ . '/../components/partner_picker.php';
+require_once __DIR__ . '/../components/approve_item.php';
 
 $role = $_SESSION['role'] ?? 'solicitante';
 $isAdmin = isGlobalAdminRole($role);
@@ -30,6 +29,9 @@ $rows = $approvals['rows'];
 $partnerAreas = RequestForwardService::availableAreas($pdo);
 $total = count($approvals['all']);
 $urgentCount = count(array_filter($approvals['all'], fn($r) => !empty($r['is_urgent'])));
+$filtering = $q !== '' || $sector !== '';
+// Com poucos pedidos, busca e filtro só atrapalham
+$showFilters = $total > 5 || $filtering;
 
 $sectors = [];
 foreach ($approvals['all'] as $r) {
@@ -40,17 +42,33 @@ asort($sectors);
 $listParams = array_filter(['setor' => $sector !== '' ? $sector : null, 'q' => $q !== '' ? $q : null]);
 $rowLink = fn(array $row) => 'request_detail?' . http_build_query(['id' => (int)$row['id'], 'table' => $row['table'], 'from' => 'approve'] + $listParams);
 
+// Grupos da lista: urgentes primeiro (a ordem já vem de RequestInbox::approvals)
+$groups = ['urgentes' => [], 'outros' => []];
+foreach ($rows as $row) {
+    $groups[!empty($row['is_urgent']) ? 'urgentes' : 'outros'][] = $row;
+}
+$groupTitles = ['urgentes' => 'Urgentes', 'outros' => 'Esperando decisão'];
+
+$items = [];
+$pos = 0;
+foreach ($rows as $row) {
+    $key = $row['table'] . ':' . (int)$row['id'];
+    $href = $rowLink($row);
+    $items[$key] = ['key' => $key, 'href' => $href, 'ask' => $href . '#perguntar', 'pos' => ++$pos, 'total' => count($rows)];
+}
+
+$waitingText = fn(int $n) => $n === 1 ? '1 pedido esperando sua decisão' : $n . ' pedidos esperando sua decisão';
 ?>
 <div class="page-head page-head--hide-mobile">
     <h1>Aprovar pedidos</h1>
 </div>
 
-<div class="toolbar approve-toolbar" data-sync="approve-sub"<?= $total === 0 ? ' hidden' : '' ?>>
-    <?php // "N aguardando decisão · X enviando · urgentes primeiro"; approve.js atualiza N e X enquanto há decisões esperando o Desfazer ?>
-    <p class="toolbar__text approve-summary" data-approve-summary data-total="<?= $total ?>" aria-live="polite">
-        <strong data-summary-waiting><?= $total ?> aguardando decisão</strong><span class="approve-summary__sending" data-summary-sending hidden></span><?php if ($urgentCount > 0): ?><span> · urgentes primeiro</span><?php endif; ?>
+<div class="toolbar ap-toolbar" data-sync="approve-sub"<?= $total === 0 ? ' hidden' : '' ?>>
+    <?php // approve.js atualiza os números enquanto há decisões esperando o Desfazer ?>
+    <p class="toolbar__text ap-summary" data-approve-summary data-total="<?= $total ?>" data-urgent="<?= $urgentCount ?>" aria-live="polite">
+        <strong data-summary-waiting><?= e($waitingText($total)) ?></strong><span class="ap-summary__urgent" data-summary-urgent<?= $urgentCount ? '' : ' hidden' ?>> · <?= $urgentCount === 1 ? '1 urgente' : $urgentCount . ' urgentes' ?></span><span data-summary-sending hidden></span>
     </p>
-    <?php if ($total > 0): ?>
+    <?php if ($showFilters): ?>
     <form method="get" action="approve" class="toolbar__filters" role="search">
         <?php if (count($sectors) > 1): ?>
             <select name="setor" aria-label="Setor" onchange="this.form.submit()">
@@ -68,48 +86,41 @@ $rowLink = fn(array $row) => 'request_detail?' . http_build_query(['id' => (int)
     <?php endif; ?>
 </div>
 
-<?php if ($rows): ?>
-<div class="approve-progress" data-approve-progress>
-    <div class="approve-progress__row">
-        <span class="approve-progress__text" data-progress-text aria-live="polite">0 de <?= count($rows) ?> decididos</span>
-        <button type="button" class="btn btn--ghost btn--sm approve-progress__toggle" data-deck-toggle aria-pressed="false">Ver todos</button>
-    </div>
-    <div class="approve-progress__track" aria-hidden="true"><span data-progress-bar></span></div>
-</div>
-<?php endif; ?>
-
-<section class="queue approve-deck" data-queue data-approve-deck data-url="<?= e('approve' . ($listParams ? '?' . http_build_query($listParams) : '')) ?>" aria-label="Pedidos aguardando aprovação">
-    <?php if ($q !== '' || $sector !== ''): ?>
-        <p class="queue__note"><?= count($rows) ?> de <?= $total ?> pedidos. <a href="approve">Limpar filtros</a></p>
+<section class="ap-body" data-queue data-url="<?= e('approve' . ($listParams ? '?' . http_build_query($listParams) : '')) ?>" aria-label="Pedidos esperando aprovação">
+    <?php if ($filtering): ?>
+        <p class="ap-note"><?= count($rows) ?> de <?= $total ?> pedidos. <a href="approve">Limpar busca</a></p>
     <?php endif; ?>
     <?php if ($rows): ?>
-        <div class="approve-pickall">
-            <label><input type="checkbox" data-pick-all> Selecionar todos</label>
-            <span class="approve-pickall__hint">para aprovar ou recusar vários de uma vez</span>
+        <div class="ap-cols">
+            <div class="ap-list" data-list>
+                <button type="button" class="btn btn--sm btn--ghost ap-list__back" data-show-panel><i class="fa-solid fa-arrow-left" aria-hidden="true"></i> Voltar ao pedido</button>
+                <?php foreach ($groups as $g => $groupRows): if (!$groupRows) continue; ?>
+                    <section class="ap-group ap-group--<?= e($g) ?>" aria-labelledby="apg-<?= e($g) ?>">
+                        <h2 class="ap-group__title" id="apg-<?= e($g) ?>"><?= e($groupTitles[$g]) ?> <span><?= count($groupRows) ?></span></h2>
+                        <ul class="ap-rows">
+                            <?php foreach ($groupRows as $row): ?>
+                                <?= renderApproveRow($row, $items[$row['table'] . ':' . (int)$row['id']]) ?>
+                            <?php endforeach; ?>
+                        </ul>
+                    </section>
+                <?php endforeach; ?>
+            </div>
+            <div class="ap-panel" data-panel aria-live="polite">
+                <?php foreach ($rows as $row): ?>
+                    <?= renderApproveDetail($row, $items[$row['table'] . ':' . (int)$row['id']], $partnerAreas) ?>
+                <?php endforeach; ?>
+                <?php // Fila vazia nesta visita: enquanto há decisão esperando o Desfazer, ainda não está "em dia" ?>
+                <div class="ap-state" data-approve-wait hidden><i class="fa-regular fa-clock" aria-hidden="true"></i><p>Enviando a última decisão. Ainda dá para desfazer no aviso abaixo.</p></div>
+                <div class="ap-state" data-approve-done hidden><i class="fa-regular fa-circle-check" aria-hidden="true"></i><p><strong>Tudo em dia.</strong> Nenhum pedido esperando sua decisão.</p></div>
+            </div>
         </div>
-        <ul class="approve-list">
-            <?php foreach ($rows as $row): ?>
-                <?= renderApproveCard($row, ['href' => $rowLink($row), 'check' => true, 'partnerAreas' => $partnerAreas]) ?>
-            <?php endforeach; ?>
-        </ul>
-        <p class="approve-next" data-next-hint aria-live="polite"></p>
-        <div class="empty-state approve-done" data-approve-done hidden><i class="fa-regular fa-circle-check" aria-hidden="true"></i><p><strong>Tudo em dia.</strong> Nenhum pedido esperando sua decisão.</p></div>
-        <?= renderBulkBar(['approve' => ['Aprovar', 'btn--primary', 'fa-check'], 'refuse' => ['Recusar', '', 'fa-xmark']]) ?>
     <?php else: ?>
-        <div class="empty-state"><i class="fa-regular fa-circle-check" aria-hidden="true"></i><p><?= $total === 0 ? 'Tudo em dia: nenhum pedido aguardando aprovação. Quando alguém pedir algo, o pedido aparece aqui e você recebe um aviso.' : 'Nada encontrado com esses filtros.' ?></p></div>
+        <div class="empty-state ap-empty"><i class="fa-regular fa-circle-check" aria-hidden="true"></i><p><?= $total === 0 ? '<strong>Tudo em dia.</strong> Nenhum pedido esperando sua decisão. Quando alguém pedir algo, o pedido aparece aqui e você recebe um aviso.' : 'Nada encontrado com essa busca.' ?></p></div>
     <?php endif; ?>
 </section>
 
-<?php if ($rows): ?>
-<!-- Celular: decisão do cartão atual, fixa acima da barra inferior -->
-<div class="approve-dock" data-approve-dock hidden>
-    <button type="button" class="btn approve-dock__refuse" data-dock="refuse">Recusar</button>
-    <button type="button" class="btn btn--primary approve-dock__approve" data-dock="approve">Aprovar</button>
-</div>
-<?php endif; ?>
-
 <!-- Aviso com Desfazer: a decisão só vai para o servidor quando ele some -->
 <div class="undo-toast" data-undo-toast role="status" aria-live="polite" hidden>
-    <span class="undo-toast__text" data-undo-text></span>
+    <span class="undo-toast__text"><span data-undo-text></span><span class="undo-toast__secs" data-undo-secs aria-hidden="true"></span></span>
     <button type="button" class="undo-toast__btn" data-undo>Desfazer</button>
 </div>

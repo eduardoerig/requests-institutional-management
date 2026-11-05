@@ -131,8 +131,28 @@
         }
     }).observe(page, { childList: true, subtree: true });
 
+    // Vindo de "Perguntar" (tela Aprovar, link com #perguntar): abre a conversa já com o campo de
+    // mensagem à vista e focado. No celular, o botão de conversa da barra de baixo troca os botões pelo campo.
+    function openAsk() {
+        if (location.hash !== '#perguntar') return;
+        select('chat', false);
+        var view = page.querySelector('.request-view');
+        var area = view && view.querySelector('[data-chat-form]:not([hidden]) textarea');
+        if (!area) return;
+        area.placeholder = 'Escreva sua dúvida';
+        var toggle = view.querySelector('[data-write-toggle]');
+        var dock = toggle && toggle.closest('.rv-dock');
+        if (toggle && toggle.offsetParent !== null && dock && !dock.classList.contains('is-writing')) {
+            toggle.click(); // script.js abre o campo e foca
+        } else {
+            area.focus({ preventScroll: true });
+            area.scrollIntoView({ block: 'center' });
+        }
+    }
+
     applyAll();
     watchDock();
     markLongAsk();
+    openAsk();
     window.addEventListener('resize', markLongAsk);
 })();

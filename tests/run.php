@@ -724,7 +724,10 @@ check('sugestão gravada, sem encaminhamento ainda', $suggestion($pId) === 1 && 
 $res = $shop->get("api/request_view.php?id=$pId&table=ti");
 check('setor sugerido não vê o pedido antes da aprovação', $res['status'] === 403, 'HTTP ' . $res['status']);
 $res = $apr->get('approve');
-check('Aprovar mostra a sugestão no cartão', str_contains($res['body'], 'como parceiro') && str_contains($res['body'], 'data-partner-picker'), 'HTTP ' . $res['status']);
+check('Aprovar mostra a sugestão numa linha, com a janela para alterar', str_contains($res['body'], 'Também participam') && str_contains($res['body'], 'sugestão de quem pediu')
+    && str_contains($res['body'], 'data-partner-dialog') && str_contains($res['body'], 'data-partner-picker'), 'HTTP ' . $res['status']);
+check('Aprovar não tem decisão em lote', !str_contains($res['body'], 'data-pick') && !str_contains($res['body'], 'data-bulk'), 'HTTP ' . $res['status']);
+check('Aprovar tem Perguntar, que abre a conversa do pedido', str_contains($res['body'], 'request_detail?id=' . $pId . '&amp;table=ti&amp;from=approve#perguntar'), 'HTTP ' . $res['status']);
 
 // Dados inválidos não aprovam
 $res = $apr->post('api/approve_request.php', ['action' => 'post', 'id' => $pId, 'table' => 'ti', 'value' => 'Y', 'partner_area_id' => $tiAreaId]);
@@ -899,7 +902,7 @@ check('segunda sugestão também não pode ser o setor do pedido', ($res['json']
 [$pSug2] = $newPartnerReq(['partner_area_id' => $shopAreaId, 'partner2_area_id' => $mktAreaId]);
 check('quem pede sugere dois setores', $suggestion($pSug2) === 2);
 $res = $apr->get('approve');
-check('Aprovar mostra as duas sugestões', str_contains($res['body'], 'Compras e Marketing como parceiros'), 'HTTP ' . $res['status']);
+check('Aprovar mostra as duas sugestões', str_contains($res['body'], '>Compras e Marketing</span>'), 'HTTP ' . $res['status']);
 $res = $apr->get("request_detail?id=$pSug2&table=ti&from=approve");
 check('página do pedido mostra as duas sugestões', str_contains($res['body'], 'Parceiros sugeridos'), 'HTTP ' . $res['status']);
 $res = $apr->post('api/approve_request.php', ['action' => 'post', 'id' => $pSug2, 'table' => 'ti', 'value' => 'Y']);
