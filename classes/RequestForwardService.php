@@ -15,7 +15,8 @@
  * sem transferência aceita, é o setor original (o setor do formulário).
  *
  * Setor parceiro: uma ajuda (is_partner = 1) incluída pela coordenação, com prazo próprio (due_date).
- * Quem pede só sugere (request_partner_suggestions); o setor só vê o pedido depois da aprovação.
+ * Até MAX_PARTNERS parceiros ao mesmo tempo. Quem pede só sugere (request_partner_suggestions);
+ * o setor só vê o pedido depois da aprovação.
  * O principal segue trabalhando, não desfaz a inclusão e só conclui depois que o parceiro devolver.
  */
 
@@ -25,6 +26,9 @@ require_once __DIR__ . '/../config/security.php';
 class RequestForwardService
 {
     public const MIN_MESSAGE = 10;
+
+    /** Setores parceiros abertos ao mesmo tempo em um pedido, além do principal */
+    public const MAX_PARTNERS = 2;
 
     // Situações de um encaminhamento (request_forwards.status)
     public const ST_PENDING = 'pending';
@@ -197,6 +201,12 @@ class RequestForwardService
         return $row;
     }
 
+    /** Todos os encaminhamentos em aberto: mais de um só acontece com setores parceiros */
+    public static function openForwards(PDO $pdo, int $reqId, string $sector): array
+    {
+        return array_values(array_filter(self::forRequest($pdo, $reqId, $sector), [self::class, 'isOpen']));
+    }
+
     /** Setor responsável agora: destino da última transferência aceita, senão o setor original */
     public static function ownerAreaId(PDO $pdo, int $reqId, string $sector): ?int
     {
@@ -306,6 +316,12 @@ class RequestForwardService
         return self::isPartner($f) && self::isOpen($f) && $due !== '' && $due < date('Y-m-d');
     }
 
+    /** Nomes dos setores para as frases: "Compras" ou "Compras e Marketing" */
+    public static function partnerNames(array $forwards): string
+    {
+        return implode(' e ', array_column($forwards, 'to_label'));
+    }
+
     /** Prazo inicial da parte: o do pedido; se já passou ou não existe, hoje */
     public static function defaultPartnerDue(array $req): string
     {
@@ -330,20 +346,22 @@ class RequestForwardService
             'Sugeriu um setor parceiro', null, self::areaLabel($pdo, $areaId), 'partner_suggested');
     }
 
-    public static function suggestedPartner(PDO $pdo, string $sector, int $reqId): ?int
+    /** Setores sugeridos por quem pediu, sem os que deixaram de valer (setor excluído ou que é o responsável) */
+    public static function suggestedPartners(PDO $pdo, string $sector, int $reqId): array
     {
-        $stmt = $pdo->prepare('SELECT area_id FROM request_partner_suggestions WHERE request_table = ? AND request_id = ?');
+        $stmt = $pdo->prepare('SELECT area_id FROM request_partner_suggestions WHERE request_table = ? AND request_id = ? ORDER BY area_id');
         $stmt->execute([$sector, $reqId]);
-        $areaId = $stmt->fetchColumn();
-        return $areaId ? (int)$areaId : null;
+        $ownerArea = (int)self::ownerAreaId($pdo, $reqId, $sector);
+        return array_values(array_filter(array_map('intval', $stmt->fetchAll(PDO::FETCH_COLUMN)),
+            fn($areaId) => $areaId !== $ownerArea && self::areaSlug($pdo, $areaId) !== null));
     }
 
-    /** Sugestões em lote para a fila de aprovação: "tabela:id" => área. A tabela só guarda pedidos sem decisão. */
+    /** Sugestões em lote para a fila de aprovação: "tabela:id" => [áreas]. A tabela só guarda pedidos sem decisão. */
     public static function suggestionsFor(PDO $pdo): array
     {
         $out = [];
-        foreach ($pdo->query('SELECT request_table, request_id, area_id FROM request_partner_suggestions')->fetchAll(PDO::FETCH_ASSOC) as $s) {
-            $out[$s['request_table'] . ':' . $s['request_id']] = (int)$s['area_id'];
+        foreach ($pdo->query('SELECT request_table, request_id, area_id FROM request_partner_suggestions ORDER BY area_id')->fetchAll(PDO::FETCH_ASSOC) as $s) {
+            $out[$s['request_table'] . ':' . $s['request_id']][] = (int)$s['area_id'];
         }
         return $out;
     }
@@ -354,31 +372,23 @@ class RequestForwardService
     }
 
     /**
-     * Confere a escolha da coordenação. Sem partner_area_id no envio, vale a sugestão de quem pediu;
-     * 0 tira o parceiro. Devolve null (sem parceiro) ou ['area', 'due', 'note']. Dado inválido: UserMessage.
+     * Confere um parceiro escolhido pela coordenação. Sem setor (ou 0): sem parceiro.
+     * Devolve null ou ['area', 'due', 'note']. Dado inválido: UserMessage.
      * @throws UserMessage
      */
     public static function resolvePartnerChoice(PDO $pdo, string $sector, array $req, array $input): ?array
     {
         $reqId = (int)($req['id'] ?? 0);
         $ownerArea = self::ownerAreaId($pdo, $reqId, $sector);
-        if (array_key_exists('partner_area_id', $input)) {
-            $areaId = (int)$input['partner_area_id'];
-            if ($areaId <= 0) {
-                return null;
-            }
-            if (self::areaSlug($pdo, $areaId) === null) {
-                throw new UserMessage('Setor parceiro inválido.');
-            }
-            if ($areaId === (int)$ownerArea) {
-                throw new UserMessage('O setor parceiro precisa ser diferente do setor responsável.');
-            }
-        } else {
-            // A sugestão pode ter ficado sem efeito (setor excluído ou o próprio responsável): segue sem parceiro
-            $areaId = self::suggestedPartner($pdo, $sector, $reqId) ?? 0;
-            if ($areaId <= 0 || self::areaSlug($pdo, $areaId) === null || $areaId === (int)$ownerArea) {
-                return null;
-            }
+        $areaId = (int)($input['partner_area_id'] ?? 0);
+        if ($areaId <= 0) {
+            return null;
+        }
+        if (self::areaSlug($pdo, $areaId) === null) {
+            throw new UserMessage('Setor parceiro inválido.');
+        }
+        if ($areaId === (int)$ownerArea) {
+            throw new UserMessage('O setor parceiro precisa ser diferente do setor responsável.');
         }
 
         $due = trim((string)($input['partner_due'] ?? ''));
@@ -398,6 +408,39 @@ class RequestForwardService
             throw new UserMessage('O recado ao setor parceiro pode ter até 1.000 letras. Encurte o texto e envie de novo.');
         }
         return ['area' => $areaId, 'due' => $due, 'note' => $note];
+    }
+
+    /**
+     * Escolha da aprovação: o primeiro parceiro (partner_*) e o segundo (partner2_*).
+     * Sem partner_area_id no envio, valem as sugestões de quem pediu, com o prazo do pedido; 0 tira o primeiro.
+     * @return array lista com até MAX_PARTNERS itens ['area', 'due', 'note']
+     * @throws UserMessage
+     */
+    public static function resolvePartnerChoices(PDO $pdo, string $sector, array $req, array $input): array
+    {
+        $partners = [];
+        if (!array_key_exists('partner_area_id', $input)) {
+            foreach (self::suggestedPartners($pdo, $sector, (int)($req['id'] ?? 0)) as $areaId) {
+                $partners[] = self::resolvePartnerChoice($pdo, $sector, $req, ['partner_area_id' => $areaId]);
+            }
+            return $partners;
+        }
+        $first = self::resolvePartnerChoice($pdo, $sector, $req, $input);
+        if ($first) {
+            $partners[] = $first;
+        }
+        if (!empty($input['partner2_area_id'])) {
+            $second = self::resolvePartnerChoice($pdo, $sector, $req, [
+                'partner_area_id' => $input['partner2_area_id'],
+                'partner_due' => $input['partner2_due'] ?? '',
+                'partner_note' => $input['partner2_note'] ?? '',
+            ]);
+            if ($first && $first['area'] === $second['area']) {
+                throw new UserMessage('Escolha dois setores parceiros diferentes.');
+            }
+            $partners[] = $second;
+        }
+        return $partners;
     }
 
     /** Grava o parceiro. Roda dentro da transação de quem chama (aprovação ou addPartner). */
@@ -469,9 +512,20 @@ class RequestForwardService
                 $pdo->rollBack();
                 return self::fail('Só dá para incluir um parceiro em pedidos aprovados ou em atendimento. Situação atual: ' . statusLabel($status) . '.');
             }
-            if ($open = self::openForward($pdo, $reqId, $sector)) {
+            $openList = self::openForwards($pdo, $reqId, $sector);
+            foreach ($openList as $open) {
+                if (!self::isPartner($open)) {
+                    $pdo->rollBack();
+                    return self::fail('Este pedido já tem um encaminhamento em aberto com ' . $open['to_label'] . '. Aguarde a resposta.');
+                }
+                if ((int)$open['to_area_id'] === $partner['area']) {
+                    $pdo->rollBack();
+                    return self::fail($open['to_label'] . ' já é setor parceiro deste pedido.');
+                }
+            }
+            if (count($openList) >= self::MAX_PARTNERS) {
                 $pdo->rollBack();
-                return self::fail('Este pedido já tem um encaminhamento em aberto com ' . $open['to_label'] . '. Aguarde a resposta.');
+                return self::fail('Este pedido já tem ' . self::MAX_PARTNERS . ' setores parceiros: ' . self::partnerNames($openList) . '.');
             }
             self::insertPartner($pdo, $sector, $reqId, $partner, $status, $userId, $userName);
             $pdo->commit();

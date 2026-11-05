@@ -1519,6 +1519,10 @@ details.panel[open] > summary::after { transform: rotate(180deg); }
 .partner-picker { display: grid; gap: 10px; }
 .partner-picker__more { display: grid; gap: 10px; }
 .partner-picker__more[hidden] { display: none; }
+.partner-picker__slot { display: grid; gap: 10px; min-width: 0; }
+.partner-picker__slot[hidden], .partner-picker__add[hidden] { display: none; }
+.partner-picker__slot + .partner-picker__slot { padding-top: 10px; border-top: 1px solid var(--linha); }
+.partner-picker__add { justify-self: start; }
 .partner-picker__field { display: grid; gap: 4px; min-width: 0; }
 .partner-picker__field label { font-size: var(--t-sm); font-weight: 600; }
 .partner-picker__field label small { font-weight: 400; color: var(--texto-2); }

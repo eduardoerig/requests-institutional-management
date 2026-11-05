@@ -36,7 +36,8 @@ class RequestChat
         $threads = [];
 
         if ($role === 'solicitante') {
-            $open = $openAreas[0] ?? null; // só um encaminhamento aberto por vez
+            // Com dois parceiros, quem pediu fala só com o responsável: a mensagem não pode chegar a um e não ao outro
+            $open = count($openAreas) === 1 ? $openAreas[0] : null;
             $both = $open ? $ownerLabel . ' e ' . $areaName($open) : '';
             $threads[] = ['key' => 'main', 'label' => 'Com ' . $ownerLabel, 'events' => true,
                 'sources' => array_merge([['public', 0, '', false]], $helperSources),
@@ -49,11 +50,13 @@ class RequestChat
                 'target' => $target('internal', 0, "Quem lê: só os setores. $who não vê esta conversa.", 'Mensagem para ' . $ownerLabel),
                 'empty' => "Nenhuma mensagem com $ownerLabel ainda. Use o campo abaixo para falar com o setor responsável.", 'readHint' => ''];
             foreach (array_intersect($helperAreas, RequestForwardService::userAreaIds($pdo, $viewerId)) as $a) {
-                $open = in_array($a, $openAreas, true);
+                $open = in_array($a, $openAreas, true) && count($openAreas) === 1;
                 $threads[] = ['key' => 'helper-' . $a, 'label' => 'Com ' . $who, 'events' => false, 'sources' => [['helper', $a, '', false]],
                     'target' => $open ? $target('helper', $a, "$who recebe sua mensagem; $ownerLabel também acompanha.", 'Mensagem para ' . $who) : null,
                     'empty' => "Nenhuma mensagem com $who ainda." . ($open ? ' Use o campo abaixo para falar com essa pessoa.' : ''),
-                    'readHint' => 'A ajuda já foi devolvida. Esta conversa fica só para consulta.'];
+                    'readHint' => in_array($a, $openAreas, true)
+                        ? "Com mais de um setor parceiro, $who fala com $ownerLabel. Esta conversa fica só para consulta."
+                        : 'A ajuda já foi devolvida. Esta conversa fica só para consulta.'];
             }
         } else {
             $myAreas = RequestForwardService::userAreaIds($pdo, $viewerId);
@@ -91,7 +94,7 @@ class RequestChat
                 $with = count($helpers) === 1 ? reset($helpers) : 'os setores';
                 // Os encaminhamentos (pediu ajuda, devolveu, transferiu) ficam aqui: $who não vê
                 $threads[] = ['key' => 'internal', 'label' => 'Com ' . $with, 'events' => false, 'fwdEvents' => true, 'sources' => [['internal', 0, '', false]],
-                    'target' => $target('internal', 0, 'Quem lê: ' . implode(' e ', array_unique([$ownerLabel, $with])) . ". $who não vê esta conversa.", 'Mensagem para ' . $with),
+                    'target' => $target('internal', 0, 'Quem lê: ' . implode(' e ', array_unique(array_merge([$ownerLabel], array_values($helpers)))) . ". $who não vê esta conversa.", 'Mensagem para ' . $with),
                     'empty' => "Nenhuma mensagem com $with ainda.", 'readHint' => ''];
             }
         }

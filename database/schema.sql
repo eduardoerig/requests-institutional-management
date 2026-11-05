@@ -223,7 +223,7 @@ CREATE TABLE `request_partner_suggestions` (
   `request_table` varchar(20) COLLATE utf8mb4_unicode_ci NOT NULL COMMENT 'mkt, shop, xerox, service, ti',
   `area_id` int unsigned NOT NULL COMMENT 'FK ctd_area.id — setor sugerido',
   `created_at` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP,
-  PRIMARY KEY (`request_table`,`request_id`)
+  PRIMARY KEY (`request_table`,`request_id`,`area_id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 CREATE TABLE `request_history` (
   `id` int unsigned NOT NULL AUTO_INCREMENT,

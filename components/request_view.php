@@ -106,16 +106,20 @@ function renderRequestView(PDO $pdo, array $req, string $sector, string $context
 
     // Encaminhamentos lidos uma vez; deles saem o responsável atual e o encaminhamento em aberto
     $forwards = RequestForwardService::forRequest($pdo, $reqId, $sector);
-    $open = null;
-    foreach ($forwards as $f) { // do mais antigo ao mais novo: fica o último
-        if (RequestForwardService::isOpen($f)) {
-            $open = $f;
-        }
-    }
+    $openList = array_values(array_filter($forwards, [RequestForwardService::class, 'isOpen'])); // mais de um só com parceiros
     $ownerArea = requestOwnerFromForwards($pdo, $forwards, $sector);
     $req['owner_area_id'] = $ownerArea; // as checagens de permissão abaixo não precisam consultar de novo
     $ownerLabel = RequestForwardService::areaLabel($pdo, $ownerArea);
     $viewerAreas = RequestForwardService::userAreaIds($pdo, $viewerId);
+    // As ações da tela são as do setor de quem vê; a parte que ainda espera aceite vem primeiro
+    $open = $openList ? end($openList) : null;
+    $openMine = array_filter($openList, fn($f) => in_array((int)$f['to_area_id'], $viewerAreas, true)) ?: ($isGlobalAdmin ? $openList : []);
+    foreach ($openMine as $f) {
+        $open = $f;
+        if ($f['status'] === 'pending') {
+            break;
+        }
+    }
 
     // O que esta pessoa pode fazer
     $isOwner = userIsRequestOwner($pdo, $req, $sector, $viewerId, $role);
@@ -131,7 +135,10 @@ function renderRequestView(PDO $pdo, array $req, string $sector, string $context
     // Setor parceiro: decisão da coordenação (o setor responsável não inclui nem tira)
     $openIsPartner = $open && RequestForwardService::isPartner($open);
     $canManagePartner = userCanManageOriginalRequest($pdo, $req, $sector, $viewerId, $role);
-    $canAddPartner = $canManagePartner && in_array($status, ['Y', 'W'], true) && !$open;
+    $openPartners = array_values(array_filter($openList, [RequestForwardService::class, 'isPartner']));
+    $canAddPartner = $canManagePartner && in_array($status, ['Y', 'W'], true)
+        && count($openPartners) === count($openList) && count($openPartners) < RequestForwardService::MAX_PARTNERS;
+    $partnersToRemove = $canManagePartner ? $openPartners : [];
 
     // Conversas separadas (abas): quem pediu × responsável, responsável × quem ajuda, quem pediu × quem ajuda
     $threads = requestChatThreads($pdo, $req, $sector, $viewerId, $chatRole, $forwards, $ownerArea);
@@ -242,11 +249,11 @@ function renderRequestView(PDO $pdo, array $req, string $sector, string $context
     }
     $actionsHtml = implode('', $sideButtons) . $mainButton; // barra do celular: a principal fica à direita, perto do polegar
     $headActionsHtml = $mainButton . implode('', $sideButtons); // cabeçalho (computador): a principal primeiro
-    $canCancelForward = $open && ($openIsPartner ? $canManagePartner : ($open['status'] === 'pending' && $openIsFromMe && !$openIsForMe));
-    $hasMenu = $canReopen || $canCancelForward || $canCancelRequest || $isStaff;
+    $canCancelForward = $open && !$openIsPartner && $open['status'] === 'pending' && $openIsFromMe && !$openIsForMe;
+    $hasMenu = $canReopen || $canCancelForward || $partnersToRemove || $canCancelRequest || $isStaff;
     $asAdmin = $open && $isGlobalAdmin && !in_array((int)$open['to_area_id'], $viewerAreas, true) && !in_array((int)$open['from_area_id'], $viewerAreas, true);
     $guide = $isStaff ? requestStaffGuide([
-        'status' => $status, 'open' => $open, 'openIsForMe' => (bool)$openIsForMe, 'openIsFromMe' => (bool)$openIsFromMe,
+        'status' => $status, 'open' => $open, 'openPartners' => $openPartners, 'openIsForMe' => (bool)$openIsForMe, 'openIsFromMe' => (bool)$openIsFromMe,
         'canApprove' => $canApprove, 'canWork' => $canWork, 'canReopen' => $canReopen, 'canForward' => $canForward,
         'ownerLabel' => $ownerLabel, 'sectorName' => $sectorName, 'asAdmin' => (bool)$asAdmin,
     ]) : '';
@@ -273,20 +280,16 @@ function renderRequestView(PDO $pdo, array $req, string $sector, string $context
         ? '<span class="' . ($lateDays > 0 ? 'rv-late' : '') . '">' . e(date('d/m', strtotime((string)$req['date'])) . ', ' . $weekdays[(int)date('w', strtotime((string)$req['date']))]) . '</span>'
         : 'Sem prazo';
     // Setor parceiro: a parte em andamento (ou a última entregue) e, antes da aprovação, a sugestão
-    $partnerFwd = null;
-    foreach ($forwards as $f) {
-        if (RequestForwardService::isPartner($f) && !in_array($f['status'], ['refused', 'cancelled'], true)) {
-            $partnerFwd = $f;
+    foreach ($forwards as $f) { // do mais antigo ao mais novo: por setor, vale a parte mais recente
+        if (RequestForwardService::isPartner($f) && !in_array($f['status'], ['refused', 'cancelled'], true) && !empty($f['due_date'])) {
+            $partnerLate = RequestForwardService::partnerIsLate($f);
+            $props['Prazo de ' . $f['to_label']] = '<span class="' . ($partnerLate ? 'rv-late' : '') . '">' . e(date('d/m', strtotime((string)$f['due_date'])))
+                . ($partnerLate ? ' · atrasada' : ($f['status'] === 'returned' ? ' · entregue' : '')) . '</span>';
         }
     }
-    if ($partnerFwd && !empty($partnerFwd['due_date'])) {
-        $partnerLate = RequestForwardService::partnerIsLate($partnerFwd);
-        $props['Prazo de ' . $partnerFwd['to_label']] = '<span class="' . ($partnerLate ? 'rv-late' : '') . '">' . e(date('d/m', strtotime((string)$partnerFwd['due_date'])))
-            . ($partnerLate ? ' · atrasada' : ($partnerFwd['status'] === 'returned' ? ' · entregue' : '')) . '</span>';
-    }
-    $suggestedPartner = $status === 'P' ? RequestForwardService::suggestedPartner($pdo, $sector, $reqId) : null;
-    if ($suggestedPartner) {
-        $props['Parceiro sugerido'] = e(RequestForwardService::areaLabel($pdo, $suggestedPartner));
+    $suggestedPartners = $status === 'P' ? RequestForwardService::suggestedPartners($pdo, $sector, $reqId) : [];
+    if ($suggestedPartners) {
+        $props[count($suggestedPartners) > 1 ? 'Parceiros sugeridos' : 'Parceiro sugerido'] = e(implode(' e ', array_map(fn($a) => RequestForwardService::areaLabel($pdo, $a), $suggestedPartners)));
     }
     $props['Aberto em'] = e(date('d/m, H\hi', strtotime((string)$req['created_at'])));
     if (!empty($statusAt['Y'])) {
@@ -353,13 +356,25 @@ function renderRequestView(PDO $pdo, array $req, string $sector, string $context
             $fwdCard = $f;
         }
     }
+    // Com parceiros, um cartão por setor (a parte mais recente de cada um)
+    $fwdCards = $fwdCard ? [$fwdCard] : [];
+    if ($fwdCard && RequestForwardService::isPartner($fwdCard)) {
+        $byArea = [];
+        foreach ($forwards as $f) {
+            if (RequestForwardService::isPartner($f) && $f['status'] !== 'cancelled') {
+                $byArea[(int)$f['to_area_id']] = $f;
+            }
+        }
+        $fwdCards = array_values($byArea);
+    }
     $tabId = 'rv' . $reqId . '-';
     // Coordenação: escolher o parceiro ao aprovar (o botão Aprovar envia) ou incluir durante o atendimento
     $partnerSection = '';
     if ($canApprove || $canAddPartner) {
-        $partnerSection = '<section class="rv-partner card" data-partner-section aria-label="Setor parceiro"><details' . ($suggestedPartner ? ' open' : '') . '>'
-            . '<summary>' . e($canApprove ? ($suggestedPartner ? 'Quem pediu sugeriu um setor parceiro' : 'Outro setor também participa?') : 'Incluir setor parceiro') . '</summary>'
-            . renderPartnerPicker(RequestForwardService::availableAreas($pdo, $ownerArea), 'rv' . $reqId, $suggestedPartner, RequestForwardService::defaultPartnerDue($req), $canApprove ? 'Sem setor parceiro' : 'Escolha o setor')
+        $partnerSection = '<section class="rv-partner card" data-partner-section aria-label="Setor parceiro"><details' . ($suggestedPartners ? ' open' : '') . '>'
+            . '<summary>' . e($canApprove ? ($suggestedPartners ? 'Quem pediu sugeriu ' . (count($suggestedPartners) > 1 ? 'setores parceiros' : 'um setor parceiro') : 'Outro setor também participa?') : ($openPartners ? 'Incluir outro setor parceiro' : 'Incluir setor parceiro')) . '</summary>'
+            . renderPartnerPicker(array_values(array_filter(RequestForwardService::availableAreas($pdo, $ownerArea), fn($a) => !in_array((int)$a['id'], array_map('intval', array_column($openPartners, 'to_area_id')), true))),
+                'rv' . $reqId, $suggestedPartners[0] ?? null, RequestForwardService::defaultPartnerDue($req), $canApprove ? 'Sem setor parceiro' : 'Escolha o setor', $canApprove, $suggestedPartners[1] ?? null)
             . ($canAddPartner ? '<button type="button" class="btn rv-partner__add" onclick="addPartner(' . $reqId . ', \'' . $jsSector . '\', this)"><i class="fa-solid fa-handshake-angle" aria-hidden="true"></i> Incluir setor parceiro</button>' : '')
             . '</details></section>';
     }
@@ -406,8 +421,11 @@ function renderRequestView(PDO $pdo, array $req, string $sector, string $context
                             <button type="button" class="rv-menu-item" onclick="requestAct('reset_status', <?= $reqId ?>, '<?= e($fullTable) ?>')"><i class="fa-solid fa-rotate-left" aria-hidden="true"></i> Reabrir pedido</button>
                         <?php endif; ?>
                         <?php if ($canCancelForward): ?>
-                            <button type="button" class="rv-menu-item" onclick="forwardAct('cancel', <?= (int)$open['id'] ?><?= $openIsPartner ? ", 'partner'" : '' ?>)"><i class="fa-solid fa-ban" aria-hidden="true"></i> <?= $openIsPartner ? 'Tirar setor parceiro' : 'Cancelar envio' ?></button>
+                            <button type="button" class="rv-menu-item" onclick="forwardAct('cancel', <?= (int)$open['id'] ?>)"><i class="fa-solid fa-ban" aria-hidden="true"></i> Cancelar envio</button>
                         <?php endif; ?>
+                        <?php foreach ($partnersToRemove as $f): ?>
+                            <button type="button" class="rv-menu-item" onclick="forwardAct('cancel', <?= (int)$f['id'] ?>, 'partner')"><i class="fa-solid fa-ban" aria-hidden="true"></i> Tirar <?= e($f['to_label']) ?> como parceiro</button>
+                        <?php endforeach; ?>
                         <?php if ($isStaff): ?>
                             <a class="rv-menu-item" href="print_request.php?id=<?= $reqId ?>&table=<?= e($sector) ?>" onclick="return printRequest(event, this.href)"><i class="fa-solid fa-print" aria-hidden="true"></i> Imprimir</a>
                         <?php endif; ?>
@@ -426,8 +444,10 @@ function renderRequestView(PDO $pdo, array $req, string $sector, string $context
     </div>
 </header>
 
-<?php if ($fwdCard): ?>
-    <?= renderForwardCard($fwdCard, $viewerAreas) ?>
+<?php if (count($fwdCards) > 1): ?>
+    <div class="rv-fwds"><?= implode('', array_map(fn($f) => renderForwardCard($f, $viewerAreas), $fwdCards)) ?></div>
+<?php elseif ($fwdCards): ?>
+    <?= renderForwardCard($fwdCards[0], $viewerAreas) ?>
 <?php elseif ($isStaff && $refuseReason !== ''): ?>
     <section class="rv-fwd rv-fwd--bad card" aria-label="Motivo da recusa">
         <p class="rv-fwd__top"><span class="rv-fwd__tag"><i class="fa-solid fa-circle-xmark" aria-hidden="true"></i> Pedido recusado</span></p>

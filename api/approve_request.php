@@ -54,10 +54,10 @@ if ((int)($reqData['created_by'] ?? 0) === (int)$user_id) {
 }
 
 // Setor parceiro: a coordenação confirma, troca ou tira a sugestão de quem pediu
-$partner = null;
+$partners = [];
 if ($value === 'Y') {
     try {
-        $partner = RequestForwardService::resolvePartnerChoice($pdo, $table, $reqData, array_intersect_key($_POST, array_flip(['partner_area_id', 'partner_due', 'partner_note'])));
+        $partners = RequestForwardService::resolvePartnerChoices($pdo, $table, $reqData, array_intersect_key($_POST, array_flip(['partner_area_id', 'partner_due', 'partner_note', 'partner2_area_id', 'partner2_due', 'partner2_note'])));
     } catch (UserMessage $e) {
         jsonResponse(['success' => false, 'message' => $e->getMessage()]);
     }
@@ -86,7 +86,7 @@ try {
         $stmtComment = $pdo->prepare("INSERT INTO request_comments (request_id, request_table, user_id, user_name, comment) VALUES (?, ?, ?, ?, ?)");
         $stmtComment->execute([$id, $table, $user_id, $user_name, ($value === 'N' ? 'Motivo da recusa: ' : 'Observação da aprovação: ') . $reason]);
     }
-    if ($partner) {
+    foreach ($partners as $partner) {
         RequestForwardService::insertPartner($pdo, $table, $id, $partner, 'Y', $user_id, $user_name);
     }
     RequestForwardService::clearSuggestion($pdo, $table, $id);
@@ -159,8 +159,15 @@ foreach ($admins as $admin) {
     }
 }
 
-if ($partner) {
+$partnerLabels = [];
+foreach ($partners as $partner) {
     RequestForwardService::notifyPartnerAdded($pdo, $reqData, $table, $partner, $user_id);
+    $partnerLabels[] = RequestForwardService::areaLabel($pdo, $partner['area']);
 }
+$partnerText = match (count($partnerLabels)) {
+    0 => '',
+    1 => ' ' . $partnerLabels[0] . ' foi chamado como setor parceiro.',
+    default => ' ' . implode(' e ', $partnerLabels) . ' foram chamados como setores parceiros.',
+};
 
-jsonResponse(['success' => true, 'message' => 'Pedido ' . $done . ' com sucesso.' . ($partner ? ' ' . RequestForwardService::areaLabel($pdo, $partner['area']) . ' foi chamado como setor parceiro.' : '')]);
+jsonResponse(['success' => true, 'message' => 'Pedido ' . $done . ' com sucesso.' . $partnerText]);

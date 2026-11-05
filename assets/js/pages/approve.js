@@ -36,7 +36,7 @@
     const beaconed = new Map();  // enviados por sendBeacon (sem resposta): "tabela:id" -> nº do pedido
     const refusing = new Set();  // cartões com o campo do motivo aberto
     const drafts = new Map();    // motivo de recusa sendo escrito: "tabela:id" -> texto
-    const partnerDrafts = new Map(); // setor parceiro mudado no cartão: "tabela:id" -> { area, due, note }
+    const partnerDrafts = new Map(); // setores parceiros mudados no cartão: "tabela:id" -> [{ area, due, note, on }]
     const BEACON_KEY = 'sisreq-approve-beacon';
     const BEACON_SETTLE_MS = 1500; // espera o envio de saída chegar antes de conferir a lista
     let decided = 0;             // decisões tomadas nesta visita (inclui as pendentes)
@@ -326,11 +326,13 @@
             const draft = partnerDrafts.get(keyOf(card));
             const box = $('[data-partner-picker]', card);
             if (!draft || !box) return;
-            $('[data-partner-area]', box).value = draft.area;
-            $('[data-partner-due]', box).value = draft.due;
-            $('[data-partner-note]', box).value = draft.note;
-            const more = $('[data-partner-more]', box);
-            if (more) more.hidden = !draft.area;
+            box.querySelectorAll('[data-partner-slot]').forEach((slot, i) => {
+                slot.hidden = !draft[i].on;
+                $('[data-partner-area]', slot).value = draft[i].area;
+                $('[data-partner-due]', slot).value = draft[i].due;
+                $('[data-partner-note]', slot).value = draft[i].note;
+            });
+            syncPartnerPicker(box);
             const details = box.closest('details');
             if (details) details.open = true;
         });
@@ -427,11 +429,12 @@
     document.addEventListener('input', (e) => {
         const picker = e.target.closest('[data-approve-card] [data-partner-picker]');
         if (picker) {
-            partnerDrafts.set(keyOf(picker.closest('[data-approve-card]')), {
-                area: $('[data-partner-area]', picker).value,
-                due: $('[data-partner-due]', picker).value,
-                note: $('[data-partner-note]', picker).value,
-            });
+            partnerDrafts.set(keyOf(picker.closest('[data-approve-card]')), [...picker.querySelectorAll('[data-partner-slot]')].map(slot => ({
+                area: $('[data-partner-area]', slot).value,
+                due: $('[data-partner-due]', slot).value,
+                note: $('[data-partner-note]', slot).value,
+                on: !slot.hidden,
+            })));
         }
         const input = e.target.closest('[data-refuse-reason]');
         const owner = input && input.closest('[data-approve-card]');

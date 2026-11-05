@@ -90,10 +90,15 @@ if ($endDate < new DateTime('today')) {
     fail('A data de entrega não pode ser no passado.');
 }
 
-// Sugestão de setor parceiro (opcional): a coordenação confirma, troca ou tira ao aprovar
-$partnerAreaId = (int)($_POST['partner_area_id'] ?? 0);
-if ($partnerAreaId > 0 && !RequestForwardService::canSuggestPartner($pdo, $sector, $partnerAreaId)) {
-    fail('Escolha como parceiro um setor diferente do que vai atender o pedido.');
+// Sugestão de setores parceiros (opcional): a coordenação confirma, troca ou tira ao aprovar
+$partnerAreaIds = array_values(array_filter([(int)($_POST['partner_area_id'] ?? 0), (int)($_POST['partner2_area_id'] ?? 0)]));
+foreach ($partnerAreaIds as $partnerAreaId) {
+    if ($partnerAreaId < 0 || !RequestForwardService::canSuggestPartner($pdo, $sector, $partnerAreaId)) {
+        fail('Escolha como parceiro um setor diferente do que vai atender o pedido.');
+    }
+}
+if (count($partnerAreaIds) !== count(array_unique($partnerAreaIds))) {
+    fail('Escolha dois setores parceiros diferentes.');
 }
 
 // ---- Campos específicos por setor ----
@@ -169,7 +174,7 @@ try {
     $userId = (int)$_SESSION['id'];
     $userName = $_SESSION['name'] ?? 'Usuário';
     RequestManager::addHistory($pdo, $newId, $sector, $userId, $userName, 'Requisição criada', null, 'P', 'created');
-    if ($partnerAreaId > 0) {
+    foreach ($partnerAreaIds as $partnerAreaId) {
         RequestForwardService::saveSuggestion($pdo, $sector, $newId, $partnerAreaId, $userId, $userName);
     }
     $pdo->commit();

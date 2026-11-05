@@ -148,8 +148,9 @@ try {
             }
             $openForward = RequestForwardService::openForward($pdo, (int)$id, $sector);
             if ($openForward) {
+                $openList = RequestForwardService::openForwards($pdo, (int)$id, $sector);
                 throw new UserMessage(RequestForwardService::isPartner($openForward)
-                    ? 'Aguarde ' . $openForward['to_label'] . ' devolver a parte para concluir. Só a coordenação pode tirar o setor parceiro.'
+                    ? 'Aguarde ' . RequestForwardService::partnerNames($openList) . (count($openList) > 1 ? ' devolverem as partes' : ' devolver a parte') . ' para concluir. Só a coordenação pode tirar o setor parceiro.'
                     : 'Há um encaminhamento em aberto com ' . $openForward['to_label'] . '. Aguarde a resposta ou cancele antes de concluir.');
             }
 

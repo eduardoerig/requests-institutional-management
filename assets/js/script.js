@@ -1106,9 +1106,8 @@ async function decideRequestNow(value, id, table) {
         });
         if (reason === false) return;
     } else {
-        const select = partnerRoot?.querySelector('[data-partner-area]');
-        const partnerName = select?.value ? select.selectedOptions[0]?.textContent : '';
-        const ok = await showConfirm({ title: 'Aprovar pedido', message: 'O pedido vai para o setor responsável começar o atendimento.' + (partnerName ? ` ${partnerName} é chamado como setor parceiro.` : ''), type: 'success', confirmLabel: 'Aprovar' });
+        const names = partnerNames(partnerRoot);
+        const ok = await showConfirm({ title: 'Aprovar pedido', message: 'O pedido vai para o setor responsável começar o atendimento.' + (names ? ` Setor parceiro: ${names}.` : ''), type: 'success', confirmLabel: 'Aprovar' });
         if (!ok) return;
     }
     const data = await postPedido('api/approve_request.php', { action: 'post', id, table, value, reason, ...(value === 'Y' ? partnerFields(partnerRoot) : {}) });
@@ -1124,19 +1123,65 @@ async function decideRequestNow(value, id, table) {
 function partnerFields(root) {
     const box = root?.querySelector('[data-partner-picker]');
     if (!box) return {};
-    const area = box.querySelector('[data-partner-area]').value;
-    if (!area) return { partner_area_id: '0' };
-    return {
-        partner_area_id: area,
-        partner_due: box.querySelector('[data-partner-due]').value,
-        partner_note: box.querySelector('[data-partner-note]').value.trim(),
-    };
+    const fields = {};
+    [...box.querySelectorAll('[data-partner-slot]')].forEach((slot, i) => {
+        if (slot.hidden) return;
+        const prefix = i === 0 ? 'partner' : 'partner2';
+        const area = slot.querySelector('[data-partner-area]').value;
+        if (!area) {
+            if (i === 0) fields.partner_area_id = '0';
+            return;
+        }
+        fields[`${prefix}_area_id`] = area;
+        fields[`${prefix}_due`] = slot.querySelector('[data-partner-due]').value;
+        fields[`${prefix}_note`] = slot.querySelector('[data-partner-note]').value.trim();
+    });
+    return fields;
+}
+
+/** Nomes dos setores escolhidos: "Compras" ou "Compras e Marketing" */
+function partnerNames(root) {
+    const selects = [...(root?.querySelectorAll('[data-partner-slot]:not([hidden]) [data-partner-area]') || [])];
+    return selects.filter(s => s.value).map(s => s.selectedOptions[0]?.textContent).join(' e ');
+}
+
+/** Liga o seletor ao que foi escolhido: prazo e recado, "Adicionar outro setor" e sem repetir o setor */
+function syncPartnerPicker(box) {
+    const slots = [...box.querySelectorAll('[data-partner-slot]')];
+    const selects = slots.map(s => s.querySelector('[data-partner-area]'));
+    slots.forEach((slot, i) => {
+        const more = slot.querySelector('[data-partner-more]');
+        if (more) more.hidden = !selects[i].value;
+    });
+    selects.forEach(s => [...s.options].forEach(o => {
+        o.disabled = !!o.value && selects.some(other => other !== s && other.value === o.value);
+    }));
+    const add = box.querySelector('[data-partner-add-slot]');
+    if (add) add.hidden = !selects[0].value || !slots[1].hidden;
 }
 
 document.addEventListener('change', (e) => {
-    const select = e.target.closest('[data-partner-area]');
-    const more = select?.closest('[data-partner-picker]').querySelector('[data-partner-more]');
-    if (more) more.hidden = !select.value;
+    const box = e.target.closest('[data-partner-area]')?.closest('[data-partner-picker]');
+    if (box) syncPartnerPicker(box);
+    // Formulário de novo pedido: o segundo setor aparece depois do primeiro e não repete o mesmo
+    const first = e.target.closest('[name="partner_area_id"]');
+    const form = first?.closest('form');
+    const field = form?.querySelector('[data-partner2-field]');
+    if (!field) return;
+    const second = field.querySelector('select');
+    field.hidden = !first.value;
+    if (!first.value || second.value === first.value) second.value = '';
+    [...second.options].forEach(o => { o.disabled = !!o.value && o.value === first.value; });
+});
+
+document.addEventListener('click', (e) => {
+    const btn = e.target.closest('[data-partner-add-slot]');
+    if (!btn) return;
+    const box = btn.closest('[data-partner-picker]');
+    const second = box.querySelectorAll('[data-partner-slot]')[1];
+    second.hidden = false;
+    syncPartnerPicker(box);
+    second.querySelector('[data-partner-area]').focus();
 });
 
 function addPartner(id, table, button) {
@@ -1189,7 +1234,7 @@ async function forwardActNow(action, forwardId, mode = 'help') {
         if (note === false) return;
         fields.note = note;
     } else if (action === 'cancel') {
-        const ok = await showConfirm({ title: mode === 'partner' ? 'Tirar setor parceiro' : 'Cancelar envio', message: mode === 'partner' ? 'O setor parceiro deixa de ver o pedido, e o setor responsável já pode concluir.' : 'O outro setor deixa de ver este encaminhamento.', type: 'warning', confirmLabel: 'Cancelar envio', cancelLabel: 'Voltar' });
+        const ok = await showConfirm({ title: mode === 'partner' ? 'Tirar setor parceiro' : 'Cancelar envio', message: mode === 'partner' ? 'Este setor deixa de ver o pedido, e o setor responsável não precisa mais esperar a parte dele.' : 'O outro setor deixa de ver este encaminhamento.', type: 'warning', confirmLabel: mode === 'partner' ? 'Tirar parceiro' : 'Cancelar envio', cancelLabel: 'Voltar' });
         if (!ok) return;
     }
     const data = await postPedido('api/request_forwards.php', fields);

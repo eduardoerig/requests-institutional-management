@@ -10,7 +10,7 @@ require_once __DIR__ . '/../../classes/RequestForwardService.php';
  * Nomeia o botão a usar; devolve HTML já escapado ('' quando não há nada a dizer).
  */
 /**
- * $c: status, open (encaminhamento em aberto ou null), openIsForMe, openIsFromMe, canApprove, canWork,
+ * $c: status, open (encaminhamento em aberto ou null), openPartners (opcional), openIsForMe, openIsFromMe, canApprove, canWork,
  * canReopen, canForward, ownerLabel, sectorName, asAdmin (opcional).
  */
 function requestStaffGuide(array $c): string
@@ -20,6 +20,7 @@ function requestStaffGuide(array $c): string
         'canApprove' => $canApprove, 'canWork' => $canWork, 'canReopen' => $canReopen, 'canForward' => $canForward,
         'ownerLabel' => $ownerLabel, 'sectorName' => $sectorName, 'asAdmin' => $asAdmin,
     ] = $c + ['asAdmin' => false];
+    $openPartners = $c['openPartners'] ?? [];
     $b = fn(string $label) => '<strong>' . e($label) . '</strong>';
     // Setor parceiro: incluído pela coordenação, então a frase não diz que o setor responsável pediu
     if ($open && RequestForwardService::isPartner($open)) {
@@ -35,7 +36,9 @@ function requestStaffGuide(array $c): string
                 ? 'A coordenação chamou vocês para uma parte deste pedido. Toque em ' . $b('Aceitar a parte') . ' ou recuse dizendo o motivo.'
                 : 'Esta parte é de vocês. Quando terminar, toque em ' . $b('Devolver com retorno') . '.';
         }
-        $state = $pending ? "$to ainda não aceitou a parte." : "$to está fazendo a parte dele.";
+        $state = count($openPartners) > 1
+            ? e(RequestForwardService::partnerNames($openPartners)) . ' têm partes em aberto.'
+            : ($pending ? "$to ainda não aceitou a parte." : "$to está fazendo a parte dele.");
         if ($canWork && $status === 'Y') {
             return "$state Toque em " . $b('Começar atendimento') . ' quando iniciar; dá para concluir depois que devolverem.';
         }

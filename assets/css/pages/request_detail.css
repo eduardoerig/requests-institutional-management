@@ -139,7 +139,8 @@
 .rv2 a.rv-menu-item { text-decoration: none; }
 
 /* Encaminhamento (ajuda ou transferência): o que foi pedido e o que voltou */
-.rv2 > .rv-fwd { display: grid; gap: 12px; padding: 16px; border-radius: var(--r-3); background: var(--superficie); }
+.rv2 > .rv-fwd, .rv-fwds > .rv-fwd { display: grid; gap: 12px; padding: 16px; border-radius: var(--r-3); background: var(--superficie); }
+.rv-fwds { display: grid; gap: 12px; }
 .rv2 > .rv-partner { padding: 12px 16px; border-radius: var(--r-3); background: var(--superficie); }
 .rv-fwd__top { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin: 0; font-size: var(--t-xs); color: var(--texto-2); }
 .rv-fwd__tag { display: inline-flex; align-items: center; gap: 6px; padding: 3px 10px; border-radius: var(--r-pill); background: var(--roxo-claro); color: var(--roxo); font-weight: 600; }
@@ -399,7 +400,7 @@
         row-gap: 16px;
     }
     .rv2 > .rv-head { grid-area: head; }
-    .rv2 > .rv-fwd { grid-area: fwd; }
+    .rv2 > .rv-fwd, .rv2 > .rv-fwds { grid-area: fwd; }
     /* Linha do setor parceiro só existe quando há o bloco: sem ele, a grade não ganha um espaço a mais */
     .detail-page .request-view.rv2:has(> .rv-partner) {
         grid-template-areas: "head side" "fwd side" "partner side" "body side";
@@ -418,7 +419,7 @@
     .rv2 .rv-actions--head .rv-more__menu { left: 0; right: auto; }
     .rv-tabs { display: none; }
 
-    .rv2 > .rv-fwd { padding: 18px 22px; }
+    .rv2 > .rv-fwd, .rv-fwds > .rv-fwd { padding: 18px 22px; }
     .rv2 .rv-talk__head { flex-wrap: nowrap; }
     .rv2 .rv-talk__head .chat-threads { overflow: visible; }
     .rv2 .rv-fwd__cols { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 20px; }

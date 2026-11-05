@@ -125,9 +125,10 @@ $present = function (array $row) use ($cut, $fmtDay, $canBulk): array {
                 $out['check'] = $canBulk ? 'none' : '';
             } elseif ($fwd && RequestForwardService::isPartner($fwd)) {
                 // O principal só conclui depois que o parceiro devolver: sem botão que daria erro
-                $out['next'] = ['Aguardar ' . $fwd['to_label'] . ' para concluir', 'wait'];
+                $names = (string)($row['partner_names'] ?? $fwd['to_label']);
+                $out['next'] = ['Aguardar ' . $names . ' para concluir', 'wait'];
                 $out['status'] = ['andamento', 'Em atendimento'];
-                $out['badge'] = 'Com ' . $fwd['to_label'];
+                $out['badge'] = 'Com ' . $names;
                 $out['check'] = $canBulk ? 'none' : '';
             } else {
                 $out['next'] = ['Concluir', 'go'];

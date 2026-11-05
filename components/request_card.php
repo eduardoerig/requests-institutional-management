@@ -147,7 +147,7 @@ if (!function_exists('renderApproveCard')) {
      * Ações coladas no rodapé (Recusar | Aprovar). Depois de decidir, o próprio cartão mostra
      * "Enviando para ... em N s" com Desfazer (data-card-undo, preenchido por assets/js/pages/approve.js).
      * $opt: href (link do pedido), check (true mostra a caixa de seleção do lote),
-     * partnerAreas (setores para o seletor de parceiro; $row['suggested_partner'] já vem escolhido)
+     * partnerAreas (setores para o seletor de parceiro; $row['suggested_partners'] já vêm escolhidos)
      */
     function renderApproveCard(array $row, array $opt = []): string
     {
@@ -173,19 +173,17 @@ if (!function_exists('renderApproveCard')) {
         $partnerHtml = '';
         if (!empty($opt['partnerAreas'])) {
             $areas = array_values(array_filter($opt['partnerAreas'], fn($a) => $a['slug'] !== $sector));
-            $suggested = !empty($row['suggested_partner']) ? (int)$row['suggested_partner'] : null;
-            $suggestedLabel = '';
+            // Só as sugestões que ainda valem (setor existe e não é o do pedido)
+            $suggested = [];
             foreach ($areas as $a) {
-                if ((int)$a['id'] === $suggested) {
-                    $suggestedLabel = (string)$a['label'];
+                if (in_array((int)$a['id'], $row['suggested_partners'] ?? [], true)) {
+                    $suggested[(int)$a['id']] = (string)$a['label'];
                 }
             }
-            if ($suggestedLabel === '') {
-                $suggested = null;
-            }
+            $suggestedIds = array_keys($suggested);
             $partnerHtml = '<details class="approve-card__partner"' . ($suggested ? ' open' : '') . '>'
-                . '<summary>' . ($suggested ? 'Quem pediu sugeriu ' . e($suggestedLabel) . ' como parceiro' : 'Outro setor também participa?') . '</summary>'
-                . renderPartnerPicker($areas, $uid, $suggested, RequestForwardService::defaultPartnerDue($row))
+                . '<summary>' . ($suggested ? 'Quem pediu sugeriu ' . e(implode(' e ', $suggested)) . ' como ' . (count($suggested) > 1 ? 'parceiros' : 'parceiro') : 'Outro setor também participa?') . '</summary>'
+                . renderPartnerPicker($areas, $uid, $suggestedIds[0] ?? null, RequestForwardService::defaultPartnerDue($row), 'Sem setor parceiro', true, $suggestedIds[1] ?? null)
                 . '</details>';
         }
 

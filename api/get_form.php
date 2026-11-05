@@ -39,7 +39,7 @@ $priorityHtml = '
     </div>
 ';
 
-// Quem pede pode sugerir um setor parceiro; a coordenação decide ao aprovar
+// Quem pede pode sugerir até 2 setores parceiros; a coordenação decide ao aprovar
 $formSector = '';
 foreach (sectorRegistry() as $slug => $s) {
     if ($s['form_file'] === $formName) {
@@ -58,6 +58,10 @@ if ($partnerOptions !== '') {
             <label for="partner_area_id">Qual setor?</label>
             <select name="partner_area_id" id="partner_area_id"><option value="">Não, só este setor</option>' . $partnerOptions . '</select>
             <small>A coordenação confirma ou muda quando aprovar o pedido.</small>
+        </div>
+        <div class="form-group" data-partner2-field hidden>
+            <label for="partner2_area_id">Mais um setor? <small>(opcional)</small></label>
+            <select name="partner2_area_id" id="partner2_area_id"><option value="">Não, só esse</option>' . $partnerOptions . '</select>
         </div>
     </details>
 ';

@@ -145,8 +145,11 @@
         const due = formatDate(form.querySelector('[name="end"]')?.value);
         const urgent = !!form.querySelector('[name="urgent"]')?.checked;
         const sectorName = chosen.dataset.sectorName || chosen.dataset.label || '';
-        const partner = form.querySelector('[name="partner_area_id"]');
-        const partnerName = partner?.value ? partner.selectedOptions[0]?.textContent || '' : '';
+        const partnerName = ['partner_area_id', 'partner2_area_id']
+            .map(name => form.querySelector(`[name="${name}"]`))
+            .filter(select => select?.value)
+            .map(select => select.selectedOptions[0]?.textContent || '')
+            .join(' e ');
         box.innerHTML =
             '<span class="nr-review__label">Revisão</span>' +
             `<strong class="nr-review__title">Pedido para ${escapeHtml(chosen.dataset.label || sectorName)}</strong>` +

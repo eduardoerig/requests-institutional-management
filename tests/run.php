@@ -821,8 +821,6 @@ foreach ($aprSubs as $subId) {
 }
 $res = $apr->post('api/request_forwards.php', ['action' => 'add_partner', 'id' => $pBulk, 'table' => 'ti', 'partner_area_id' => $mktAreaId, 'partner_due' => $later]);
 check('coordenação inclui durante o atendimento', ($res['json']['success'] ?? false) === true && (int)($partnerRow($pBulk)['to_area_id'] ?? 0) === $mktAreaId, snippet($res));
-$res = $apr->post('api/request_forwards.php', ['action' => 'add_partner', 'id' => $pBulk, 'table' => 'ti', 'partner_area_id' => $shopAreaId]);
-check('não inclui com outra parte em aberto', ($res['json']['success'] ?? true) === false, snippet($res));
 $res = $apr->post('api/request_forwards.php', ['action' => 'cancel', 'forward_id' => (int)$partnerRow($pBulk)['id']]);
 check('coordenação tira o parceiro pendente', ($res['json']['success'] ?? false) === true, snippet($res));
 
@@ -847,6 +845,70 @@ $res = $apr->post('api/request_forwards.php', ['action' => 'forward', 'id' => $p
 check('coordenação não encaminha pedido', $res['status'] === 403, snippet($res));
 $res = $apr->get("api/request_forwards.php?action=areas&id=$pBulk&table=ti");
 check('coordenação não consulta o responsável pelos setores do encaminhar', $res['status'] === 403, 'HTTP ' . $res['status']);
+
+// Dois parceiros ao mesmo tempo
+[$pTwo] = $newPartnerReq();
+$res = $apr->post('api/approve_request.php', ['action' => 'post', 'id' => $pTwo, 'table' => 'ti', 'value' => 'Y', 'partner_area_id' => $shopAreaId, 'partner2_area_id' => $shopAreaId]);
+check('dois parceiros iguais são recusados', ($res['json']['success'] ?? true) === false, snippet($res));
+$res = $apr->post('api/approve_request.php', ['action' => 'post', 'id' => $pTwo, 'table' => 'ti', 'value' => 'Y', 'partner_area_id' => $shopAreaId, 'partner_due' => $later, 'partner2_area_id' => $mktAreaId, 'partner2_due' => $future]);
+$twoRows = $pdo->query("SELECT id, to_area_id, due_date FROM request_forwards WHERE request_id = $pTwo AND request_table = 'ti' AND is_partner = 1 ORDER BY id")->fetchAll(PDO::FETCH_ASSOC);
+check('aprovar chama os dois, cada um com seu prazo', ($res['json']['success'] ?? false) === true && count($twoRows) === 2 && $twoRows[0]['due_date'] === $later && $twoRows[1]['due_date'] === $future, snippet($res));
+$row = $inboxRow($tiAreaId, $pTwo);
+check('principal vê os dois parceiros na linha', $row['tab'] === 'comecar' && str_contains((string)$row['context'][0], 'Compras') && str_contains((string)$row['context'][0], 'Marketing'), json_encode($row['context'] ?? null, JSON_UNESCAPED_UNICODE));
+$row = $inboxRow($shopAreaId, $pTwo);
+check('cada parceiro vê a própria parte', $row['tab'] === 'aceitar' && (int)$row['open_forward']['id'] === (int)$twoRows[0]['id'] && substr((string)$row['date'], 0, 10) === $later, json_encode($row['tab']));
+$res = $apr->post('api/request_forwards.php', ['action' => 'add_partner', 'id' => $pTwo, 'table' => 'ti', 'partner_area_id' => (int)$pdo->query("SELECT id FROM ctd_area WHERE LOWER(TRIM(title)) IN ('xerox', 'reprografia') LIMIT 1")->fetchColumn()]);
+check('terceiro parceiro é recusado', ($res['json']['success'] ?? true) === false, snippet($res));
+$res = $ti->post('api/request_forwards.php', ['action' => 'forward', 'id' => $pTwo, 'table' => 'ti', 'to_area_id' => (int)$pdo->query("SELECT id FROM ctd_area WHERE LOWER(TRIM(title)) IN ('xerox', 'reprografia') LIMIT 1")->fetchColumn(), 'mode' => 'help', 'message' => 'Mensagem de teste suficiente']);
+check('principal não pede ajuda com partes em aberto', ($res['json']['success'] ?? true) === false, snippet($res));
+$ti->post('api/request_actions.php', ['id' => $pTwo, 'table' => 'ctd_ti_frm', 'action' => 'start_progress']);
+$shop->post('api/request_forwards.php', ['action' => 'accept', 'forward_id' => (int)$twoRows[0]['id']]);
+$adm->post('api/request_forwards.php', ['action' => 'accept', 'forward_id' => (int)$twoRows[1]['id']]);
+$res = $ti->get("request_detail?id=$pTwo&table=ti");
+check('página mostra uma parte por setor', str_contains($res['body'], 'Parte de Compras') && str_contains($res['body'], 'Parte de Marketing') && str_contains($res['body'], 'Prazo de Marketing'), 'HTTP ' . $res['status']);
+// Conversa: com dois parceiros, quem pede fala só com o responsável
+$res = $sol->post('api/add_comment.php', ['id' => $pTwo, 'table' => 'ti', 'comment' => 'Mensagem com dois parceiros 8842']);
+$lastChannel = (string)$pdo->query("SELECT channel FROM request_comments WHERE request_id = $pTwo AND request_table = 'ti' ORDER BY id DESC LIMIT 1")->fetchColumn();
+check('com dois parceiros, quem pede escreve ao responsável', ($res['json']['success'] ?? false) === true && $lastChannel === 'public', $lastChannel);
+$res = $shop->post('api/add_comment.php', ['id' => $pTwo, 'table' => 'ti', 'comment' => 'Tentativa do parceiro', 'channel' => 'helper', 'area' => $shopAreaId]);
+check('com dois parceiros, o parceiro não escreve a quem pediu', $res['status'] === 403, snippet($res));
+$res = $shop->post('api/add_comment.php', ['id' => $pTwo, 'table' => 'ti', 'comment' => 'Combinando entre os setores 5521', 'channel' => 'internal']);
+check('parceiro escreve na conversa entre setores', ($res['json']['success'] ?? false) === true, snippet($res));
+$res = $ti->get("api/get_comments.php?id=$pTwo&table=ti&thread=internal");
+check('principal lê a conversa entre setores', str_contains($res['body'], '5521'), 'HTTP ' . $res['status']);
+// Só conclui depois que os dois devolverem
+$shop->post('api/request_forwards.php', ['action' => 'return', 'forward_id' => (int)$twoRows[0]['id'], 'note' => 'Parte de Compras feita']);
+$res = $ti->post('api/request_actions.php', ['id' => $pTwo, 'table' => 'ctd_ti_frm', 'action' => 'finish']);
+check('um devolveu: ainda não conclui', ($res['json']['success'] ?? true) === false && str_contains((string)($res['json']['message'] ?? ''), 'Marketing'), snippet($res));
+$res = $adm->post('api/request_forwards.php', ['action' => 'return', 'forward_id' => (int)$twoRows[1]['id'], 'note' => 'Parte de Marketing feita']);
+$res = $ti->post('api/request_actions.php', ['id' => $pTwo, 'table' => 'ctd_ti_frm', 'action' => 'finish']);
+check('os dois devolveram: conclui', ($res['json']['success'] ?? false) === true, snippet($res));
+// Inclusão durante o atendimento até o limite
+[$pAdd] = $newPartnerReq();
+$apr->post('api/approve_request.php', ['action' => 'post', 'id' => $pAdd, 'table' => 'ti', 'value' => 'Y', 'partner_area_id' => $shopAreaId]);
+$res = $apr->post('api/request_forwards.php', ['action' => 'add_partner', 'id' => $pAdd, 'table' => 'ti', 'partner_area_id' => $shopAreaId]);
+check('mesmo setor não entra duas vezes', ($res['json']['success'] ?? true) === false, snippet($res));
+$res = $apr->post('api/request_forwards.php', ['action' => 'add_partner', 'id' => $pAdd, 'table' => 'ti', 'partner_area_id' => $mktAreaId]);
+check('coordenação acrescenta o segundo parceiro no atendimento', ($res['json']['success'] ?? false) === true, snippet($res));
+
+// Quem pede sugere os dois parceiros
+[, $res] = $newPartnerReq(['partner_area_id' => $shopAreaId, 'partner2_area_id' => $shopAreaId]);
+check('quem pede não sugere o mesmo setor duas vezes', ($res['json']['success'] ?? true) === false, snippet($res));
+[, $res] = $newPartnerReq(['partner_area_id' => $shopAreaId, 'partner2_area_id' => $tiAreaId]);
+check('segunda sugestão também não pode ser o setor do pedido', ($res['json']['success'] ?? true) === false, snippet($res));
+[$pSug2] = $newPartnerReq(['partner_area_id' => $shopAreaId, 'partner2_area_id' => $mktAreaId]);
+check('quem pede sugere dois setores', $suggestion($pSug2) === 2);
+$res = $apr->get('approve');
+check('Aprovar mostra as duas sugestões', str_contains($res['body'], 'Compras e Marketing como parceiros'), 'HTTP ' . $res['status']);
+$res = $apr->get("request_detail?id=$pSug2&table=ti&from=approve");
+check('página do pedido mostra as duas sugestões', str_contains($res['body'], 'Parceiros sugeridos'), 'HTTP ' . $res['status']);
+$res = $apr->post('api/approve_request.php', ['action' => 'post', 'id' => $pSug2, 'table' => 'ti', 'value' => 'Y']);
+$sugRows = $pdo->query("SELECT to_area_id FROM request_forwards WHERE request_id = $pSug2 AND request_table = 'ti' AND is_partner = 1")->fetchAll(PDO::FETCH_COLUMN);
+check('sem escolha no envio, valem as duas sugestões', ($res['json']['success'] ?? false) === true && count($sugRows) === 2 && $suggestion($pSug2) === 0, json_encode($sugRows));
+[$pSugOne] = $newPartnerReq(['partner_area_id' => $shopAreaId, 'partner2_area_id' => $mktAreaId]);
+$apr->post('api/approve_request.php', ['action' => 'post', 'id' => $pSugOne, 'table' => 'ti', 'value' => 'Y', 'partner_area_id' => $mktAreaId]);
+$sugRows = $pdo->query("SELECT to_area_id FROM request_forwards WHERE request_id = $pSugOne AND request_table = 'ti' AND is_partner = 1")->fetchAll(PDO::FETCH_COLUMN);
+check('coordenação pode ficar com só uma das sugestões', count($sugRows) === 1 && (int)$sugRows[0] === $mktAreaId, json_encode($sugRows));
 
 // ------------------------------------------------------------------
 section('12. Todas as páginas abrem para cada perfil');
