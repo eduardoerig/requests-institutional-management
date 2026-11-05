@@ -167,6 +167,7 @@ class RequestInbox
 
         // 3) Encaminhamento em aberto e o último enviado por estes setores, por pedido
         $open = [];
+        $openAll = []; // mais de um só com setores parceiros
         $lastSent = [];
         foreach ($myForwards as $f) {
             $key = $f['request_table'] . ':' . $f['request_id'];
@@ -174,6 +175,7 @@ class RequestInbox
             $f['to_label'] = RequestForwardService::areaLabel($pdo, (int)$f['to_area_id']);
             if (RequestForwardService::isOpen($f)) {
                 $open[$key] = $f;
+                $openAll[$key][] = $f;
             }
             if (in_array((int)$f['from_area_id'], $areaIds, true)) {
                 $lastSent[$key] = $f; // fica o mais recente
@@ -189,6 +191,15 @@ class RequestInbox
         foreach ($requests as $key => $row) {
             $isMine = in_array((int)$row['owner_area_id'], $areaIds, true);
             $fwd = $open[$key] ?? null;
+            // Com dois parceiros, vale a parte do meu setor (a que ainda espera aceite primeiro)
+            foreach ($openAll[$key] ?? [] as $f) {
+                if (in_array((int)$f['to_area_id'], $areaIds, true)) {
+                    $fwd = $f;
+                    if ($f['status'] === 'pending') {
+                        break;
+                    }
+                }
+            }
             $toMe = $fwd && in_array((int)$fwd['to_area_id'], $areaIds, true);
             $fromMe = $fwd && in_array((int)$fwd['from_area_id'], $areaIds, true);
             $sent = $lastSent[$key] ?? null;
@@ -197,16 +208,22 @@ class RequestInbox
             if ($fwd) {
                 $row['open_forward'] = $fwd;
             }
+            $isPartner = $fwd && RequestForwardService::isPartner($fwd);
+            // Para o setor parceiro, o prazo que conta é o da parte dele (lista, Atrasados e ordem)
+            if ($toMe && $isPartner && !empty($fwd['due_date'])) {
+                $row['request_date'] = $row['date'];
+                $row['date'] = $fwd['due_date'];
+            }
 
             if ($toMe && $fwd['status'] === 'pending') {
                 $row['group'] = 'chegaram';
-                $row['context'] = [$fwd['from_label'] . ($fwd['mode'] === 'help' ? ' pede ajuda' : ' quer transferir'), 'in'];
+                $row['context'] = [$isPartner ? 'Coordenação chamou vocês' : $fwd['from_label'] . ($fwd['mode'] === 'help' ? ' pede ajuda' : ' quer transferir'), 'in'];
                 $tabs['aceitar'][] = $row;
             } elseif ($toMe) {
                 $row['group'] = 'ajudando';
-                $row['context'] = ['Ajudando ' . $fwd['from_label'], ''];
+                $row['context'] = [($isPartner ? 'Parte de vocês com ' : 'Ajudando ') . $fwd['from_label'], ''];
                 $tabs['andamento'][] = $row;
-            } elseif ($isMine && $fromMe) {
+            } elseif ($isMine && $fromMe && !$isPartner) { // o principal segue com a parte dele: não fica em Esperando
                 $row['group'] = 'esperando';
                 if ($fwd['mode'] === 'transfer') {
                     $row['context'] = ['Aguardando ' . $fwd['to_label'] . ' aceitar', ''];
@@ -219,7 +236,10 @@ class RequestInbox
             } elseif ($isMine && in_array($row['st_raw'], ['Y', 'W'], true)) {
                 $row['group'] = $row['st_raw'] === 'Y' ? 'novos' : 'andamento';
                 $reply = self::replyContext($sent, $recent);
-                if ($reply) {
+                if ($isPartner) {
+                    $row['partner_names'] = RequestForwardService::partnerNames($openAll[$key]);
+                    $row['context'] = self::partnerContext($openAll[$key]);
+                } elseif ($reply) {
                     $row['context'] = $reply;
                 } elseif ($row['group'] === 'andamento' && $row['worker_name'] !== '') {
                     $row['context'] = ['com ' . self::firstName($row['worker_name']), ''];
@@ -495,8 +515,10 @@ class RequestInbox
             $all = array_values(array_filter($all, fn($r) => (int)($r['created_by'] ?? 0) !== $viewerId));
         }
         $today = strtotime(date('Y-m-d'));
+        $suggestions = RequestForwardService::suggestionsFor($pdo);
         foreach ($all as &$r) {
             $r['table'] = requestSlug((string)($r['table'] ?? ''));
+            $r['suggested_partners'] = $suggestions[$r['table'] . ':' . (int)$r['id']] ?? [];
             // Há quanto tempo o pedido espera a decisão
             $days = (int)round(($today - strtotime(date('Y-m-d', strtotime((string)$r['created_at'])))) / 86400);
             $r['context'] = [$days <= 0 ? 'Hoje' : ($days === 1 ? 'Ontem' : 'Há ' . $days . ' dias'), $days >= 3 ? 'in' : ''];
@@ -577,6 +599,23 @@ class RequestInbox
         return array_map('count', $tabs);
     }
 
+    /** Situação do setor parceiro na linha do setor principal: nomeia quem está com a parte */
+    private static function partnerContext(array $forwards): array
+    {
+        $late = array_values(array_filter($forwards, [RequestForwardService::class, 'partnerIsLate']));
+        if (count($late) === 1) {
+            return [$late[0]['to_label'] . ' atrasado desde ' . date('d/m', strtotime((string)$late[0]['due_date'])), 'bad'];
+        }
+        if ($late) {
+            return [RequestForwardService::partnerNames($late) . ' atrasados', 'bad'];
+        }
+        if (count($forwards) > 1) {
+            return ['Aguardando as partes de ' . RequestForwardService::partnerNames($forwards), ''];
+        }
+        $f = $forwards[0];
+        return [$f['status'] === 'pending' ? 'Aguardando ' . $f['to_label'] . ' aceitar a parte' : $f['to_label'] . ' faz a parte dele', ''];
+    }
+
     /** Resposta recente a um encaminhamento feito pelo setor: o pedido voltou com recado */
     private static function replyContext(?array $sent, string $since): ?array
     {
@@ -584,7 +623,7 @@ class RequestInbox
             return null;
         }
         if ($sent['status'] === 'refused') {
-            return [$sent['to_label'] . ' recusou o encaminhamento', 'bad'];
+            return [$sent['to_label'] . (RequestForwardService::isPartner($sent) ? ' recusou ser parceiro' : ' recusou o encaminhamento'), 'bad'];
         }
         if ($sent['status'] === 'returned') {
             return [$sent['to_label'] . ' devolveu a ajuda', 'in'];

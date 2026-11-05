@@ -10,6 +10,7 @@
  */
 require_once __DIR__ . '/../classes/RequestInbox.php';
 require_once __DIR__ . '/../components/request_card.php';
+require_once __DIR__ . '/../components/partner_picker.php';
 
 $role = $_SESSION['role'] ?? 'solicitante';
 $isAdmin = isGlobalAdminRole($role);
@@ -26,6 +27,7 @@ $sector = (string)($_GET['setor'] ?? '');
 $q = mb_substr(trim((string)($_GET['q'] ?? '')), 0, 100);
 $approvals = RequestInbox::approvals($pdo, $subdivisionFilter, $sector, $q, (int)($_SESSION['id'] ?? 0));
 $rows = $approvals['rows'];
+$partnerAreas = RequestForwardService::availableAreas($pdo);
 $total = count($approvals['all']);
 $urgentCount = count(array_filter($approvals['all'], fn($r) => !empty($r['is_urgent'])));
 
@@ -87,7 +89,7 @@ $rowLink = fn(array $row) => 'request_detail?' . http_build_query(['id' => (int)
         </div>
         <ul class="approve-list">
             <?php foreach ($rows as $row): ?>
-                <?= renderApproveCard($row, ['href' => $rowLink($row), 'check' => true]) ?>
+                <?= renderApproveCard($row, ['href' => $rowLink($row), 'check' => true, 'partnerAreas' => $partnerAreas]) ?>
             <?php endforeach; ?>
         </ul>
         <p class="approve-next" data-next-hint aria-live="polite"></p>

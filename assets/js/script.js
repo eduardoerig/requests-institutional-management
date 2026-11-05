@@ -1095,6 +1095,7 @@ function decideRequest(value, id, table) {
 }
 
 async function decideRequestNow(value, id, table) {
+    const partnerRoot = document.querySelector(`.request-view[data-id="${id}"][data-table="${table}"]`);
     let reason = '';
     if (value === 'N') {
         reason = await showConfirm({
@@ -1105,13 +1106,103 @@ async function decideRequestNow(value, id, table) {
         });
         if (reason === false) return;
     } else {
-        const ok = await showConfirm({ title: 'Aprovar pedido', message: 'O pedido vai para o setor responsável começar o atendimento.', type: 'success', confirmLabel: 'Aprovar' });
+        const names = partnerNames(partnerRoot);
+        const ok = await showConfirm({ title: 'Aprovar pedido', message: 'O pedido vai para o setor responsável começar o atendimento.' + (names ? ` Setor parceiro: ${names}.` : ''), type: 'success', confirmLabel: 'Aprovar' });
         if (!ok) return;
     }
-    const data = await postPedido('api/approve_request.php', { action: 'post', id, table, value, reason });
+    const data = await postPedido('api/approve_request.php', { action: 'post', id, table, value, reason, ...(value === 'Y' ? partnerFields(partnerRoot) : {}) });
     if (!data) return;
     showToast(data.message, data.success ? 'success' : 'error');
     if (data.success) await refreshAfterChange({ advance: true, message: data.message });
+}
+
+// ---------------------------------------------------------------------
+// Setor parceiro (components/partner_picker.php)
+// ---------------------------------------------------------------------
+/** Campos do seletor para enviar. Sem seletor: nada (o servidor usa a sugestão). Sem setor: tira o parceiro. */
+function partnerFields(root) {
+    const box = root?.querySelector('[data-partner-picker]');
+    if (!box) return {};
+    const fields = {};
+    [...box.querySelectorAll('[data-partner-slot]')].forEach((slot, i) => {
+        if (slot.hidden) return;
+        const prefix = i === 0 ? 'partner' : 'partner2';
+        const area = slot.querySelector('[data-partner-area]').value;
+        if (!area) {
+            if (i === 0) fields.partner_area_id = '0';
+            return;
+        }
+        fields[`${prefix}_area_id`] = area;
+        fields[`${prefix}_due`] = slot.querySelector('[data-partner-due]').value;
+        fields[`${prefix}_note`] = slot.querySelector('[data-partner-note]').value.trim();
+    });
+    return fields;
+}
+
+/** Nomes dos setores escolhidos: "Compras" ou "Compras e Marketing" */
+function partnerNames(root) {
+    const selects = [...(root?.querySelectorAll('[data-partner-slot]:not([hidden]) [data-partner-area]') || [])];
+    return selects.filter(s => s.value).map(s => s.selectedOptions[0]?.textContent).join(' e ');
+}
+
+/** Liga o seletor ao que foi escolhido: prazo e recado, "Adicionar outro setor" e sem repetir o setor */
+function syncPartnerPicker(box) {
+    const slots = [...box.querySelectorAll('[data-partner-slot]')];
+    const selects = slots.map(s => s.querySelector('[data-partner-area]'));
+    slots.forEach((slot, i) => {
+        const more = slot.querySelector('[data-partner-more]');
+        if (more) more.hidden = !selects[i].value;
+    });
+    selects.forEach(s => [...s.options].forEach(o => {
+        o.disabled = !!o.value && selects.some(other => other !== s && other.value === o.value);
+    }));
+    const add = box.querySelector('[data-partner-add-slot]');
+    if (add) add.hidden = !selects[0].value || !slots[1].hidden;
+}
+
+document.addEventListener('change', (e) => {
+    const box = e.target.closest('[data-partner-area]')?.closest('[data-partner-picker]');
+    if (box) syncPartnerPicker(box);
+    // Formulário de novo pedido: o segundo setor aparece depois do primeiro e não repete o mesmo
+    const first = e.target.closest('[name="partner_area_id"]');
+    const form = first?.closest('form');
+    const field = form?.querySelector('[data-partner2-field]');
+    if (!field) return;
+    const second = field.querySelector('select');
+    field.hidden = !first.value;
+    if (!first.value || second.value === first.value) second.value = '';
+    [...second.options].forEach(o => { o.disabled = !!o.value && o.value === first.value; });
+});
+
+document.addEventListener('click', (e) => {
+    const btn = e.target.closest('[data-partner-add-slot]');
+    if (!btn) return;
+    const box = btn.closest('[data-partner-picker]');
+    const second = box.querySelectorAll('[data-partner-slot]')[1];
+    second.hidden = false;
+    syncPartnerPicker(box);
+    second.querySelector('[data-partner-area]').focus();
+});
+
+function addPartner(id, table, button) {
+    return runPedidoAction(() => addPartnerNow(id, table, button));
+}
+
+async function addPartnerNow(id, table, button) {
+    const root = button.closest('[data-partner-section]');
+    const fields = partnerFields(root);
+    if (!fields.partner_area_id || fields.partner_area_id === '0') {
+        showToast('Escolha o setor parceiro.', 'error');
+        root?.querySelector('[data-partner-area]')?.focus();
+        return;
+    }
+    const name = root.querySelector('[data-partner-area]').selectedOptions[0]?.textContent || 'O setor';
+    const ok = await showConfirm({ title: 'Incluir setor parceiro', message: `${name} recebe um aviso e precisa aceitar a parte. O setor responsável só conclui depois que ${name} devolver.`, type: 'info', confirmLabel: 'Incluir' });
+    if (!ok) return;
+    const data = await postPedido('api/request_forwards.php', { action: 'add_partner', id, table, ...fields });
+    if (!data) return;
+    showToast(data.message, data.success ? 'success' : 'error');
+    if (data.success) await refreshAfterChange({ message: data.message });
 }
 
 function forwardAct(action, forwardId, mode = 'help') {
@@ -1121,13 +1212,16 @@ function forwardAct(action, forwardId, mode = 'help') {
 async function forwardActNow(action, forwardId, mode = 'help') {
     const fields = { action, forward_id: forwardId };
     if (action === 'accept') {
-        const ok = await showConfirm(mode === 'transfer'
+        const ok = await showConfirm(mode === 'partner'
+            ? { title: 'Aceitar a parte', message: 'Seu setor faz esta parte e depois devolve com um retorno. O pedido continua com o setor responsável.', type: 'info', confirmLabel: 'Aceitar a parte' }
+            : mode === 'transfer'
             ? { title: 'Assumir o pedido', message: 'Seu setor passa a cuidar do pedido inteiro e a falar com quem pediu. O setor que enviou só acompanha.', type: 'info', confirmLabel: 'Aceitar e assumir' }
             : { title: 'Aceitar ajuda', message: 'Seu setor faz esta parte e depois devolve com um retorno. O pedido continua com o setor que pediu ajuda.', type: 'info', confirmLabel: 'Aceitar ajuda' });
         if (!ok) return;
     } else if (action === 'refuse') {
         const reason = await showConfirm({
-            title: 'Recusar encaminhamento', message: 'Quem enviou vai receber o motivo.', type: 'error', confirmLabel: 'Recusar', isDanger: true,
+            title: mode === 'partner' ? 'Recusar a parte' : 'Recusar encaminhamento',
+            message: mode === 'partner' ? 'A coordenação e o setor responsável vão receber o motivo.' : 'Quem enviou vai receber o motivo.', type: 'error', confirmLabel: 'Recusar', isDanger: true,
             input: { label: 'Por que não é com vocês? *', placeholder: 'Ex.: isso é com a Manutenção, não com Compras', required: true, minLength: 5 }
         });
         if (reason === false) return;
@@ -1140,7 +1234,7 @@ async function forwardActNow(action, forwardId, mode = 'help') {
         if (note === false) return;
         fields.note = note;
     } else if (action === 'cancel') {
-        const ok = await showConfirm({ title: 'Cancelar envio', message: 'O outro setor deixa de ver este encaminhamento.', type: 'warning', confirmLabel: 'Cancelar envio', cancelLabel: 'Voltar' });
+        const ok = await showConfirm({ title: mode === 'partner' ? 'Tirar setor parceiro' : 'Cancelar envio', message: mode === 'partner' ? 'Este setor deixa de ver o pedido, e o setor responsável não precisa mais esperar a parte dele.' : 'O outro setor deixa de ver este encaminhamento.', type: 'warning', confirmLabel: mode === 'partner' ? 'Tirar parceiro' : 'Cancelar envio', cancelLabel: 'Voltar' });
         if (!ok) return;
     }
     const data = await postPedido('api/request_forwards.php', fields);
@@ -1366,7 +1460,9 @@ document.addEventListener('click', async (e) => {
         count.textContent = `${verb} ${i + 1} de ${n}...`;
         let data;
         if (action === 'approve' || action === 'refuse') {
-            data = await postForm('api/approve_request.php', { action: 'post', id: item.id, table: item.table, value: action === 'approve' ? 'Y' : 'N', reason });
+            // Aprovar em lote respeita o setor parceiro escolhido em cada cartão
+            const card = action === 'approve' ? document.querySelector(`[data-approve-card][data-key="${item.table}:${item.id}"]`) : null;
+            data = await postForm('api/approve_request.php', { action: 'post', id: item.id, table: item.table, value: action === 'approve' ? 'Y' : 'N', reason, ...partnerFields(card) });
         } else {
             data = await postForm('api/request_actions.php', { id: item.id, table: `ctd_${item.table}_frm`, action: action === 'start' ? 'start_progress' : 'finish' });
         }

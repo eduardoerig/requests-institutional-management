@@ -95,6 +95,7 @@
         start: (b) => requestAct('start_progress', b.dataset.id, b.dataset.table),
         finish: (b) => requestAct('finish', b.dataset.id, b.dataset.table),
         accept: (b) => forwardAct('accept', b.dataset.forward, 'help'),
+        partner: (b) => forwardAct('accept', b.dataset.forward, 'partner'),
         assume: (b) => forwardAct('accept', b.dataset.forward, 'transfer'),
         return: (b) => forwardAct('return', b.dataset.forward),
     };

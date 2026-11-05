@@ -146,7 +146,8 @@ if (!function_exists('renderApproveCard')) {
      * Urgente: faixa vermelha no topo com prioridade e motivo; senão, etiqueta da prioridade na linha do nº.
      * Ações coladas no rodapé (Recusar | Aprovar). Depois de decidir, o próprio cartão mostra
      * "Enviando para ... em N s" com Desfazer (data-card-undo, preenchido por assets/js/pages/approve.js).
-     * $opt: href (link do pedido), check (true mostra a caixa de seleção do lote)
+     * $opt: href (link do pedido), check (true mostra a caixa de seleção do lote),
+     * partnerAreas (setores para o seletor de parceiro; $row['suggested_partners'] já vêm escolhidos)
      */
     function renderApproveCard(array $row, array $opt = []): string
     {
@@ -167,6 +168,24 @@ if (!function_exists('renderApproveCard')) {
         $summary = requestSummary($row);
         $uid = $sector . '-' . $id;
         $title = (string)($row['title'] ?? 'Sem título');
+
+        // Setor parceiro: fechado, a não ser que quem pediu tenha sugerido um
+        $partnerHtml = '';
+        if (!empty($opt['partnerAreas'])) {
+            $areas = array_values(array_filter($opt['partnerAreas'], fn($a) => $a['slug'] !== $sector));
+            // Só as sugestões que ainda valem (setor existe e não é o do pedido)
+            $suggested = [];
+            foreach ($areas as $a) {
+                if (in_array((int)$a['id'], $row['suggested_partners'] ?? [], true)) {
+                    $suggested[(int)$a['id']] = (string)$a['label'];
+                }
+            }
+            $suggestedIds = array_keys($suggested);
+            $partnerHtml = '<details class="approve-card__partner"' . ($suggested ? ' open' : '') . '>'
+                . '<summary>' . ($suggested ? 'Quem pediu sugeriu ' . e(implode(' e ', $suggested)) . ' como ' . (count($suggested) > 1 ? 'parceiros' : 'parceiro') : 'Outro setor também participa?') . '</summary>'
+                . renderPartnerPicker($areas, $uid, $suggestedIds[0] ?? null, RequestForwardService::defaultPartnerDue($row), 'Sem setor parceiro', true, $suggestedIds[1] ?? null)
+                . '</details>';
+        }
 
         $html = '<li class="approve-card' . ($urgent ? ' is-urgent' . ($priority >= 4 ? ' is-critical' : '') : '') . '" data-approve-card data-key="' . e($sector) . ':' . $id . '"'
             . ' data-id="' . $id . '" data-table="' . e($sector) . '" data-sector-to="' . e(requestSectorTo($sector)) . '" aria-labelledby="ac-' . e($uid) . '">';
@@ -190,6 +209,7 @@ if (!function_exists('renderApproveCard')) {
             . ($sub !== '' ? ' · ' . e($sub) : '')
             . ' · <span class="approve-card__due' . ($dueKind !== '' ? ' approve-card__due--' . e($dueKind) : '') . '" title="Prazo">' . e(mb_strtolower($due)) . '</span>'
             . '</p>'
+            . $partnerHtml
             . '<div class="approve-card__refuse" data-refuse-box hidden>'
             .   '<label for="rr-' . e($uid) . '">Motivo da recusa <span class="req">*</span> <small>(quem pediu vai ler)</small></label>'
             .   '<input type="text" id="rr-' . e($uid) . '" maxlength="1000" data-refuse-reason autocomplete="off" placeholder="Ex.: já temos esse material no almoxarifado">'

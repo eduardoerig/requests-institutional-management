@@ -4,6 +4,7 @@ require_once __DIR__ . '/../config/conn.php';
 require_once __DIR__ . '/../config/security.php';
 requireLoginJson($pdo);
 require_once __DIR__ . '/../classes/RequestManager.php';
+require_once __DIR__ . '/../classes/RequestForwardService.php';
 
 // Aprovação: administradores globais e administradores de subdivisão (na própria subdivisão)
 $role = $_SESSION['role'] ?? 'solicitante';
@@ -52,6 +53,16 @@ if ((int)($reqData['created_by'] ?? 0) === (int)$user_id) {
     jsonResponse(['success' => false, 'message' => 'Você não pode aprovar nem recusar um pedido feito por você. Outra pessoa da coordenação ou da administração precisa decidir.'], 403);
 }
 
+// Setor parceiro: a coordenação confirma, troca ou tira a sugestão de quem pediu
+$partners = [];
+if ($value === 'Y') {
+    try {
+        $partners = RequestForwardService::resolvePartnerChoices($pdo, $table, $reqData, array_intersect_key($_POST, array_flip(['partner_area_id', 'partner_due', 'partner_note', 'partner2_area_id', 'partner2_due', 'partner2_note'])));
+    } catch (UserMessage $e) {
+        jsonResponse(['success' => false, 'message' => $e->getMessage()]);
+    }
+}
+
 try {
     $pdo->beginTransaction();
     // Guarda de estado: só sai de "Pendente" uma vez (evita duplo clique / dois aprovadores)
@@ -75,6 +86,10 @@ try {
         $stmtComment = $pdo->prepare("INSERT INTO request_comments (request_id, request_table, user_id, user_name, comment) VALUES (?, ?, ?, ?, ?)");
         $stmtComment->execute([$id, $table, $user_id, $user_name, ($value === 'N' ? 'Motivo da recusa: ' : 'Observação da aprovação: ') . $reason]);
     }
+    foreach ($partners as $partner) {
+        RequestForwardService::insertPartner($pdo, $table, $id, $partner, 'Y', $user_id, $user_name);
+    }
+    RequestForwardService::clearSuggestion($pdo, $table, $id);
     $pdo->commit();
 } catch (Throwable $e) {
     if ($pdo->inTransaction()) {
@@ -144,4 +159,15 @@ foreach ($admins as $admin) {
     }
 }
 
-jsonResponse(['success' => true, 'message' => 'Pedido ' . $done . ' com sucesso.']);
+$partnerLabels = [];
+foreach ($partners as $partner) {
+    RequestForwardService::notifyPartnerAdded($pdo, $reqData, $table, $partner, $user_id);
+    $partnerLabels[] = RequestForwardService::areaLabel($pdo, $partner['area']);
+}
+$partnerText = match (count($partnerLabels)) {
+    0 => '',
+    1 => ' ' . $partnerLabels[0] . ' foi chamado como setor parceiro.',
+    default => ' ' . implode(' e ', $partnerLabels) . ' foram chamados como setores parceiros.',
+};
+
+jsonResponse(['success' => true, 'message' => 'Pedido ' . $done . ' com sucesso.' . $partnerText]);

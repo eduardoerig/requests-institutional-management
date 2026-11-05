@@ -10,7 +10,7 @@ require_once __DIR__ . '/../../classes/RequestForwardService.php';
  * Nomeia o botão a usar; devolve HTML já escapado ('' quando não há nada a dizer).
  */
 /**
- * $c: status, open (encaminhamento em aberto ou null), openIsForMe, openIsFromMe, canApprove, canWork,
+ * $c: status, open (encaminhamento em aberto ou null), openPartners (opcional), openIsForMe, openIsFromMe, canApprove, canWork,
  * canReopen, canForward, ownerLabel, sectorName, asAdmin (opcional).
  */
 function requestStaffGuide(array $c): string
@@ -20,7 +20,30 @@ function requestStaffGuide(array $c): string
         'canApprove' => $canApprove, 'canWork' => $canWork, 'canReopen' => $canReopen, 'canForward' => $canForward,
         'ownerLabel' => $ownerLabel, 'sectorName' => $sectorName, 'asAdmin' => $asAdmin,
     ] = $c + ['asAdmin' => false];
+    $openPartners = $c['openPartners'] ?? [];
     $b = fn(string $label) => '<strong>' . e($label) . '</strong>';
+    // Setor parceiro: incluído pela coordenação, então a frase não diz que o setor responsável pediu
+    if ($open && RequestForwardService::isPartner($open)) {
+        $to = e($open['to_label']);
+        $pending = $open['status'] === 'pending';
+        if ($asAdmin) {
+            return $pending
+                ? "A coordenação chamou $to como setor parceiro. Como administração, você pode tocar em " . $b('Aceitar a parte') . " ou recusar no lugar de $to."
+                : "$to está fazendo a parte dele. Como administração, você pode tocar em " . $b('Devolver com retorno') . " no lugar de $to.";
+        }
+        if ($openIsForMe) {
+            return $pending
+                ? 'A coordenação chamou vocês para uma parte deste pedido. Toque em ' . $b('Aceitar a parte') . ' ou recuse dizendo o motivo.'
+                : 'Esta parte é de vocês. Quando terminar, toque em ' . $b('Devolver com retorno') . '.';
+        }
+        $state = count($openPartners) > 1
+            ? e(RequestForwardService::partnerNames($openPartners)) . ' têm partes em aberto.'
+            : ($pending ? "$to ainda não aceitou a parte." : "$to está fazendo a parte dele.");
+        if ($canWork && $status === 'Y') {
+            return "$state Toque em " . $b('Começar atendimento') . ' quando iniciar; dá para concluir depois que devolverem.';
+        }
+        return $canWork ? "$state Sigam com o atendimento; dá para concluir depois que devolverem." : $state;
+    }
     // Administração age no lugar dos setores: a frase diz quem é quem, sem "vocês"
     if ($open && $asAdmin) {
         $from = e($open['from_label']);
@@ -104,7 +127,15 @@ function requestPeople(array $c): array
         $from = (int)$f['from_area_id'];
         $by = (string)($f['responded_by_name'] ?? '');
         $when = $day($f['responded_at'] ?? null);
-        if ($f['mode'] === 'help') {
+        if (RequestForwardService::isPartner($f)) {
+            $due = $day($f['due_date'] ?? null);
+            $role = [
+                'pending' => 'Setor parceiro · aguardando aceite' . ($due ? ' · prazo ' . $due : ''),
+                'accepted' => 'Setor parceiro · fazendo a parte' . ($due ? ' · prazo ' . $due : ''),
+                'returned' => 'Setor parceiro · entregou' . ($when ? ' em ' . $when : ''),
+                'refused' => 'Recusou ser parceiro',
+            ][$f['status']] ?? '';
+        } elseif ($f['mode'] === 'help') {
             $role = [
                 'pending' => 'Chamado para ajudar · aguardando resposta',
                 'accepted' => 'Ajudando agora',
