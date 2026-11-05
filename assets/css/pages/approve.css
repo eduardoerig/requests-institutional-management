@@ -1,179 +1,124 @@
 /* =====================================================================
-   Aprovar pedidos — UI 2.0
-   Celular primeiro: um pedido por vez (cartão grande), progresso e
-   Recusar/Aprovar fixos acima da barra inferior (.bottom-nav).
-   ≥900px: grade de 3 colunas; cada cartão com faixa de urgência, Recusar | Aprovar
-   no rodapé e o Desfazer dentro do próprio cartão.
-   Marcação: components/request_card.php (renderApproveCard); comportamento: assets/js/pages/approve.js
+   Aprovar pedidos — UI 2.0, feita para quem aprova sem prática com o sistema
+   Celular primeiro: o painel do pedido é a tela principal (um por vez) e os botões
+   Perguntar | Recusar | Aprovar ficam presos acima da barra de baixo; "Ver lista" mostra todos.
+   ≥900px: lista à esquerda e o pedido escolhido aberto à direita (como a Caixa do setor).
+   A janela "Alterar" (setores que também participam) é um <dialog>: bottom sheet abaixo de 600px.
+   Marcação: components/approve_item.php · comportamento: assets/js/pages/approve.js
    ===================================================================== */
 
-/* ---------- Linha do topo: "N aguardando decisão · X enviando · urgentes primeiro" ---------- */
-.approve-summary { margin: 0; font-size: var(--t-sm); color: var(--texto-2); }
-.approve-summary strong { color: var(--texto); font-weight: 700; }
-.approve-summary__sending[hidden] { display: none; }
+/* ---------- Topo ---------- */
+.ap-summary { margin: 0; font-size: var(--t-sm); color: var(--texto-2); }
+.ap-summary strong { color: var(--texto); font-weight: 700; }
+.ap-summary__urgent { color: var(--perigo); font-weight: 600; }
+.ap-summary [hidden] { display: none; }
 
-/* ---------- Contêiner: cartões soltos, sem painel ---------- */
-.approve-deck {
-    background: transparent;
-    border: 0;
-    border-radius: 0;
+.ap-note {
+    margin: 0 0 12px;
+    padding: 10px 14px;
+    border: 1px solid var(--linha);
+    border-radius: var(--r-2);
+    background: var(--superficie);
+    font-size: var(--t-sm);
+    color: var(--texto-2);
 }
-.approve-deck > .empty-state {
+.ap-note a { margin-left: 4px; font-weight: 600; color: var(--laranja); }
+
+.ap-body > .ap-empty {
     padding: 48px 20px;
     border: 1px solid var(--linha);
     border-radius: var(--r-3);
     background: var(--superficie);
 }
-.approve-deck > .queue__note {
-    margin-bottom: 12px;
-    padding: 12px 14px;
-    border: 1px solid var(--linha);
-    border-radius: var(--r-2);
-    background: var(--superficie);
-}
 
-/* ---------- Progresso (celular) ---------- */
-.approve-progress { display: grid; gap: 8px; margin-bottom: 14px; }
-.approve-progress__row { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
-.approve-progress__text { font-size: var(--t-sm); font-weight: 600; color: var(--texto-2); font-variant-numeric: tabular-nums; }
-.approve-progress__toggle { min-height: var(--h-md); }
-.approve-progress__track { height: 4px; border-radius: 2px; background: var(--linha); overflow: hidden; }
-.approve-progress__track > span { display: block; width: 0; height: 100%; background: var(--laranja); transition: width var(--dur-2) var(--ease-out); }
-@media (prefers-reduced-motion: reduce) { .approve-progress__track > span { transition: none; } }
+/* ---------- Colunas ---------- */
+.ap-body { scroll-margin-top: calc(var(--topbar-h) + 8px); }
+.ap-cols { display: block; }
+.ap-list { min-width: 0; }
+.ap-list__back { margin: 0 0 10px -8px; }
 
-/* Selecionar todos (lote) */
-.approve-pickall {
+/* ---------- Lista ---------- */
+.ap-group[hidden] { display: none; }
+.ap-group + .ap-group { margin-top: 18px; }
+.ap-group__title {
     display: flex;
-    flex-wrap: wrap;
-    align-items: center;
-    gap: 4px 10px;
-    margin-bottom: 8px;
-    font-size: var(--t-sm);
+    align-items: baseline;
+    gap: 6px;
+    margin: 0 0 8px;
+    padding: 0 4px;
+    font-size: var(--t-xs);
+    font-weight: 700;
+    letter-spacing: .04em;
+    text-transform: uppercase;
+    color: var(--texto-2);
 }
-.approve-pickall label { display: inline-flex; align-items: center; gap: 10px; min-height: var(--h-md); font-weight: 600; cursor: pointer; }
-.approve-pickall input { width: 20px; height: 20px; margin: 0; }
-.approve-pickall__hint { color: var(--texto-2); }
+.ap-group__title span { font-weight: 600; color: var(--texto-3); font-variant-numeric: tabular-nums; }
+.ap-group--urgentes .ap-group__title { color: var(--perigo); }
 
-/* ---------- Cartão ---------- */
-.approve-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 12px; }
-.approve-card {
+.ap-rows { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; }
+
+.ap-row {
     position: relative;
     display: flex;
-    flex-direction: column;
-    min-width: 0;
+    align-items: stretch;
     border: 1px solid var(--linha);
     border-radius: var(--r-2);
     background: var(--superficie);
-    overflow: hidden;
+    transition: background-color var(--dur-1);
 }
-.approve-card[hidden] { display: none; }
-.approve-card:has(input[data-pick]:checked) { border-color: var(--laranja); }
-/* Com pedidos marcados, decide-se pela barra de baixo: os botões de cada cartão saem */
-body.has-bulk .approve-card__actions { display: none; }
-
-/* Faixa de urgência: "Crítica · motivo" */
-.approve-card__urgent {
-    margin: 0;
-    padding: 9px 14px;
-    background: #FEF2F2;
-    border-bottom: 1px solid var(--perigo-claro);
-    color: var(--perigo);
-    font-size: var(--t-xs);
-    line-height: 1.4;
-    overflow-wrap: anywhere;
+.ap-row[hidden] { display: none; }
+/* Marca lateral de urgente */
+.ap-row.is-urgent::before {
+    content: "";
+    position: absolute;
+    inset: 8px auto 8px 0;
+    width: 4px;
+    border-radius: 0 4px 4px 0;
+    background: var(--perigo);
 }
-.approve-card__urgent strong { font-weight: 700; }
 
-.approve-card__body { display: flex; flex-direction: column; gap: 8px; flex: 1; padding: 14px 16px 16px; min-width: 0; }
-
-.approve-card__head { display: flex; align-items: center; gap: 8px; min-width: 0; }
-.approve-card__check {
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    flex: none;
-    width: var(--h-md);
-    height: var(--h-md);
-    margin: -12px -6px -12px -12px;
-    cursor: pointer;
-}
-.approve-card__check input { width: 20px; height: 20px; margin: 0; cursor: pointer; }
-.approve-card__ref {
+.ap-row__link {
+    flex: 1;
     min-width: 0;
-    font-family: ui-monospace, SFMono-Regular, Consolas, monospace;
-    font-size: var(--t-xs);
-    font-weight: 700;
-    color: var(--texto);
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
-}
-.approve-card__prio { margin-left: auto; flex: none; font-size: var(--t-xs); color: var(--texto-2); }
-
-.approve-card__title {
-    font-size: 1.25rem;
-    font-weight: 700;
-    line-height: 1.3;
+    display: grid;
+    gap: 3px;
+    padding: 12px 14px 12px 16px;
     color: var(--texto);
     text-decoration: none;
-    overflow-wrap: anywhere;
+    border-radius: inherit;
 }
-.approve-card__title:hover { color: var(--laranja-escuro); text-decoration: underline; }
-.approve-card__title:focus-visible { outline: none; box-shadow: var(--anel); border-radius: 4px; }
-.approve-card__desc { margin: 0; font-size: 0.9375rem; line-height: 1.5; color: #3F3F46; overflow-wrap: anywhere; }
-
-.approve-card__by { margin: 0; font-size: var(--t-xs); color: var(--texto-2); overflow-wrap: anywhere; }
-.approve-card__by strong { color: var(--texto); font-weight: 700; }
-.approve-card__due--bad { color: var(--perigo); font-weight: 600; }
-.approve-card__due--warn { color: var(--laranja-escuro); font-weight: 600; }
-
-.approve-card__refuse { display: grid; gap: 6px; margin-top: 4px; }
-.approve-card__refuse[hidden] { display: none; }
-.approve-card__refuse label { font-size: var(--t-sm); font-weight: 600; }
-.approve-card__refuse label small { font-weight: 400; color: var(--texto-2); }
-.approve-card__refuse input { min-height: 50px; font-size: 16px; }
-
-/* Rodapé: Recusar | Aprovar colados ao cartão */
-.approve-card__actions {
-    display: grid;
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-    margin-top: auto;
-    border-top: 1px solid var(--linha);
-}
-.approve-card__btn {
-    min-height: 46px;
-    padding: 0 12px;
-    border: 0;
-    background: var(--superficie);
-    color: var(--texto);
-    font: inherit;
-    font-size: var(--t-sm);
+.ap-row__link:focus-visible { outline: none; box-shadow: var(--anel-dentro); }
+.ap-row__top { display: flex; align-items: center; gap: 8px; min-width: 0; }
+.ap-row__title {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
     font-weight: 600;
-    cursor: pointer;
 }
-.approve-card__btn--refuse { border-right: 1px solid var(--linha); }
-.approve-card__btn--refuse:hover { background: var(--fundo-2); }
-.approve-card__btn--approve { background: var(--laranja-claro); color: var(--laranja-escuro); font-weight: 700; }
-.approve-card__btn--approve:hover { background: #FFEDD5; }
-.approve-card__btn:focus-visible { outline: none; box-shadow: var(--anel-dentro); }
-.approve-card.is-refusing .approve-card__btn--refuse { background: var(--perigo); color: var(--texto-inv); }
-.approve-card.is-refusing .approve-card__btn--approve { background: var(--superficie); color: var(--texto); font-weight: 600; }
+.ap-row__sub {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    font-size: var(--t-xs);
+    color: var(--texto-2);
+}
+.ap-row__due { font-size: var(--t-xs); font-weight: 600; color: var(--texto-2); font-variant-numeric: tabular-nums; }
+.ap-row__due--bad { color: var(--perigo); }
+.ap-row__due--warn { color: var(--aviso); }
+.ap-row__due--muted { font-weight: 400; color: var(--texto-3); }
 
-/* Decidido, esperando o Desfazer: cartão apagado, selo, contagem e botão por cima */
-.approve-card.is-pending :is(.approve-card__urgent, .approve-card__body, .approve-card__actions) { opacity: .25; pointer-events: none; }
-.approve-card__undo {
+/* Decidido, esperando o Desfazer: apagado, com selo e o próprio Desfazer */
+.ap-row.is-decided .ap-row__link { opacity: .4; }
+.ap-row__pending {
     position: absolute;
-    inset: 0;
+    inset: 0 10px 0 auto;
     display: flex;
-    flex-direction: column;
     align-items: center;
-    justify-content: center;
     gap: 8px;
-    padding: 16px;
-    text-align: center;
 }
-.approve-card__undo[hidden] { display: none; }
-.approve-card__stamp {
+.ap-row__pending[hidden] { display: none; }
+.ap-row__stamp {
     padding: 2px 8px;
     border-radius: 6px;
     background: var(--ok-claro);
@@ -181,65 +126,180 @@ body.has-bulk .approve-card__actions { display: none; }
     font-size: var(--t-xs);
     font-weight: 700;
 }
-.approve-card.is-pending--refuse .approve-card__stamp { background: var(--perigo-claro); color: var(--perigo); }
-.approve-card__sending { font-size: var(--t-sm); color: var(--texto); font-variant-numeric: tabular-nums; }
-.approve-card__sending strong { font-weight: 700; }
-.approve-card__undo-btn { min-height: 38px; padding: 0 16px; border-color: var(--grafite); font-weight: 700; background: var(--superficie); }
+.ap-row.is-decided--refuse .ap-row__stamp { background: var(--perigo-claro); color: var(--perigo); }
+.ap-row__secs { min-width: 2.2em; font-size: var(--t-xs); font-weight: 700; color: var(--texto-2); font-variant-numeric: tabular-nums; }
+.undo-toast__secs { font-weight: 400; opacity: .8; font-variant-numeric: tabular-nums; }
+.ap-row__undo {
+    min-height: var(--h-sm);
+    padding: 0 12px;
+    border: 1px solid var(--grafite);
+    border-radius: var(--r-1);
+    background: var(--superficie);
+    color: var(--texto);
+    font: inherit;
+    font-size: var(--t-xs);
+    font-weight: 700;
+    cursor: pointer;
+}
+.ap-row__undo:focus-visible { outline: none; box-shadow: var(--anel); }
 
-.approve-next { margin: 10px 0 0; font-size: var(--t-xs); color: var(--texto-2); text-align: center; }
-.approve-next:empty { display: none; }
-.approve-done[hidden] { display: none; }
-.approve-done { padding: 48px 20px; border: 1px solid var(--linha); border-radius: var(--r-3); background: var(--superficie); }
-
-/* ---------- Celular, um por vez ---------- */
-.approve-dock { display: none; }
-@media (max-width: 899.98px) {
-    .approve-card { border-radius: 18px; }
-    /* Na lista ("Ver todos") o resumo fica em 2 linhas; um por vez mostra tudo */
-    .approve-deck:not(.is-deck) .approve-card__desc {
-        display: -webkit-box;
-        -webkit-line-clamp: 2;
-        -webkit-box-orient: vertical;
-        overflow: hidden;
-    }
-    .approve-deck.is-deck .approve-card:not(.is-current) { display: none; }
-    .approve-deck.is-deck .approve-card__actions,
-    .approve-deck.is-deck .approve-card__check,
-    .approve-deck.is-deck .approve-pickall { display: none; }
-    .approve-deck.is-deck .approve-card__body { padding: 18px; gap: 12px; }
-    .approve-deck.is-deck .approve-card__by { font-size: var(--t-sm); }
-    /* Espaço para a barra de decisão fixa */
-    .approve-deck.is-deck { margin-bottom: 96px; }
-
-    .approve-dock:not([hidden]) {
-        position: fixed;
-        left: 0;
-        right: 0;
-        bottom: calc(var(--bottomnav-h) + env(safe-area-inset-bottom));
-        z-index: 44;
-        display: grid;
-        grid-template-columns: repeat(2, minmax(0, 1fr));
-        gap: 10px;
-        padding: 12px 16px;
-        background: var(--superficie);
-        border-top: 1px solid var(--linha);
-    }
-    .approve-dock .btn { min-height: 56px; border-radius: 14px; font-size: var(--t-md); }
-    .approve-dock__approve.btn--primary { background: var(--laranja-claro); border-color: var(--laranja-borda); color: var(--laranja-escuro); font-weight: 700; }
-    .approve-dock__approve.btn--primary:hover { background: #FFEDD5; border-color: var(--laranja-borda); }
-    .approve-dock.is-refusing .approve-dock__refuse { background: var(--perigo); border-color: var(--perigo); color: var(--texto-inv); }
-    .approve-dock.is-refusing .approve-dock__approve { background: var(--superficie); border-color: var(--linha-forte); color: var(--texto); }
-    /* Barra de lote no lugar da barra de decisão */
-    body.has-bulk .approve-dock { display: none; }
-    body.has-bulk .approve-deck { margin-bottom: 150px; }
+/* Etiqueta de urgência (pedido normal não ganha etiqueta) */
+.ap-tag {
+    flex: none;
+    padding: 1px 8px;
+    border-radius: var(--r-pill);
+    background: var(--perigo-claro);
+    color: var(--perigo);
+    font-size: 12px;
+    font-weight: 700;
 }
 
-/* ---------- Aviso com Desfazer (só celular, um por vez) ---------- */
+/* ---------- Painel do pedido ---------- */
+.ap-detail {
+    display: grid;
+    gap: 14px;
+    padding: 16px 18px 20px;
+    border: 1px solid var(--linha);
+    border-radius: 18px;
+    background: var(--superficie);
+    scroll-margin-top: calc(var(--topbar-h) + 12px);
+}
+.ap-detail[hidden] { display: none; }
+
+.ap-detail__bar { display: flex; align-items: center; gap: 8px; min-height: var(--h-sm); }
+.ap-detail__list { margin-left: -8px; }
+.ap-detail__pos { font-size: var(--t-sm); font-weight: 600; color: var(--texto-2); font-variant-numeric: tabular-nums; }
+.ap-detail__pager { display: flex; gap: 2px; margin-left: auto; }
+.ap-detail__pager .btn { min-width: var(--h-md); padding: 0 10px; }
+.ap-detail__pager .btn:disabled { opacity: .35; cursor: default; }
+
+.ap-urgent {
+    margin: 0;
+    padding: 10px 12px;
+    border-left: 4px solid var(--perigo);
+    border-radius: 0 var(--r-1) var(--r-1) 0;
+    background: #FEF2F2;
+    color: #991B1B;
+    font-size: var(--t-sm);
+    line-height: 1.45;
+    overflow-wrap: anywhere;
+}
+.ap-urgent strong { font-weight: 700; }
+
+.ap-detail__title { margin: 0; font-size: var(--t-xl); line-height: 1.25; font-weight: 700; overflow-wrap: anywhere; }
+.ap-detail__title:focus { outline: none; }
+.ap-detail__title:focus-visible { box-shadow: var(--anel); border-radius: 4px; }
+.ap-detail__who { margin: -6px 0 0; font-size: var(--t-sm); color: var(--texto-2); overflow-wrap: anywhere; }
+.ap-detail__who strong { color: var(--texto); font-weight: 600; }
+
+/* O que é, quem faz, para quando */
+.ap-facts { display: grid; gap: 14px; margin: 0; padding: 14px 0 0; border-top: 1px solid var(--linha); }
+.ap-facts > div { display: grid; gap: 3px; min-width: 0; }
+.ap-facts dt { font-size: var(--t-xs); font-weight: 600; color: var(--texto-2); }
+.ap-facts dd { margin: 0; font-size: var(--t-md); line-height: 1.5; overflow-wrap: anywhere; }
+.ap-text { margin: 0; white-space: pre-line; }
+.ap-more { display: inline-block; margin-top: 4px; font-size: var(--t-sm); font-weight: 600; color: var(--laranja-escuro); }
+.ap-due--bad { color: var(--perigo); font-weight: 700; }
+.ap-due--warn { color: var(--aviso); font-weight: 700; }
+.ap-due--muted { color: var(--texto-3); }
+
+.ap-partners dd { display: flex; flex-wrap: wrap; align-items: center; gap: 2px 10px; }
+.ap-partners__names { font-weight: 700; }
+.ap-partners__origin { font-size: var(--t-xs); color: var(--texto-2); }
+.ap-partners [hidden] { display: none; }
+.ap-link {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    min-height: var(--h-sm);
+    padding: 0 2px;
+    border: 0;
+    background: transparent;
+    color: var(--laranja-escuro);
+    font: inherit;
+    font-size: var(--t-sm);
+    font-weight: 700;
+    text-decoration: underline;
+    text-underline-offset: 3px;
+    cursor: pointer;
+}
+.ap-link:hover { color: var(--laranja); }
+.ap-link:focus-visible { outline: none; box-shadow: var(--anel); border-radius: 4px; }
+
+/* O que acontece ao aprovar */
+.ap-detail__hint { margin: 0; font-size: var(--t-sm); color: var(--texto-2); line-height: 1.45; }
+
+/* Perguntar | Recusar | Aprovar: só Aprovar tem a cor cheia */
+.ap-actions {
+    display: grid;
+    grid-template-columns: minmax(0, .95fr) minmax(0, 1fr) minmax(0, 1.3fr);
+    gap: 8px;
+}
+.ap-actions .btn { min-height: var(--h-lg); padding: 0 10px; font-size: var(--t-md); font-weight: 600; white-space: nowrap; }
+.ap-actions__ask { border-color: transparent; background: var(--fundo); color: var(--texto); text-decoration: none; }
+.ap-actions__ask:hover { background: var(--fundo-2); }
+.ap-actions__refuse:hover { border-color: var(--perigo); background: var(--perigo-claro); color: var(--perigo); }
+.ap-actions__approve { font-weight: 700; }
+
+/* Fila vazia nesta visita (enviando a última decisão / tudo em dia) */
+.ap-state {
+    display: grid;
+    justify-items: center;
+    gap: 10px;
+    padding: 44px 20px;
+    border: 1px solid var(--linha);
+    border-radius: 18px;
+    background: var(--superficie);
+    color: var(--texto-2);
+    text-align: center;
+}
+.ap-state[hidden] { display: none; }
+.ap-state i { font-size: 2rem; color: var(--ok); }
+.ap-state p { margin: 0; max-width: 34ch; }
+.ap-state strong { color: var(--texto); }
+
+/* ---------- Janela "Setores que também participam" ---------- */
+.ap-sheet {
+    width: min(480px, calc(100% - 32px));
+    max-width: none;
+    max-height: min(90vh, 760px);
+    padding: 0;
+    border: 0;
+    border-radius: var(--r-3);
+    background: var(--superficie);
+    color: var(--texto);
+    box-shadow: var(--sombra-2);
+    overflow: auto;
+}
+.ap-sheet::backdrop { background: var(--veu); }
+.ap-sheet[open] { animation: modal-in var(--dur-2) var(--ease-out); }
+.ap-sheet__card { display: grid; gap: 14px; padding: 22px 22px 20px; }
+.ap-sheet__title { margin: 0; font-size: var(--t-lg); font-weight: 700; }
+.ap-sheet__lead { margin: -6px 0 0; font-size: var(--t-sm); color: var(--texto-2); line-height: 1.5; }
+.ap-sheet__actions { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; padding-top: 4px; }
+.ap-sheet__actions .btn { min-height: var(--h-md); }
+.ap-sheet .field-error[hidden] { display: none; }
+.ap-sheet .partner-picker__slot + .partner-picker__slot { padding-top: 14px; }
+.ap-sheet .partner-picker__remove { justify-self: start; margin-left: -10px; color: var(--perigo); }
+.ap-sheet .partner-picker__add { margin-left: -10px; }
+@media (max-width: 599.98px) {
+    .ap-sheet {
+        width: 100%;
+        max-height: 92vh;
+        margin: auto 0 0;
+        border-radius: var(--r-3) var(--r-3) 0 0;
+    }
+    .ap-sheet[open] { animation-name: folha-in; }
+    .ap-sheet__card { padding: 20px 16px calc(20px + env(safe-area-inset-bottom)); }
+}
+@media (prefers-reduced-motion: reduce) { .ap-sheet[open] { animation: none; } }
+
+/* ---------- Aviso com Desfazer ---------- */
 .undo-toast {
     position: fixed;
     left: 16px;
     right: 16px;
-    bottom: calc(var(--bottomnav-h) + env(safe-area-inset-bottom) + 92px);
+    bottom: calc(var(--bottomnav-h) + env(safe-area-inset-bottom) + 88px);
     z-index: 121;
     display: flex;
     align-items: center;
@@ -268,29 +328,101 @@ body.has-bulk .approve-card__actions { display: none; }
 }
 .undo-toast__btn:hover { background: rgb(255 255 255 / .08); }
 .undo-toast__btn:focus-visible { outline: none; box-shadow: var(--anel); }
-/* Sem a barra de decisão (lista ou lote), o aviso desce */
+/* Sem os botões presos embaixo (lista à vista), o aviso desce */
 .undo-toast.is-low { bottom: calc(var(--bottomnav-h) + env(safe-area-inset-bottom) + 12px); }
 
-/* ---------- Computador: grade de 3 colunas ---------- */
+/* ---------- Celular: painel ou lista ---------- */
+@media (max-width: 899.98px) {
+    /* Busca e filtro só junto da lista; no pedido aberto, o pedido vem primeiro */
+    body:not(.ap-list-open) .ap-toolbar .toolbar__filters { display: none; }
+    .ap-body:not(.is-list) .ap-list { display: none; }
+    .ap-body.is-list .ap-panel { display: none; }
+
+    /* Botões do pedido aberto presos acima da barra de baixo; o painel guarda o espaço deles */
+    .ap-body:not(.is-list) .ap-panel { padding-bottom: 84px; }
+    .ap-body:not(.is-list) .ap-detail:not([hidden]) .ap-actions {
+        position: fixed;
+        left: 0;
+        right: 0;
+        bottom: calc(var(--bottomnav-h) + env(safe-area-inset-bottom));
+        z-index: 44;
+        padding: 10px 16px;
+        background: var(--superficie);
+        border-top: 1px solid var(--linha);
+    }
+    .ap-actions .btn { border-radius: 14px; }
+}
+@media (max-width: 379.98px) {
+    .ap-actions { gap: 6px; }
+    .ap-actions .btn { padding: 0 6px; font-size: var(--t-sm); }
+}
+
+/* ---------- Computador: lista | painel ---------- */
 @media (min-width: 900px) {
-    .approve-progress { display: none; }
-    .approve-list { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 14px; }
-    .approve-card__body { gap: 6px; padding: 12px 14px 14px; }
-    .approve-card__title { font-size: 0.9375rem; line-height: 1.35; }
-    .approve-card__desc {
-        font-size: var(--t-xs);
-        line-height: 1.5;
-        display: -webkit-box;
-        -webkit-line-clamp: 2;
-        -webkit-box-orient: vertical;
+    .ap-cols {
+        display: grid;
+        grid-template-columns: minmax(280px, 360px) minmax(0, 1fr);
+        gap: 16px;
+        align-items: start;
+    }
+    .ap-list__back, .ap-detail__list { display: none; }
+
+    .ap-rows {
+        gap: 0;
+        border: 1px solid var(--linha);
+        border-radius: var(--r-2);
+        background: var(--superficie);
         overflow: hidden;
     }
-    .approve-card__by { margin-top: 2px; }
-    .approve-card__refuse label { font-size: var(--t-xs); }
-    .approve-card__refuse input { min-height: 40px; font-size: var(--t-sm); }
-    .approve-card__btn { min-height: 36px; font-size: var(--t-xs); }
-    .approve-card__undo-btn { min-height: 36px; font-size: var(--t-sm); }
-    .approve-next { display: none; }
-    .undo-toast { display: none; }
-    .approve-deck .bulk-bar { margin-top: 14px; border-radius: var(--r-2); }
+    .ap-row { border: 0; border-radius: 0; }
+    .ap-row + .ap-row { border-top: 1px solid var(--linha); }
+    .ap-row:hover { background: var(--fundo); }
+    .ap-row.is-selected { background: var(--laranja-claro); }
+    .ap-row.is-selected::after {
+        content: "";
+        position: absolute;
+        inset: 0 0 0 auto;
+        width: 3px;
+        background: var(--laranja);
+    }
+
+    .ap-panel {
+        position: sticky;
+        top: calc(var(--topbar-h) + 16px);
+        max-height: calc(100vh - var(--topbar-h) - 32px);
+        overflow: auto;
+        border: 1px solid var(--linha);
+        border-radius: var(--r-3);
+        background: var(--superficie);
+        box-shadow: var(--sombra-1);
+    }
+    .ap-detail { padding: 18px 24px 0; border: 0; border-radius: 0; background: transparent; }
+    .ap-detail__title { font-size: 1.5rem; }
+    .ap-facts > div { grid-template-columns: 150px minmax(0, 1fr); gap: 16px; align-items: baseline; }
+    .ap-facts dt { font-size: var(--t-sm); }
+    .ap-state { border: 0; border-radius: 0; padding: 64px 24px; }
+
+    /* Botões no pé do painel, sempre à vista mesmo com descrição longa */
+    .ap-actions {
+        position: sticky;
+        bottom: 0;
+        display: flex;
+        gap: 10px;
+        margin: 0 -24px;
+        padding: 14px 24px 18px;
+        border-top: 1px solid var(--linha);
+        background: var(--superficie);
+    }
+    .ap-actions .btn { min-height: var(--h-md); padding: 0 18px; }
+    .ap-actions__ask { margin-right: auto; }
+    .ap-actions__approve { min-width: 160px; }
+
+    .undo-toast,
+    .undo-toast.is-low {
+        left: calc(var(--sidebar-w) + (100% - var(--sidebar-w)) / 2);
+        right: auto;
+        bottom: 24px;
+        min-width: 340px;
+        transform: translateX(-50%);
+    }
 }

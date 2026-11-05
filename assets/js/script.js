@@ -462,8 +462,10 @@ function refreshForNotifications(fresh) {
     const links = fresh.map(n => String(n.link || ''));
     if (document.querySelector('[data-queue]') && typeof refreshAfterChange === 'function') {
         // Com pedidos marcados para resolver de uma vez, não redesenha a fila (perderia a seleção):
-        // os avisos ficam em espera e entram quando a seleção esvazia (updateBulkBar) ou depois da ação em lote
-        if (document.body.classList.contains('has-bulk')) {
+        // os avisos ficam em espera e entram quando a seleção esvazia (updateBulkBar) ou depois da ação em lote.
+        // queue-hold: a página segura o redesenho (Aprovar, com a janela de setores aberta) e chama
+        // refreshAfterChange() quando solta, se queuePending > 0
+        if (document.body.classList.contains('has-bulk') || document.body.classList.contains('queue-hold')) {
             queuePending += fresh.length || 1;
             showQueuePending();
         } else {
@@ -1184,6 +1186,29 @@ document.addEventListener('click', (e) => {
     second.querySelector('[data-partner-area]').focus();
 });
 
+// "Tirar este setor": o segundo some; tirar o primeiro com o segundo escolhido passa o segundo para o
+// lugar dele (partnerFields() manda partner_area_id=0 quando o primeiro está vazio e o segundo se perderia)
+document.addEventListener('click', (e) => {
+    const btn = e.target.closest('[data-partner-remove]');
+    if (!btn) return;
+    const box = btn.closest('[data-partner-picker]');
+    const slots = [...box.querySelectorAll('[data-partner-slot]')];
+    const slot = btn.closest('[data-partner-slot]');
+    const field = (s, name) => s.querySelector(`[data-partner-${name}]`);
+    const clear = (s) => { field(s, 'area').value = ''; field(s, 'note').value = ''; };
+    const second = slots[1];
+    if (slot === slots[0] && second && !second.hidden && field(second, 'area').value) {
+        ['area', 'due', 'note'].forEach(name => { field(slots[0], name).value = field(second, name).value; });
+        clear(second);
+        second.hidden = true;
+    } else {
+        clear(slot);
+        if (slot === second) slot.hidden = true;
+    }
+    syncPartnerPicker(box);
+    field(slots[0], 'area').focus();
+});
+
 function addPartner(id, table, button) {
     return runPedidoAction(() => addPartnerNow(id, table, button));
 }
@@ -1361,7 +1386,8 @@ async function reloadChat(view) {
 setInterval(() => document.querySelectorAll('.request-view').forEach(reloadChat), 15000);
 
 // ---------------------------------------------------------------------
-// Escolher vários pedidos e resolver de uma vez (Aprovar, Começar, Concluir)
+// Escolher vários pedidos e resolver de uma vez (Caixa: Começar, Concluir).
+// A tela Aprovar não tem lote: cada pedido é decidido sozinho.
 // ---------------------------------------------------------------------
 // Avisos que chegaram com pedidos marcados: a fila só redesenha quando a seleção esvaziar
 var queuePending = 0; // var: usada também por funções declaradas antes daqui
@@ -1428,49 +1454,31 @@ document.addEventListener('click', async (e) => {
     const n = items.length;
     const plural = n === 1 ? 'o pedido' : `os ${n} pedidos`;
 
-    let reason = '';
-    if (action === 'refuse') {
-        reason = await showConfirm({
-            title: `Recusar ${n === 1 ? '1 pedido' : n + ' pedidos'}`,
-            message: 'Cada pessoa que pediu recebe o motivo abaixo.',
-            type: 'error', confirmLabel: 'Recusar', isDanger: true,
-            input: { label: 'Motivo da recusa *', placeholder: 'Ex.: pedido repetido, já foi atendido', required: true }
-        });
-        if (reason === false) return;
-    } else {
-        const texts = {
-            approve: [`Aprovar ${plural}?`, 'Cada pedido vai para o setor responsável.', 'Aprovar', 'success'],
-            start: [`Começar ${plural}?`, 'Quem pediu é avisado que o atendimento começou.', 'Começar', 'info'],
-            finish: [`Concluir ${plural}?`, 'Quem pediu é avisado que o pedido foi atendido.', 'Concluir', 'success'],
-        }[action];
-        if (n > 1 || action === 'finish') {
-            const ok = await showConfirm({ title: texts[0], message: texts[1], confirmLabel: texts[2], type: texts[3] });
-            if (!ok) return;
-        }
+    const texts = {
+        start: [`Começar ${plural}?`, 'Quem pediu é avisado que o atendimento começou.', 'Começar', 'info'],
+        finish: [`Concluir ${plural}?`, 'Quem pediu é avisado que o pedido foi atendido.', 'Concluir', 'success'],
+    }[action];
+    if (!texts) return;
+    if (n > 1 || action === 'finish') {
+        const confirmed = await showConfirm({ title: texts[0], message: texts[1], confirmLabel: texts[2], type: texts[3] });
+        if (!confirmed) return;
     }
 
     const bar = btn.closest('[data-bulk]');
     const count = bar.querySelector('[data-bulk-count]');
     bar.querySelectorAll('button').forEach(b => { b.disabled = true; });
-    const verb = { approve: 'Aprovando', refuse: 'Recusando', start: 'Começando', finish: 'Concluindo' }[action];
+    const verb = { start: 'Começando', finish: 'Concluindo' }[action];
 
     let ok = 0;
     const errors = [];
     for (const [i, item] of items.entries()) {
         count.textContent = `${verb} ${i + 1} de ${n}...`;
-        let data;
-        if (action === 'approve' || action === 'refuse') {
-            // Aprovar em lote respeita o setor parceiro escolhido em cada cartão
-            const card = action === 'approve' ? document.querySelector(`[data-approve-card][data-key="${item.table}:${item.id}"]`) : null;
-            data = await postForm('api/approve_request.php', { action: 'post', id: item.id, table: item.table, value: action === 'approve' ? 'Y' : 'N', reason, ...partnerFields(card) });
-        } else {
-            data = await postForm('api/request_actions.php', { id: item.id, table: `ctd_${item.table}_frm`, action: action === 'start' ? 'start_progress' : 'finish' });
-        }
+        const data = await postForm('api/request_actions.php', { id: item.id, table: `ctd_${item.table}_frm`, action: action === 'start' ? 'start_progress' : 'finish' });
         if (data && data.success) ok++;
         else errors.push(`nº ${item.id}: ${(data && data.message) || 'sem conexão'}`);
     }
 
-    const done = { approve: ['aprovado', 'aprovados'], refuse: ['recusado', 'recusados'], start: ['em atendimento', 'em atendimento'], finish: ['concluído', 'concluídos'] }[action];
+    const done = { start: ['em atendimento', 'em atendimento'], finish: ['concluído', 'concluídos'] }[action];
     if (!errors.length) {
         showToast(n === 1 ? `Pedido ${done[0]}.` : `${ok} pedidos ${done[1]}.`, 'success');
     } else {
