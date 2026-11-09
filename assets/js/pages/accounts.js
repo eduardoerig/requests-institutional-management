@@ -175,6 +175,13 @@
         layerPushed = false;
         const name = openLayerName();
         if (!name) return;
+        // Voltar com uma pergunta aberta (Excluir conta, Gerar senha, Descartar...) só responde "não" a ela:
+        // a folha continua aberta e nenhuma outra pergunta é feita por cima.
+        if (globalModalOpen()) {
+            pushLayer(name);
+            if (window.closeGlobalModal) window.closeGlobalModal();
+            return;
+        }
         if (await canLeave(name)) {
             if (name === 'wizard' && wz.done) { reloadTo('pessoas', 'Conta criada.'); return; }
             if (name === 'wizard') closeWizard(); else closeEditor();

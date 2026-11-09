@@ -121,8 +121,17 @@ $useCombo = in_array($assetPage, $comboPages, true);
     </script>
     <script>
         // Global Modal Functionality (Attached to window for global access)
+        // A janela é uma só: abrir outra por cima fecha a anterior como "Cancelar" (ou "OK" no aviso).
+        // Sem isso os ouvintes se somavam e um toque confirmava as duas perguntas (ex.: "Descartar" + "Excluir conta").
+        window.closeGlobalModal = function() {
+            const pending = window.__gModalClose;
+            window.__gModalClose = null;
+            if (pending) pending();
+        };
+
         // input: { label, placeholder, required } -> resolve com o texto digitado (ou false se cancelar)
         window.showConfirm = function({ title, message, type = 'warning', confirmLabel = 'Confirmar', cancelLabel = 'Cancelar', isDanger = false, input = null }) {
+            window.closeGlobalModal();
             const globalModal = document.getElementById('globalModal');
             const modalIcon = document.getElementById('gModalIcon');
             const modalTitle = document.getElementById('gModalTitle');
@@ -187,6 +196,7 @@ $useCombo = in_array($assetPage, $comboPages, true);
                 const handleBackdrop = (e) => { if (e.target === globalModal) handleCancel(); };
 
                 const cleanup = () => {
+                    if (window.__gModalClose === handleCancel) window.__gModalClose = null;
                     modalBtnConfirm.removeEventListener('click', handleConfirm);
                     modalBtnCancel.removeEventListener('click', handleCancel);
                     document.removeEventListener('keydown', handleKey);
@@ -197,6 +207,7 @@ $useCombo = in_array($assetPage, $comboPages, true);
                 modalBtnCancel.addEventListener('click', handleCancel);
                 document.addEventListener('keydown', handleKey);
                 globalModal.addEventListener('click', handleBackdrop);
+                window.__gModalClose = handleCancel;
             });
         };
 
@@ -209,6 +220,7 @@ $useCombo = in_array($assetPage, $comboPages, true);
             const modalBtnConfirm = document.getElementById('gModalBtnConfirm');
 
             if(!globalModal || !modalTitle) { console.error('Global Modal not found'); return; }
+            window.closeGlobalModal();
             modalTitle.textContent = title;
             modalMessage.textContent = message;
             modalBtnConfirm.textContent = confirmLabel;
@@ -226,11 +238,13 @@ $useCombo = in_array($assetPage, $comboPages, true);
 
             return new Promise((resolve) => {
                 const handleClose = () => {
+                    if (window.__gModalClose === handleClose) window.__gModalClose = null;
                     globalModal.classList.remove('active');
                     modalBtnConfirm.removeEventListener('click', handleClose);
                     resolve();
                 };
                 modalBtnConfirm.addEventListener('click', handleClose);
+                window.__gModalClose = handleClose;
             });
         };
     </script>
