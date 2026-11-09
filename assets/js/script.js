@@ -666,6 +666,7 @@ function clearFieldErrors(form) {
 function validateRequestForm(form) {
     clearFieldErrors(form);
     const messages = {
+        subdivision_id: 'Escolha de qual área é este pedido.',
         title: 'Escreva um título curto.',
         end: 'Escolha a data em que você precisa.',
         details: 'Explique o que você precisa.',
@@ -987,8 +988,14 @@ async function refreshAfterChange(opts = {}) {
             if (twin) el.replaceWith(twin);
         });
         document.body.classList.remove('has-bulk');
+        return true;
     } catch (err) {
-        location.reload();
+        // Sem resposta (sem internet): recarregar levaria à página de erro do navegador e apagaria
+        // o que está na tela. Fica a lista atual, com o aviso (sem cobrir um erro mais importante)
+        if (!document.querySelector('.toast.error.show')) {
+            showToast('Não deu para atualizar a lista. Confira a internet; o que está na tela pode estar desatualizado.', 'error');
+        }
+        return false;
     }
 }
 
@@ -1230,11 +1237,11 @@ async function addPartnerNow(id, table, button) {
     if (data.success) await refreshAfterChange({ message: data.message });
 }
 
-function forwardAct(action, forwardId, mode = 'help') {
-    return runPedidoAction(() => forwardActNow(action, forwardId, mode));
+function forwardAct(action, forwardId, mode = 'help', toLabel = '') {
+    return runPedidoAction(() => forwardActNow(action, forwardId, mode, toLabel));
 }
 
-async function forwardActNow(action, forwardId, mode = 'help') {
+async function forwardActNow(action, forwardId, mode = 'help', toLabel = '') {
     const fields = { action, forward_id: forwardId };
     if (action === 'accept') {
         const ok = await showConfirm(mode === 'partner'
@@ -1258,6 +1265,17 @@ async function forwardActNow(action, forwardId, mode = 'help') {
         });
         if (note === false) return;
         fields.note = note;
+    } else if (action === 'cancel' && mode === 'help_accepted') {
+        // Ajuda já aceita que não volta: encerrar libera Concluir; o outro setor recebe o motivo
+        const who = toLabel || 'O outro setor';
+        const reason = await showConfirm({
+            title: 'Encerrar a ajuda?',
+            message: `${who} deixa de ajudar neste pedido e recebe o motivo. Depois disso, o pedido pode ser concluído sem esperar a devolução.`,
+            type: 'warning', confirmLabel: 'Encerrar a ajuda', cancelLabel: 'Voltar', isDanger: true,
+            input: { label: 'Por que encerrar a ajuda? *', placeholder: 'Ex.: resolvemos por conta própria', required: true, minLength: 5 }
+        });
+        if (reason === false) return;
+        fields.reason = reason;
     } else if (action === 'cancel') {
         const ok = await showConfirm({ title: mode === 'partner' ? 'Tirar setor parceiro' : 'Cancelar envio', message: mode === 'partner' ? 'Este setor deixa de ver o pedido, e o setor responsável não precisa mais esperar a parte dele.' : 'O outro setor deixa de ver este encaminhamento.', type: 'warning', confirmLabel: mode === 'partner' ? 'Tirar parceiro' : 'Cancelar envio', cancelLabel: 'Voltar' });
         if (!ok) return;

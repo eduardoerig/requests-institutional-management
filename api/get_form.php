@@ -22,6 +22,24 @@ if ($formName === '' || !preg_match('/^form_[a-z_]+\.php$/', $formName) || !is_f
 
 $formHtml = file_get_contents($formFile);
 
+// Quem responde por mais de uma área diz de qual é o pedido: é isso que define quem aprova
+$areaHtml = '';
+$userAreaIds = $_SESSION['subdivision_ids'] ?? [];
+if (count($userAreaIds) > 1) {
+    $areaOptions = '';
+    foreach ($userAreaIds as $i => $areaId) {
+        $areaOptions .= '<option value="' . (int)$areaId . '">' . e((string)($_SESSION['subdivision_names'][$i] ?? '')) . '</option>';
+    }
+    $areaHtml = '
+        <div class="form-group">
+            <label for="subdivision_id">De qual área é este pedido? <span class="req">*</span></label>
+            <select name="subdivision_id" id="subdivision_id" required><option value="">Escolha a área</option>' . $areaOptions . '</select>
+            <small>A coordenação dessa área é quem aprova.</small>
+        </div>
+';
+}
+$formHtml = str_replace('<!--AREA-->', $areaHtml, $formHtml);
+
 // Quem pede só diz se é urgente (e por quê); o nível de urgência fica com o setor
 $priorityHtml = '
     <div class="form-group urgent-field">

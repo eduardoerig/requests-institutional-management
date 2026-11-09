@@ -84,7 +84,7 @@
     /* Casca */
     --topbar-h: 60px;
     --bottomnav-h: 68px;
-    --sidebar-w: 252px;
+    --sidebar-w: 268px;
 
 }
 
@@ -216,7 +216,7 @@ small { font-size: 0.875em; }
 .sidebar .menu-link {
     display: flex;
     align-items: center;
-    gap: 12px;
+    gap: 10px;
     min-height: 40px;
     padding: 0 12px;
     margin-bottom: 2px;
@@ -227,20 +227,22 @@ small { font-size: 0.875em; }
     position: relative;
 }
 .sidebar .menu-link i { width: 22px; text-align: center; color: var(--texto-3); }
-.sidebar .menu-link > span:not(.sidebar-badge) { flex: 1; }
+/* Numa linha só: nome que não couber termina em "…" (o nome inteiro fica no title) */
+.sidebar .menu-link > span:not(.sidebar-badge):not(.visually-hidden) { flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .sidebar .menu-link:hover { background: var(--fundo); color: var(--texto); }
 .sidebar .menu-link.is-active { background: var(--fundo-2); color: var(--texto); }
 .sidebar .menu-link.is-active i { color: var(--grafite); }
 .sidebar .menu-link--new { justify-content: center; min-height: var(--h-md); border-radius: var(--r-2); background: var(--laranja); color: var(--texto-inv); margin-bottom: 16px; }
-.sidebar .menu-link--new > span:not(.sidebar-badge) { flex: 0 0 auto; }
+.sidebar .menu-link--new > span:not(.sidebar-badge):not(.visually-hidden) { flex: 0 0 auto; }
 .sidebar .menu-link--new i,
 .sidebar .menu-link--new.is-active i { color: var(--texto-inv); }
 .sidebar .menu-link--new:hover, .sidebar .menu-link--new.is-active { background: var(--laranja-escuro); color: var(--texto-inv); }
 .sidebar .menu-section { margin: 20px 12px 4px; font-size: var(--t-xs); font-weight: 600; color: var(--texto-3); }
 .sidebar-badge {
+    flex: none;
     min-width: 20px;
     height: 20px;
-    padding: 0 6px;
+    padding: 0 5px;
     border-radius: var(--r-pill);
     background: var(--fundo);
     border: 1px solid var(--linha);

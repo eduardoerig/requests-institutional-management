@@ -234,6 +234,12 @@ function renderRequestView(PDO $pdo, array $req, string $sector, string $context
     } elseif ($canWork && $status === 'W' && !$open) {
         $candidates[] = ['main', '<button type="button" class="btn %s" onclick="requestAct(\'finish\', ' . $reqId . ', \'' . e($fullTable) . '\')"><i class="fa-solid fa-check-double" aria-hidden="true"></i> Concluir</button>'];
     }
+    // Ajuda aceita e não devolvida trava Concluir e Encaminhar: quem pediu a ajuda ou a coordenação encerra, com motivo
+    $canCloseHelp = $open && !$openIsPartner && $open['mode'] === 'help' && $open['status'] === 'accepted'
+        && ($canManagePartner || ($isGestor && $openIsFromMe && !in_array((int)$open['to_area_id'], $viewerAreas, true)));
+    if ($canCloseHelp) {
+        $candidates[] = ['side', '<button type="button" class="btn" onclick="forwardAct(\'cancel\', ' . (int)$open['id'] . ', \'help_accepted\', \'' . e(addslashes((string)$open['to_label'])) . '\')"><i class="fa-solid fa-ban" aria-hidden="true"></i> Encerrar a ajuda</button>'];
+    }
     if ($canForward) {
         $candidates[] = ['side', '<button type="button" class="btn" onclick="openForwardWizard(' . $reqId . ', \'' . $jsSector . '\')"><i class="fa-solid fa-share-from-square" aria-hidden="true"></i> Encaminhar</button>'];
     }

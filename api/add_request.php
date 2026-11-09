@@ -7,10 +7,18 @@ require_once __DIR__ . '/../classes/RequestForwardService.php';
 requireLoginJson($pdo);
 requirePostJson();
 
-$subdivision_id = $_SESSION['subdivision_id'] ?? null;
+// A área do pedido define quem aprova. Quem responde por mais de uma escolhe no formulário.
+$userAreas = userSubdivisionIds();
+$subdivision_id = $userAreas[0] ?? null;
 $role = $_SESSION['role'] ?? 'solicitante';
 if (in_array($role, ['solicitante', 'adm_sub'], true) && empty($subdivision_id)) {
     jsonResponse(['success' => false, 'message' => 'Seu usuário ainda não está ligado a uma subdivisão. Fale com o administrador.']);
+}
+if (count($userAreas) > 1) {
+    $subdivision_id = (int)($_POST['subdivision_id'] ?? 0);
+    if (!in_array($subdivision_id, $userAreas, true)) {
+        jsonResponse(['success' => false, 'message' => 'Escolha de qual área é este pedido.']);
+    }
 }
 
 /**

@@ -6,7 +6,7 @@
  *  POST action=forward  id, table, to_area_id, mode (transfer|help), message
  *  POST action=accept   forward_id
  *  POST action=refuse   forward_id, reason
- *  POST action=cancel   forward_id
+ *  POST action=cancel   forward_id [, reason: obrigatório para encerrar uma ajuda já aceita]
  *  POST action=return   forward_id, note
  *  POST action=add_partner  id, table, partner_area_id, partner_due, partner_note (coordenação)
  *  GET  action=areas    id, table   (setores para onde dá para encaminhar)
@@ -64,7 +64,7 @@ switch ($action) {
         $result = RequestForwardService::refuse($pdo, $forwardId, (string)($_POST['reason'] ?? ''), $userId, $userName, $role);
         break;
     case 'cancel':
-        $result = RequestForwardService::cancel($pdo, $forwardId, $userId, $userName, $role);
+        $result = RequestForwardService::cancel($pdo, $forwardId, $userId, $userName, $role, (string)($_POST['reason'] ?? ''));
         break;
     case 'return':
         $result = RequestForwardService::returnHelp($pdo, $forwardId, (string)($_POST['note'] ?? ''), $userId, $userName, $role);

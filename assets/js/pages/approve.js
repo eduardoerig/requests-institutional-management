@@ -16,6 +16,10 @@
  * Nenhuma decisão tomada se perde; o preço é que o Desfazer deixa de valer quando a página sai de vista.
  * O que vai por sendBeacon não tem resposta: fica em "beaconed" (e no sessionStorage) até a lista ser
  * recarregada; se o pedido ainda estiver na fila, a decisão não chegou e a pessoa é avisada.
+ * Enquanto o envio não responde, o pedido fica "Enviando..." na lista, sem botões (sending).
+ * Sem resposta (sem internet, servidor fora): nada mudou no servidor. A página NÃO recarrega (sem rede,
+ * cairia na tela de erro do navegador); o pedido volta para a fila e o aviso fixo [data-send-fail] diz
+ * qual não foi enviado, com "Tentar de novo" (failed). Decidir o pedido de novo também resolve.
  *
  * Setores que também participam: a linha do painel mostra a escolha; "Alterar" abre a janela <dialog>
  * do próprio painel com o seletor (components/partner_picker.php). Cancelar (ou Esc, ou tocar fora)
@@ -38,6 +42,8 @@
     const mobile = window.matchMedia('(max-width: 899.98px)');
 
     const pending = new Map();       // "tabela:id" -> { fields, kind, id, timer }
+    const sending = new Map();       // enviando agora, ainda sem resposta: "tabela:id" -> o mesmo objeto
+    const failed = new Map();        // o envio não teve resposta: "tabela:id" -> o mesmo objeto (para repetir)
     const sent = new Set();          // já enviados (somem mesmo antes da lista recarregar)
     const beaconed = new Map();      // enviados por sendBeacon (sem resposta): "tabela:id" -> nº do pedido
     const partnerDrafts = new Map(); // escolha de setores feita na janela e ainda não enviada: "tabela:id" -> slots
@@ -56,7 +62,8 @@
     const panelFor = (key) => panels().find(p => p.dataset.detail === key) || null;
     const rowFor = (key) => rows().find(r => r.dataset.row === key) || null;
     const isGone = (key) => sent.has(key) || beaconed.has(key);
-    const isOpen = (key) => !!key && !pending.has(key) && !isGone(key);
+    const isOpen = (key) => !!key && !pending.has(key) && !sending.has(key) && !isGone(key);
+    const inFlight = () => pending.size + sending.size;
     const openKeys = () => rows().map(r => r.dataset.row).filter(isOpen);
     const plural = (n, one, many) => (n === 1 ? `1 ${one}` : `${n} ${many}`);
     const secsLeft = (p) => Math.max(1, Math.ceil((p.until - Date.now()) / 1000));
@@ -78,10 +85,12 @@
         rows().forEach(r => {
             const key = r.dataset.row;
             const p = pending.get(key);
+            const s = sending.get(key);
+            const d = p || s;
             r.hidden = isGone(key);
             r.classList.toggle('is-selected', key === selected);
-            r.classList.toggle('is-decided', !!p);
-            r.classList.toggle('is-decided--refuse', !!p && p.kind === 'refuse');
+            r.classList.toggle('is-decided', !!d);
+            r.classList.toggle('is-decided--refuse', !!d && d.kind === 'refuse');
             const link = $('[data-select]', r);
             if (link) {
                 if (key === selected) link.setAttribute('aria-current', 'true');
@@ -89,11 +98,14 @@
             }
             const box = $('[data-row-pending]', r);
             if (box) {
-                box.hidden = !p;
+                box.hidden = !d;
                 const stamp = $('[data-row-stamp]', box);
-                if (stamp) stamp.textContent = p ? (p.kind === 'approve' ? 'Aprovado' : 'Recusado') : '';
+                if (stamp) stamp.textContent = s ? 'Enviando...' : p ? (p.kind === 'approve' ? 'Aprovado' : 'Recusado') : '';
                 const secs = $('[data-row-secs]', box);
                 if (secs) secs.textContent = p ? `${secsLeft(p)} s` : '';
+                // Já saiu para o servidor: não dá mais para desfazer
+                const undoBtn = $('[data-row-undo]', box);
+                if (undoBtn) undoBtn.hidden = !p;
             }
         });
         // Aviso de baixo: contagem da última decisão
@@ -124,8 +136,14 @@
         // Fila vazia nesta visita: enquanto há decisão esperando o Desfazer, o pedido ainda pode voltar
         const wait = $('[data-approve-wait]', q);
         const done = $('[data-approve-done]', q);
-        if (wait) wait.hidden = open.length > 0 || pending.size === 0;
-        if (done) done.hidden = open.length > 0 || pending.size > 0;
+        if (wait) {
+            wait.hidden = open.length > 0 || inFlight() === 0;
+            const text = $('p', wait);
+            if (text) text.textContent = pending.size
+                ? 'Enviando a última decisão. Ainda dá para desfazer no aviso abaixo.'
+                : 'Enviando a última decisão...';
+        }
+        if (done) done.hidden = open.length > 0 || inFlight() > 0;
 
         // Celular: lista ou painel
         const showList = listOpen && mobile.matches;
@@ -144,7 +162,8 @@
             const u = $('[data-summary-urgent]', summary);
             if (u) { u.hidden = !urgent; u.textContent = urgent ? ` · ${plural(urgent, 'urgente', 'urgentes')}` : ''; }
             const s = $('[data-summary-sending]', summary);
-            if (s) { s.hidden = !pending.size; s.textContent = pending.size ? ` · ${pending.size} enviando` : ''; }
+            const n = inFlight();
+            if (s) { s.hidden = !n; s.textContent = n ? ` · ${n} enviando` : ''; }
         }
 
         // O aviso do Desfazer fica acima dos botões presos embaixo (celular, painel à vista)
@@ -197,6 +216,8 @@
         const at = open.indexOf(key);
         const next = open[at + 1] || open[at - 1] || '';
         const fields = { action: 'post', id: panel.dataset.id, table: panel.dataset.table, value: kind === 'approve' ? 'Y' : 'N', reason, ...partner };
+        // Decidiu de novo um pedido cujo envio falhou: vale a decisão nova
+        if (failed.delete(key)) paintFailed();
         pending.set(key, { fields, kind, id: panel.dataset.id, timer: setTimeout(() => commit(key), UNDO_MS), until: Date.now() + UNDO_MS });
         lastKey = key;
         if (!ticker) ticker = setInterval(tick, 250);
@@ -213,16 +234,53 @@
         clearTimeout(p.timer);
         pending.delete(key);
         if (key === lastKey) hideUndo();
+        await send(key, p);
+    }
+
+    async function send(key, p) {
+        // Até a resposta, o pedido fica "Enviando..." e não pode ser decidido de novo
+        sending.set(key, p);
+        if (failed.delete(key)) paintFailed();
+        render();
         const data = await postForm(URL_DECIDE, p.fields);
+        sending.delete(key);
         if (data && data.success) {
             sent.add(key);
             partnerDrafts.delete(key);
         } else if (data) {
-            // Não foi: o pedido volta para a fila
+            // O servidor respondeu que não: o pedido volta para a fila
             showToast(`Pedido nº ${p.id}: ${data.message || 'não foi possível decidir.'}`, 'error');
+        } else {
+            // Sem resposta (sem internet, servidor fora): nada mudou no servidor. Não recarrega a lista,
+            // que sem rede levaria à página de erro do navegador; o aviso fixo oferece repetir
+            failed.set(key, p);
+            paintFailed();
+            render();
+            return;
         }
         render();
         maybeRefresh();
+    }
+
+    // ---------- Aviso fixo: decisões que não foram enviadas ----------
+    function paintFailed() {
+        const bar = $('[data-send-fail]');
+        if (!bar) return;
+        const list = [...failed.values()];
+        bar.hidden = !list.length;
+        if (!list.length) return;
+        const text = $('[data-send-fail-text]', bar);
+        if (text) {
+            const p = list[0];
+            text.textContent = list.length === 1
+                ? `A ${p.kind === 'approve' ? 'aprovação' : 'recusa'} do pedido nº ${p.id} não foi enviada. Confira a internet e toque em Tentar de novo.`
+                : `As decisões dos pedidos nº ${list.map(x => x.id).join(', ')} não foram enviadas. Confira a internet e toque em Tentar de novo.`;
+        }
+    }
+
+    function retryFailed() {
+        const list = [...failed];
+        list.forEach(([key, p]) => send(key, p));
     }
 
     // Sem chave: desfaz a última (aviso de baixo)
@@ -273,7 +331,14 @@
         const list = [...beaconed];
         beaconed.clear();
         try { sessionStorage.removeItem(BEACON_KEY); } catch (e) { /* sem armazenamento */ }
-        if (typeof refreshAfterChange === 'function') await refreshAfterChange();
+        const fresh = typeof refreshAfterChange === 'function' ? await refreshAfterChange() : false;
+        if (fresh === false) {
+            // Lista não atualizou (sem internet): ainda não dá para saber se chegaram; confere depois
+            list.forEach(([key, id]) => beaconed.set(key, id));
+            saveBeaconed();
+            render();
+            return;
+        }
         render();
         const keys = new Set(rows().map(r => r.dataset.row));
         const lost = list.filter(([key]) => keys.has(key)).map(([, id]) => id);
@@ -286,7 +351,7 @@
 
     // Depois de enviar tudo, atualiza lista, números e menu (sem fechar a janela de setores)
     function maybeRefresh() {
-        if (pending.size || editing) return;
+        if (inFlight() || editing) return;
         if (typeof refreshAfterChange === 'function') refreshAfterChange();
     }
 
@@ -364,7 +429,7 @@
     function releaseHold() {
         document.body.classList.remove('queue-hold');
         // Avisos que chegaram com a janela aberta: agora a lista pode redesenhar
-        if (typeof queuePending !== 'undefined' && queuePending > 0 && !pending.size) refreshAfterChange();
+        if (typeof queuePending !== 'undefined' && queuePending > 0 && !inFlight()) refreshAfterChange();
     }
 
     function openPartners(panel) {
@@ -459,6 +524,7 @@
             return;
         }
         if (t.closest('[data-undo]')) { undo(); return; }
+        if (t.closest('[data-send-retry]')) { retryFailed(); return; }
         const rowUndo = t.closest('[data-row-undo]');
         if (rowUndo) { undo(rowUndo.closest('[data-row]').dataset.row); }
     });
@@ -497,6 +563,8 @@
             setTimeout(checkBeaconed, BEACON_SETTLE_MS);
         }
     });
+    // A internet voltou: confere os envios de saída que ficaram sem confirmação
+    window.addEventListener('online', () => { if (beaconed.size) checkBeaconed(); });
 
     // A lista é redesenhada por refreshAfterChange: reaplica seleção, decisões e escolhas
     function bind() {

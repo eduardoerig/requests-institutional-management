@@ -3,6 +3,7 @@
 
     <div class="form-step" data-form-step="2">
         <h2 class="form-step__title">2. O que você precisa?</h2>
+<!--AREA-->
         <div class="form-group">
             <label for="title">Resumo em uma frase <span class="req">*</span></label>
             <input type="text" name="title" id="title" required maxlength="80" placeholder="Ex.: 10 resmas de papel A4">

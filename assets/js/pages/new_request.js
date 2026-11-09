@@ -25,7 +25,7 @@
     const desk = window.matchMedia('(min-width: 900px)');
 
     const titles = ['Para qual setor?', 'O que você precisa?', 'Urgência e revisão'];
-    const kept = ['title', 'details', 'end', 'obs', 'file', 'qtd', 'urgent_reason'];
+    const kept = ['subdivision_id', 'title', 'details', 'end', 'obs', 'file', 'qtd', 'urgent_reason'];
     const cache = {};
     let step = 1;
     let chosen = null;
@@ -145,6 +145,8 @@
         const due = formatDate(form.querySelector('[name="end"]')?.value);
         const urgent = !!form.querySelector('[name="urgent"]')?.checked;
         const sectorName = chosen.dataset.sectorName || chosen.dataset.label || '';
+        const areaSelect = form.querySelector('[name="subdivision_id"]');
+        const areaName = areaSelect?.value ? areaSelect.selectedOptions[0]?.textContent || '' : '';
         const partnerName = ['partner_area_id', 'partner2_area_id']
             .map(name => form.querySelector(`[name="${name}"]`))
             .filter(select => select?.value)
@@ -153,6 +155,7 @@
         box.innerHTML =
             '<span class="nr-review__label">Revisão</span>' +
             `<strong class="nr-review__title">Pedido para ${escapeHtml(chosen.dataset.label || sectorName)}</strong>` +
+            (areaName ? `<span class="nr-review__line">Área: ${escapeHtml(areaName)}</span>` : '') +
             (title ? `<span class="nr-review__line">${escapeHtml(title)}</span>` : '') +
             (due ? `<span class="nr-review__line">Para ${escapeHtml(due)}${urgent ? ' · <b>urgente</b>' : ''}</span>` : '') +
             (partnerName ? `<span class="nr-review__line">Sugestão de parceiro: ${escapeHtml(partnerName)}</span>` : '') +

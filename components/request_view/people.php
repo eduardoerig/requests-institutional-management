@@ -69,8 +69,12 @@ function requestStaffGuide(array $c): string
         if ($open['mode'] === 'transfer') {
             return 'Esperando ' . e($open['to_label']) . ' aceitar a transferência. Nada a fazer agora; você recebe um aviso.';
         }
-        return ($open['status'] === 'pending' ? 'Vocês pediram ajuda a ' . e($open['to_label']) . '.' : e($open['to_label']) . ' está ajudando.')
-            . ' Sigam com o atendimento; dá para concluir depois que devolverem.';
+        if ($open['status'] === 'pending') {
+            return 'Vocês pediram ajuda a ' . e($open['to_label']) . '. Sigam com o atendimento; dá para concluir depois que devolverem.';
+        }
+        $to = e($open['to_label']);
+        return "$to está ajudando. Sigam com o atendimento; dá para concluir depois que devolverem."
+            . " Se demorar, fale com $to na conversa ou toque em " . $b('Encerrar a ajuda') . '.';
     }
     if ($canApprove) {
         return 'Leia o pedido e decida. ' . $b('Aprovar') . ' envia para ' . e($sectorName) . '; ' . $b('Recusar') . ' pede um motivo para quem pediu.';

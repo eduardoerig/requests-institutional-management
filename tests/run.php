@@ -637,6 +637,46 @@ check('ajuda devolvida: volta para Em andamento da TI com o recado', $place[0] =
 $res = $ti->post('api/request_actions.php', ['id' => $helpReqId, 'table' => 'ctd_ti_frm', 'action' => 'finish']);
 check('TI conclui depois do retorno', ($res['json']['success'] ?? false) === true, snippet($res));
 
+// Ajuda aceita que não volta: o setor que pediu (ou a coordenação) encerra com motivo e o pedido destrava
+$stuckHelp = function () use ($sol, $apr, $ti, $shop, $base, $pdo, $shopAreaId, &$createdIds): array {
+    $res = $sol->post('api/add_request.php', ['title' => 'Teste ajuda parada'] + $base);
+    $id = (int)($res['json']['id'] ?? 0);
+    $createdIds[] = ['ti', $id];
+    $apr->post('api/approve_request.php', ['action' => 'post', 'id' => $id, 'table' => 'ti', 'value' => 'Y']);
+    $ti->post('api/request_actions.php', ['id' => $id, 'table' => 'ctd_ti_frm', 'action' => 'start_progress']);
+    $ti->post('api/request_forwards.php', ['action' => 'forward', 'id' => $id, 'table' => 'ti', 'to_area_id' => $shopAreaId, 'mode' => 'help', 'message' => 'Precisamos de um cabo para terminar.']);
+    $fwdId = (int)$pdo->query("SELECT id FROM request_forwards WHERE request_id = $id AND request_table = 'ti' ORDER BY id DESC LIMIT 1")->fetchColumn();
+    $shop->post('api/request_forwards.php', ['action' => 'accept', 'forward_id' => $fwdId]);
+    return [$id, $fwdId];
+};
+[$shId, $shFwd] = $stuckHelp();
+$res = $ti->post('api/request_actions.php', ['id' => $shId, 'table' => 'ctd_ti_frm', 'action' => 'finish']);
+check('ajuda aceita: ao concluir, a mensagem diz como sair', ($res['json']['success'] ?? true) === false && str_contains((string)($res['json']['message'] ?? ''), 'Encerrar a ajuda'), snippet($res));
+$res = $ti->get("request_detail?id=$shId&table=ti");
+check('ajuda aceita: TI vê o botão Encerrar a ajuda', str_contains($res['body'], 'Encerrar a ajuda') && str_contains($res['body'], "'help_accepted'"));
+$res = $shop->get("request_detail?id=$shId&table=ti");
+check('ajuda aceita: quem ajuda não vê Encerrar a ajuda', !str_contains($res['body'], "'help_accepted'"));
+$res = $ti->post('api/request_forwards.php', ['action' => 'cancel', 'forward_id' => $shFwd]);
+check('encerrar ajuda aceita sem motivo é bloqueado', ($res['json']['success'] ?? true) === false, snippet($res));
+$res = $shop->post('api/request_forwards.php', ['action' => 'cancel', 'forward_id' => $shFwd, 'reason' => 'Quem ajuda tentando encerrar']);
+check('quem ajuda não encerra a própria ajuda', ($res['json']['success'] ?? true) === false, snippet($res));
+$res = $ti->post('api/request_forwards.php', ['action' => 'cancel', 'forward_id' => $shFwd, 'reason' => 'Resolvemos por conta própria']);
+$row = $pdo->query("SELECT status, response_note FROM request_forwards WHERE id = $shFwd")->fetch(PDO::FETCH_ASSOC);
+check('TI encerra a ajuda aceita com motivo', ($res['json']['success'] ?? false) === true && ($row['status'] ?? '') === 'cancelled' && ($row['response_note'] ?? '') === 'Resolvemos por conta própria', snippet($res));
+$n = (int)$pdo->query("SELECT COUNT(*) FROM notifications n JOIN cfg_user_area cua ON cua.id_user = n.user_id WHERE cua.id_area = $shopAreaId AND n.title = 'Ajuda encerrada (nº $shId)' AND n.message LIKE '%Resolvemos por conta%'")->fetchColumn();
+check('quem ajudava recebe o motivo', $n > 0, (string)$n);
+$res = $ti->get("request_detail?id=$shId&table=ti");
+check('linha do tempo diz que a ajuda foi encerrada', str_contains($res['body'], 'encerrou a ajuda de Compras'));
+$res = $ti->post('api/request_actions.php', ['id' => $shId, 'table' => 'ctd_ti_frm', 'action' => 'finish']);
+check('depois de encerrar a ajuda, TI conclui', ($res['json']['success'] ?? false) === true, snippet($res));
+[$shId2, $shFwd2] = $stuckHelp();
+$res = $apr->get("request_detail?id=$shId2&table=ti");
+check('coordenação vê Encerrar a ajuda', str_contains($res['body'], "'help_accepted'"));
+$res = $apr->post('api/request_forwards.php', ['action' => 'cancel', 'forward_id' => $shFwd2, 'reason' => 'Coordenação liberando o pedido']);
+check('coordenação encerra a ajuda aceita', ($res['json']['success'] ?? false) === true, snippet($res));
+$res = $ti->post('api/request_actions.php', ['id' => $shId2, 'table' => 'ctd_ti_frm', 'action' => 'finish']);
+check('depois da coordenação encerrar, TI conclui', ($res['json']['success'] ?? false) === true, snippet($res));
+
 // ------------------------------------------------------------------
 section('11c. Caixa do setor');
 RequestInbox::clearCache();
@@ -914,6 +954,142 @@ $sugRows = $pdo->query("SELECT to_area_id FROM request_forwards WHERE request_id
 check('coordenação pode ficar com só uma das sugestões', count($sugRows) === 1 && (int)$sugRows[0] === $mktAreaId, json_encode($sugRows));
 
 // ------------------------------------------------------------------
+section('11e. Áreas: coordenação de mais de uma');
+$areaBySlug = fn(string $slug) => (int)$pdo->query('SELECT id FROM ctd_subdivision WHERE slug = ' . $pdo->quote($slug))->fetchColumn();
+$medioId = $areaBySlug('medio');
+$infantilId = $areaBySlug('infantil');
+$fund2Id = $areaBySlug('fundamental_2');
+check('áreas novas cadastradas', $medioId > 0 && $infantilId > 0 && $fund2Id > 0);
+$homeArea = (int)$pdo->query("SELECT id_subdivision FROM cfg_user_subdivision WHERE id_user = $aprId ORDER BY id_subdivision LIMIT 1")->fetchColumn();
+$reqArea = fn(int $id) => (int)$pdo->query("SELECT subdivision_id FROM ctd_ti_frm WHERE id = $id")->fetchColumn();
+$reqStatus = fn(int $id) => (string)$pdo->query("SELECT status FROM ctd_ti_frm WHERE id = $id")->fetchColumn();
+$tiModel = (int)$pdo->query("SELECT id FROM ctd_requests_models WHERE form_name = 'form_chamado_ti.php'")->fetchColumn();
+
+// O administrador liga a coordenação a duas áreas
+$res = $adm->post('api/update_user_admin.php', ['action' => 'update', 'id' => $aprId, 'subdivisions' => [$homeArea, $medioId]]);
+$aprCount = (int)$pdo->query("SELECT COUNT(*) FROM cfg_user_subdivision WHERE id_user = $aprId")->fetchColumn();
+check('administrador liga a coordenação a duas áreas', ($res['json']['success'] ?? false) === true && $aprCount === 2, snippet($res));
+
+$res = $apr->post('api/get_form.php', ['action' => 'get', 'id' => $tiModel]);
+$form = (string)($res['json']['form'] ?? '');
+check('quem tem duas áreas escolhe a área no formulário', str_contains($form, 'name="subdivision_id"') && str_contains($form, 'value="' . $medioId . '"') && !str_contains($form, '<!--AREA-->'), snippet($res));
+$res = $sol->post('api/get_form.php', ['action' => 'get', 'id' => $tiModel]);
+$form = (string)($res['json']['form'] ?? '');
+check('quem tem uma área não vê a escolha', $form !== '' && !str_contains($form, 'name="subdivision_id"') && !str_contains($form, '<!--AREA-->'));
+
+$res = $apr->post('api/add_request.php', ['title' => 'Teste área sem escolher'] + $base);
+check('quem tem duas áreas precisa escolher', ($res['json']['success'] ?? true) === false, snippet($res));
+$res = $apr->post('api/add_request.php', ['title' => 'Teste área alheia', 'subdivision_id' => $infantilId] + $base);
+check('não pede por área que não é sua', ($res['json']['success'] ?? true) === false, snippet($res));
+$res = $apr->post('api/add_request.php', ['title' => 'Teste área média', 'subdivision_id' => $medioId] + $base);
+$aprReq = (int)($res['json']['id'] ?? 0);
+if ($aprReq) { $createdIds[] = ['ti', $aprReq]; }
+check('pedido fica na área escolhida', $aprReq > 0 && $reqArea($aprReq) === $medioId, snippet($res));
+
+$res = $sol->post('api/add_request.php', ['title' => 'Teste área ignorada', 'subdivision_id' => $medioId] + $base);
+$solReq = (int)($res['json']['id'] ?? 0);
+if ($solReq) { $createdIds[] = ['ti', $solReq]; }
+check('quem tem uma área não troca de área pelo POST', $solReq > 0 && $reqArea($solReq) === $homeArea, snippet($res));
+
+// Outra coordenação, só da primeira área
+$tmpCoordLogin = 'tmp_teste_coord';
+$tmpMultiLogin = 'tmp_teste_coord_multi';
+$dropTmp = function (string $login) use ($pdo): void {
+    $id = (int)$pdo->query('SELECT id FROM ctd_users WHERE login = ' . $pdo->quote($login))->fetchColumn();
+    if ($id) {
+        $pdo->prepare('DELETE FROM cfg_user_subdivision WHERE id_user = ?')->execute([$id]);
+        $pdo->prepare('DELETE FROM notifications WHERE user_id = ?')->execute([$id]);
+        $pdo->prepare('DELETE FROM ctd_users WHERE id = ?')->execute([$id]);
+    }
+};
+$dropTmp($tmpCoordLogin);
+$dropTmp($tmpMultiLogin);
+$res = $adm->post('api/create_user.php', ['new_name' => 'Teste Coord Multi', 'new_login' => $tmpMultiLogin, 'new_password' => $password, 'new_role' => 'adm_sub', 'new_subdivisions' => [$fund2Id, $infantilId]]);
+$multiId = (int)($res['json']['id'] ?? 0);
+check('cadastro aceita coordenação de duas áreas', $multiId > 0 && (int)$pdo->query("SELECT COUNT(*) FROM cfg_user_subdivision WHERE id_user = $multiId")->fetchColumn() === 2, snippet($res));
+$adm->post('api/create_user.php', ['new_name' => 'Teste Coord', 'new_login' => $tmpCoordLogin, 'new_password' => $password, 'new_role' => 'adm_sub', 'new_subdivisions' => [$homeArea]]);
+$coord = new Client($baseUrl);
+check('coordenação de uma área entra', ($coord->login($tmpCoordLogin, $password)['json']['success'] ?? false) === true);
+
+$res = $coord->post('api/approve_request.php', ['action' => 'post', 'id' => $aprReq, 'table' => 'ti', 'value' => 'Y']);
+check('coordenação de outra área não aprova, mesmo quem pediu sendo da sua', $res['status'] === 403 && $reqStatus($aprReq) === 'P', snippet($res));
+$res = $coord->get('approve');
+check('coordenação de outra área não vê o pedido em Aprovar', $res['status'] === 200 && !str_contains($res['body'], 'Teste área média'));
+
+$res = $apr->post('api/approve_request.php', ['action' => 'post', 'id' => $solReq, 'table' => 'ti', 'value' => 'Y']);
+check('coordenação de duas áreas aprova a primeira', ($res['json']['success'] ?? false) === true, snippet($res));
+
+// Segunda área: o pedido é de outra pessoa, para não cair na regra de não aprovar o próprio
+$res = $coord->post('api/add_request.php', ['title' => 'Teste área segunda'] + $base);
+$secondReq = (int)($res['json']['id'] ?? 0);
+if ($secondReq) { $createdIds[] = ['ti', $secondReq]; }
+$pdo->prepare('UPDATE ctd_ti_frm SET subdivision_id = ? WHERE id = ?')->execute([$medioId, $secondReq]);
+$res = $apr->get('approve');
+check('coordenação de duas áreas vê a segunda em Aprovar', $res['status'] === 200 && str_contains($res['body'], 'Teste área segunda'));
+$res = $apr->post('api/approve_request.php', ['action' => 'post', 'id' => $secondReq, 'table' => 'ti', 'value' => 'Y']);
+check('coordenação de duas áreas aprova a segunda', ($res['json']['success'] ?? false) === true, snippet($res));
+
+// Pedido antigo, sem área: continua com a coordenação da área de quem pediu
+$res = $sol->post('api/add_request.php', ['title' => 'Teste área vazia'] + $base);
+$noAreaReq = (int)($res['json']['id'] ?? 0);
+if ($noAreaReq) { $createdIds[] = ['ti', $noAreaReq]; }
+$pdo->prepare('UPDATE ctd_ti_frm SET subdivision_id = NULL WHERE id = ?')->execute([$noAreaReq]);
+$res = $coord->post('api/approve_request.php', ['action' => 'post', 'id' => $noAreaReq, 'table' => 'ti', 'value' => 'Y']);
+check('pedido sem área fica com a coordenação de quem pediu', ($res['json']['success'] ?? false) === true, snippet($res));
+
+$res = $adm->post('api/update_user_admin.php', ['action' => 'update', 'id' => $aprId, 'subdivisions' => [$homeArea]]);
+check('coordenação volta a uma área', ($res['json']['success'] ?? false) === true, snippet($res));
+$dropTmp($tmpCoordLogin);
+$dropTmp($tmpMultiLogin);
+
+section('11f. Áreas: administrar');
+$areaApi = fn(Client $who, array $data) => $who->post('api/subdivisions.php', $data);
+$areaRow = fn(int $id) => $pdo->query("SELECT name, slug, status FROM ctd_subdivision WHERE id = $id")->fetch(PDO::FETCH_ASSOC);
+$res = $areaApi($apr, ['action' => 'create', 'name' => 'Teste Área Coordenação']);
+check('coordenação não cria área', $res['status'] === 403, snippet($res));
+$res = $areaApi($adm, ['action' => 'create', 'name' => '  Área   de <b>Téste</b> ']);
+$newArea = (int)($res['json']['id'] ?? 0);
+$row = $newArea ? $areaRow($newArea) : [];
+check('administrador cria área, com código sem acento', $newArea > 0 && $row['name'] === 'Área de <b>Téste</b>' && $row['slug'] === 'area_de_b_teste_b', snippet($res));
+$res = $adm->get('accounts');
+check('nome da área sai escapado na tela', str_contains($res['body'], 'Área de &lt;b&gt;Téste&lt;/b&gt;') && !str_contains($res['body'], 'Área de <b>Téste</b>'));
+$res = $areaApi($adm, ['action' => 'create', 'name' => 'AREA DE <B>TESTE</B>']);
+check('nome repetido é recusado, mesmo com outra caixa e sem acento', ($res['json']['success'] ?? true) === false, snippet($res));
+$res = $areaApi($adm, ['action' => 'create', 'name' => 'x']);
+check('nome curto é recusado', ($res['json']['success'] ?? true) === false, snippet($res));
+$res = $areaApi($adm, ['action' => 'rename', 'id' => $newArea, 'name' => 'Área Teste Renomeada']);
+$row = $areaRow($newArea);
+check('renomear muda o nome e mantém o código', ($res['json']['success'] ?? false) === true && $row['name'] === 'Área Teste Renomeada' && $row['slug'] === 'area_de_b_teste_b', snippet($res));
+
+// Área em uso: com pessoas não sai; com pedidos só desativa
+$res = $adm->post('api/update_user_admin.php', ['action' => 'update', 'id' => $solId, 'subdivisions' => [$newArea]]);
+check('pessoa entra na área nova', ($res['json']['success'] ?? false) === true, snippet($res));
+$res = $areaApi($adm, ['action' => 'set_status', 'id' => $newArea, 'active' => 0]);
+check('área com pessoas não desativa', ($res['json']['success'] ?? true) === false && (int)$areaRow($newArea)['status'] === 1, snippet($res));
+$res = $areaApi($adm, ['action' => 'delete', 'id' => $newArea]);
+check('área com pessoas não é excluída', ($res['json']['success'] ?? true) === false && $areaRow($newArea) !== false, snippet($res));
+$res = $sol->post('api/add_request.php', ['title' => 'Teste área nova'] + $base);
+$newAreaReq = (int)($res['json']['id'] ?? 0);
+if ($newAreaReq) { $createdIds[] = ['ti', $newAreaReq]; }
+check('pedido entra na área nova', $newAreaReq > 0 && $reqArea($newAreaReq) === $newArea, snippet($res));
+$res = $adm->post('api/update_user_admin.php', ['action' => 'update', 'id' => $solId, 'subdivisions' => [$homeArea]]);
+check('pessoa volta à área de antes', ($res['json']['success'] ?? false) === true, snippet($res));
+$res = $areaApi($adm, ['action' => 'delete', 'id' => $newArea]);
+check('área com pedidos não é excluída', ($res['json']['success'] ?? true) === false && $areaRow($newArea) !== false, snippet($res));
+$res = $areaApi($adm, ['action' => 'set_status', 'id' => $newArea, 'active' => 0]);
+check('área só com pedidos desativa', ($res['json']['success'] ?? false) === true && (int)$areaRow($newArea)['status'] === 0, snippet($res));
+$res = $adm->post('api/update_user_admin.php', ['action' => 'update', 'id' => $solId, 'subdivisions' => [$newArea]]);
+check('área desativada não recebe pessoas', ($res['json']['success'] ?? true) === false, snippet($res));
+$res = $sol->get("request_detail?id=$newAreaReq&table=ti");
+check('pedido da área desativada continua abrindo', $res['status'] === 200 && str_contains($res['body'], 'Teste área nova'));
+$res = $areaApi($adm, ['action' => 'set_status', 'id' => $newArea, 'active' => 1]);
+check('área reativa', ($res['json']['success'] ?? false) === true && (int)$areaRow($newArea)['status'] === 1, snippet($res));
+
+// Sem pessoas e sem pedidos: exclui
+$pdo->prepare('UPDATE ctd_ti_frm SET subdivision_id = NULL WHERE id = ?')->execute([$newAreaReq]);
+$res = $areaApi($adm, ['action' => 'delete', 'id' => $newArea]);
+check('área sem pessoas e sem pedidos é excluída', ($res['json']['success'] ?? false) === true && $areaRow($newArea) === false, snippet($res));
+
 section('12. Todas as páginas abrem para cada perfil');
 $pages = ['home', 'new_request', 'myRequests', 'myRequests?tab=concluidas', 'myRequests?q=teste', 'approve', 'approve?q=teste', 'inbox', 'inbox?tab=esperando', 'inbox?tab=historico', 'inbox?q=teste', 'myAccount', 'accounts', 'ajuda', "request_detail?id=$reqId&table=ti", "request_detail?id=$reqId&table=ti&from=inbox&tab=historico", "request_detail?id=$reqId&table=ti&from=approve", 'home?status=C', 'home?q=teste'];
 foreach (['solicitante' => $sol, 'coordenação' => $apr, 'gestor TI' => $ti, 'admin' => $adm] as $who => $client) {

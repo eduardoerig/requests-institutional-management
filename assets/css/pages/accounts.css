@@ -16,12 +16,14 @@
 .acc-head__actions .btn { flex: 1 1 auto; }
 
 /* ---------- Abas Pessoas / Setores ---------- */
-.acc-tabs { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 4px; padding: 4px; background: var(--fundo-2); border-radius: var(--r-2); }
+.acc-tabs { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 4px; padding: 4px; background: var(--fundo-2); border-radius: var(--r-2); }
 .acc-tab {
     display: inline-flex; align-items: center; justify-content: center; gap: 8px;
     min-height: var(--h-md); padding: 0 12px; border: 0; border-radius: 9px;
     background: transparent; color: var(--texto-2); font: inherit; font-size: var(--t-sm); font-weight: 600; cursor: pointer;
 }
+.acc-tab { white-space: nowrap; }
+.acc-tab i { display: none; } /* três abas no celular: o texto precisa caber em uma linha */
 .acc-tab.is-active { background: var(--superficie); color: var(--texto); box-shadow: 0 1px 2px rgb(0 0 0 / .08); }
 .acc-tab:focus-visible { outline: none; box-shadow: var(--anel); }
 
@@ -136,11 +138,11 @@
 .acc-note i { margin-top: 3px; color: var(--texto-2); }
 
 /* Escolhas (áreas, setores) */
-.acc-choices { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+.acc-choices { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
 .acc-choice {
     display: inline-flex; align-items: center; justify-content: center; gap: 8px;
-    min-height: 48px; padding: 8px 10px; border: 1px solid var(--linha); border-radius: var(--r-2);
-    background: var(--superficie); color: var(--texto); font: inherit; font-size: var(--t-sm); font-weight: 600; text-align: center; cursor: pointer;
+    min-height: 52px; padding: 10px 12px; border: 1px solid var(--linha); border-radius: var(--r-2);
+    background: var(--superficie); color: var(--texto); font: inherit; font-size: var(--t-sm); font-weight: 600; line-height: 1.3; text-align: center; text-wrap: balance; cursor: pointer;
 }
 .acc-choice i { color: var(--texto-2); }
 .acc-choice[aria-pressed="true"] { background: var(--grafite); border-color: var(--grafite); color: var(--texto-inv); }
@@ -208,11 +210,19 @@
 .acc-danger-text { color: var(--perigo); }
 .acc-danger-text:hover { background: var(--perigo-claro); }
 
+/* Áreas */
+.acc-areas-intro { display: flex; flex-direction: column; gap: 12px; margin-bottom: 14px; }
+.acc-areas-intro .acc-muted { margin: 0; max-width: 62ch; }
+.acc-area-new { margin-bottom: 14px; padding: 18px; }
+.acc-area__count { margin: -4px 0 0; }
+.acc-area.is-off .acc-sector__head h3 { color: var(--texto-2); }
+.acc-area__foot { flex-wrap: wrap; gap: 4px; }
+
 /* ---------- Assistente "Nova pessoa" (celular: tela cheia) ---------- */
 .acc-wizard { position: fixed; inset: 0; z-index: 85; display: flex; background: var(--superficie); }
 .acc-wizard[hidden], .acc-wizard [hidden] { display: none !important; }
 .acc-wizard__card { flex: 1; display: flex; flex-direction: column; min-height: 0; width: 100%; background: var(--superficie); animation: acc-sheet-in var(--dur-2) var(--ease-out); }
-.acc-wizard__head { display: flex; flex-direction: column; gap: 14px; padding: calc(16px + env(safe-area-inset-top)) 20px 14px; }
+.acc-wizard__head { display: flex; flex-direction: column; gap: 16px; padding: calc(16px + env(safe-area-inset-top)) 20px 18px; }
 .acc-wizard__titlebar { display: flex; align-items: center; gap: 12px; }
 .acc-wizard__step { font-size: var(--t-xs); color: var(--texto-2); }
 .acc-wizard__titlebar h2 { font-size: var(--t-xl); }
@@ -220,11 +230,11 @@
 .acc-wizard__bars { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 6px; }
 .acc-wizard__bars span { height: 4px; border-radius: 2px; background: var(--linha); }
 .acc-wizard__bars span.is-on { background: var(--laranja); }
-.acc-wizard__body { flex: 1; overflow-y: auto; padding: 4px 20px 20px; overscroll-behavior: contain; }
-.acc-wz-step { display: flex; flex-direction: column; gap: 14px; }
+.acc-wizard__body { flex: 1; overflow-y: auto; padding: 4px 20px 24px; overscroll-behavior: contain; }
+.acc-wz-step { display: flex; flex-direction: column; gap: 18px; }
 .acc-wz-step .acc-field input { min-height: 52px; font-size: 1.0625rem; }
 .acc-wz-hint { color: #3F3F46; line-height: 1.5; }
-.acc-wizard__foot { flex: none; display: flex; gap: 10px; padding: 12px 20px calc(16px + env(safe-area-inset-bottom)); border-top: 1px solid var(--linha); }
+.acc-wizard__foot { flex: none; display: flex; gap: 10px; padding: 16px 20px calc(16px + env(safe-area-inset-bottom)); border-top: 1px solid var(--linha); }
 .acc-btn-tall { min-height: 56px; font-size: var(--t-md); }
 .acc-grow { flex: 1; }
 .acc-btn-dark { background: var(--grafite); border-color: var(--grafite); color: var(--texto-inv); }
@@ -268,6 +278,7 @@ html.acc-lock, html.acc-lock body { overflow: hidden; }
     .acc-head__export { display: inline-flex; }
 
     .acc-tabs { display: flex; gap: 8px; padding: 0; background: none; }
+    .acc-tab i { display: inline-block; }
     .acc-tab { min-height: var(--h-sm); padding: 0 14px; border: 1px solid var(--linha); border-radius: var(--r-pill); background: var(--superficie); color: var(--texto); }
     .acc-tab.is-active { background: var(--grafite); border-color: var(--grafite); color: var(--texto-inv); box-shadow: none; }
 
@@ -323,17 +334,18 @@ html.acc-lock, html.acc-lock body { overflow: hidden; }
     .acc-field input, .acc-field select { min-height: var(--h-md); }
 
     .acc-sectors { grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); }
+    .acc-areas-intro { flex-direction: row; align-items: center; justify-content: space-between; gap: 24px; }
+    .acc-areas-intro .btn { flex: none; }
+    .acc-area-new { max-width: 480px; }
 
     /* Assistente em diálogo */
     .acc-wizard { align-items: center; justify-content: center; padding: 24px; background: var(--veu); }
     .acc-wizard__card { flex: none; width: min(560px, 100%); max-height: min(760px, calc(100vh - 48px)); border-radius: var(--r-3); box-shadow: var(--sombra-2); overflow: hidden; animation: none; }
-    .acc-wizard__head { padding: 20px 24px 14px; }
-    .acc-wizard__body { padding: 4px 24px 20px; }
-    .acc-wizard__foot { padding: 14px 24px; }
+    .acc-wizard__head { padding: 24px 28px 20px; }
+    .acc-wizard__body { padding: 4px 28px 28px; }
+    .acc-wizard__foot { padding: 18px 28px; }
     .acc-btn-tall { min-height: var(--h-lg); }
     .acc-kinds { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); }
-    .acc-choices { grid-template-columns: repeat(3, minmax(0, 1fr)); }
-    .acc-editor .acc-choices { grid-template-columns: repeat(2, minmax(0, 1fr)); }
     html.acc-lock, html.acc-lock body { overflow: auto; }
     html.acc-lock.acc-lock--wizard, html.acc-lock.acc-lock--wizard body { overflow: hidden; }
 }

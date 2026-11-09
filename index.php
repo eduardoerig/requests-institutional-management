@@ -239,9 +239,10 @@ $useCombo = in_array($assetPage, $comboPages, true);
     <?php include "pages/login.php"; ?>
 <?php else: ?>
     <?php
+    $coordAreas = $_SESSION['subdivision_names'] ?? [];
     $role_labels = [
         'admin' => 'Administrador', 'adm' => 'Administrador', 'coord' => 'Coordenação',
-        'adm_sub' => 'Coordenação ' . ($_SESSION['subdivision_name'] ?? ''),
+        'adm_sub' => count($coordAreas) > 1 ? 'Coordenação de ' . count($coordAreas) . ' áreas' : 'Coordenação ' . ($coordAreas[0] ?? ''),
         'gestor' => 'Setor de TI', 'ti' => 'Setor de TI', 'xerox' => 'Setor de Reprografia',
         'service' => 'Setor de Manutenção', 'shop' => 'Setor de Compras',
         'mkt' => 'Setor de Marketing', 'marketing' => 'Setor de Marketing',

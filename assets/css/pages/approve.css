@@ -331,6 +331,29 @@
 /* Sem os botões presos embaixo (lista à vista), o aviso desce */
 .undo-toast.is-low { bottom: calc(var(--bottomnav-h) + env(safe-area-inset-bottom) + 12px); }
 
+/* ---------- Aviso fixo: decisão que não foi enviada (sem internet) ---------- */
+.send-fail {
+    position: fixed;
+    top: calc(var(--topbar-h) + 8px);
+    left: 12px;
+    right: 12px;
+    z-index: 122;
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 8px 12px;
+    padding: 12px 14px;
+    border: 1px solid var(--perigo);
+    border-radius: 14px;
+    background: var(--perigo-claro);
+    color: var(--texto);
+    box-shadow: var(--sombra-2);
+}
+.send-fail[hidden] { display: none; }
+.send-fail > i { color: var(--perigo); }
+.send-fail__text { flex: 1 1 200px; font-size: var(--t-sm); font-weight: 600; line-height: 1.45; }
+.send-fail__btn { flex: none; min-height: var(--h-md); }
+
 /* ---------- Celular: painel ou lista ---------- */
 @media (max-width: 899.98px) {
     /* Busca e filtro só junto da lista; no pedido aberto, o pedido vem primeiro */
@@ -361,7 +384,8 @@
 @media (min-width: 900px) {
     .ap-cols {
         display: grid;
-        grid-template-columns: minmax(280px, 360px) minmax(0, 1fr);
+        /* A lista encolhe antes do painel: o pedido aberto e os botões precisam de espaço */
+        grid-template-columns: minmax(240px, min(30%, 360px)) minmax(0, 1fr);
         gap: 16px;
         align-items: start;
     }
@@ -416,6 +440,33 @@
     .ap-actions .btn { min-height: var(--h-md); padding: 0 18px; }
     .ap-actions__ask { margin-right: auto; }
     .ap-actions__approve { min-width: 160px; }
+    /* Navegador sem @container: os botões quebram linha em vez de sair do painel */
+    .ap-actions { flex-wrap: wrap; }
+
+    /* Painel estreito (telas de 900 a ~1200 px, com o menu ao lado): os três botões dividem a linha,
+       como no celular (Aprovar maior, à direita). Os rótulos ficam acima dos valores */
+    .ap-panel { container-type: inline-size; }
+    @container (max-width: 520px) {
+        .ap-detail { padding-left: 18px; padding-right: 18px; }
+        .ap-facts > div { grid-template-columns: minmax(0, 1fr); gap: 3px; }
+        .ap-actions {
+            display: grid;
+            grid-template-columns: minmax(0, .95fr) minmax(0, 1fr) minmax(0, 1.3fr);
+            gap: 8px;
+            margin: 0 -18px;
+            padding: 12px 18px 16px;
+        }
+        .ap-actions .btn { padding: 0 8px; }
+        .ap-actions__ask { margin-right: 0; }
+        .ap-actions__approve { min-width: 0; }
+    }
+    /* Mais estreito ainda (perto de 900 px): Aprovar em cima, largura toda; Perguntar e Recusar embaixo */
+    @container (max-width: 380px) {
+        .ap-actions { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }
+        .ap-actions__approve { grid-column: 1 / -1; order: -1; }
+    }
+
+    .send-fail { left: calc(var(--sidebar-w) + 24px); right: 24px; }
 
     .undo-toast,
     .undo-toast.is-low {

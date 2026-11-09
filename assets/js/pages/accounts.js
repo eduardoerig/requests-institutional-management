@@ -238,7 +238,7 @@
     });
 
     // ------------------------------------------------------------------
-    // Abas Pessoas / Setores
+    // Abas Pessoas / Setores / Áreas
     // ------------------------------------------------------------------
     const tabs = $$('[data-acc-tab]', app);
     function selectTab(name, focus) {
@@ -267,7 +267,7 @@
             next.focus();
         });
     });
-    if (location.hash === '#setores') selectTab('setores');
+    if (location.hash === '#setores' || location.hash === '#areas') selectTab(location.hash.slice(1));
 
     // ------------------------------------------------------------------
     // Lista: busca, perfil, situação
@@ -1001,6 +1001,73 @@
     }
 
     // ------------------------------------------------------------------
+    // Áreas (api/subdivisions.php)
+    // ------------------------------------------------------------------
+    function toggleNewArea() {
+        const form = $('[data-acc-form="area-new"]', app);
+        const opener = $('.acc-areas-intro [data-acc-action="toggle-new-area"]', app);
+        const open = form.hidden;
+        form.hidden = !open;
+        opener.setAttribute('aria-expanded', open ? 'true' : 'false');
+        if (open) form.name.focus();
+        else opener.focus();
+    }
+
+    function toggleAreaRename(btn) {
+        const card = btn.closest('.acc-area');
+        const form = card.querySelector('[data-acc-form="area-rename"]');
+        const opener = card.querySelector('.acc-area__foot [data-acc-action="toggle-area-rename"]');
+        const open = form.hidden;
+        form.hidden = !open;
+        opener.setAttribute('aria-expanded', open ? 'true' : 'false');
+        if (open) {
+            form.name.focus();
+            form.name.select();
+        } else {
+            form.name.value = card.dataset.areaSubName;
+            opener.focus();
+        }
+    }
+
+    // Grava e recarrega na aba Áreas; se recusar, mostra o motivo e fica onde está
+    async function sendArea(btn, pairs, doneMessage) {
+        setBusy(btn, true);
+        const data = await send('api/subdivisions.php', pairs);
+        setBusy(btn, false);
+        if (!data) return;
+        if (!data.success) { showToast(data.message || 'Não foi possível salvar a área.', 'error'); return; }
+        reloadTo('areas', doneMessage);
+    }
+
+    async function setAreaStatus(btn) {
+        const card = btn.closest('.acc-area');
+        const active = btn.dataset.active === '1';
+        if (!active) {
+            const ok = await showConfirm({
+                title: `Desativar ${card.dataset.areaSubName}?`,
+                message: 'Ela deixa de aparecer ao cadastrar pessoas. Os pedidos antigos continuam com este nome, e você pode reativar depois.',
+                type: 'warning',
+                confirmLabel: 'Desativar área',
+            });
+            if (!ok) return;
+        }
+        sendArea(btn, [['action', 'set_status'], ['id', card.dataset.areaSubId], ['active', active ? 1 : 0]], active ? 'Área reativada.' : 'Área desativada.');
+    }
+
+    async function deleteArea(btn) {
+        const card = btn.closest('.acc-area');
+        const ok = await showConfirm({
+            title: `Excluir ${card.dataset.areaSubName}?`,
+            message: 'A área não tem pessoas nem pedidos. Esta ação não pode ser desfeita.',
+            type: 'error',
+            confirmLabel: 'Excluir área',
+            isDanger: true,
+        });
+        if (!ok) return;
+        sendArea(btn, [['action', 'delete'], ['id', card.dataset.areaSubId]], 'Área excluída.');
+    }
+
+    // ------------------------------------------------------------------
     // Ações (delegação)
     // ------------------------------------------------------------------
     document.addEventListener('click', async (e) => {
@@ -1049,6 +1116,10 @@
             case 'toggle-desc': toggleDescForm(el); break;
             case 'remove-resp': removeResponsible(el); break;
             case 'delete-sector': deleteSector(el); break;
+            case 'toggle-new-area': toggleNewArea(); break;
+            case 'toggle-area-rename': toggleAreaRename(el); break;
+            case 'area-status': setAreaStatus(el); break;
+            case 'delete-area': deleteArea(el); break;
             default: break;
         }
     });
@@ -1059,6 +1130,12 @@
         e.preventDefault();
         if (form.dataset.accForm === 'add-resp') addResponsible(form);
         if (form.dataset.accForm === 'sector-desc') saveSectorDesc(form);
+        if (form.dataset.accForm === 'area-new') {
+            sendArea(form.querySelector('button[type="submit"]'), [['action', 'create'], ['name', form.name.value.trim()]], 'Área criada.');
+        }
+        if (form.dataset.accForm === 'area-rename') {
+            sendArea(form.querySelector('button[type="submit"]'), [['action', 'rename'], ['id', form.closest('.acc-area').dataset.areaSubId], ['name', form.name.value.trim()]], 'Nome salvo.');
+        }
     });
 
     // Passou de celular para PC (ou o contrário) com a edição aberta: ajusta o papel do painel
