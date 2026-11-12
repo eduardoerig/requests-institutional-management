@@ -15,6 +15,7 @@ if (PHP_SAPI !== 'cli') {
 }
 
 require dirname(__DIR__) . '/config/conn.php';
+require_once dirname(__DIR__) . '/includes/helpers.php'; // uploadDir()
 
 $baseUrl = rtrim(getenv('TEST_BASE_URL') ?: 'http://localhost/requests2.0/', '/') . '/';
 $password = getenv('TEST_PASSWORD') ?: '';
@@ -42,7 +43,7 @@ final class Client
         $this->jar = tempnam(sys_get_temp_dir(), 'sisreq');
     }
 
-    public function request(string $method, string $path, array $data = [], array $headers = []): array
+    public function request(string $method, string $path, array $data = [], array $headers = [], bool $multipart = false): array
     {
         $ch = curl_init($this->base . ltrim($path, '/'));
         curl_setopt_array($ch, [
@@ -55,7 +56,7 @@ final class Client
             CURLOPT_CUSTOMREQUEST => $method,
         ]);
         if ($method === 'POST') {
-            curl_setopt($ch, CURLOPT_POSTFIELDS, http_build_query($data));
+            curl_setopt($ch, CURLOPT_POSTFIELDS, $multipart ? $data : http_build_query($data));
         }
         $body = (string)curl_exec($ch);
         $status = (int)curl_getinfo($ch, CURLINFO_HTTP_CODE);
@@ -76,6 +77,19 @@ final class Client
             $this->refreshCsrf();
         }
         return $this->request('POST', $path, $data + ['csrf_token' => $this->csrf]);
+    }
+
+    /** POST multipart com arquivos em attachments[] (campos simples; listas em "nome[0]") */
+    public function postFiles(string $path, array $data, array $files): array
+    {
+        if ($this->csrf === '') {
+            $this->refreshCsrf();
+        }
+        $fields = $data + ['csrf_token' => $this->csrf];
+        foreach (array_values($files) as $i => $file) {
+            $fields["attachments[$i]"] = $file;
+        }
+        return $this->request('POST', $path, $fields, [], true);
     }
 
     public function refreshCsrf(): void
@@ -217,11 +231,124 @@ $base = ['type' => 'ti', 'title' => 'Teste automático', 'end' => $future, 'deta
 $res = $sol->post('api/add_request.php', ['title' => ''] + $base);
 check('sem título é recusado', ($res['json']['success'] ?? true) === false && str_contains($res['json']['message'] ?? '', 'título'));
 $res = $sol->post('api/add_request.php', ['end' => '2020-01-01'] + $base);
-check('data no passado é recusada', ($res['json']['success'] ?? true) === false && str_contains($res['json']['message'] ?? '', 'passado'));
+check('data no passado é recusada', ($res['json']['success'] ?? true) === false && str_contains($res['json']['message'] ?? '', 'amanhã'));
+$res = $sol->post('api/add_request.php', ['end' => date('Y-m-d')] + $base);
+check('prazo para hoje é recusado (só a partir de amanhã)', ($res['json']['success'] ?? true) === false && str_contains($res['json']['message'] ?? '', 'amanhã'), snippet($res));
 $res = $sol->post('api/add_request.php', ['type' => 'colorPrint', 'qtd' => '0', 'model' => 'A4', 'file' => 'a.pdf'] + $base);
 check('impressão com 0 cópias é recusada', ($res['json']['success'] ?? true) === false);
+$plast = ['type' => 'colorPrint', 'kind' => 'plastificacao', 'title' => 'Teste plastificação', 'qtd' => '10', 'size' => 'A4'] + $base;
+$res = $sol->post('api/add_request.php', $plast);
+$plastId = (int)($res['json']['id'] ?? 0);
+if ($plastId) { $createdIds[] = ['xerox', $plastId]; }
+$plastRow = $plastId ? $pdo->query("SELECT kind, `type`, qtd, arquive FROM ctd_xerox_frm WHERE id = $plastId")->fetch(PDO::FETCH_ASSOC) : [];
+check('plastificação sem arquivo é criada', $plastId > 0 && ($plastRow['kind'] ?? '') === 'plastificacao' && ($plastRow['type'] ?? '') === 'A4' && (int)($plastRow['qtd'] ?? 0) === 10, snippet($res));
+$res = $sol->get("request_detail?id=$plastId&table=xerox");
+check('pedido mostra que é plastificação', str_contains($res['body'], 'Plastificação') && str_contains($res['body'], '10 folhas para plastificar'), 'HTTP ' . $res['status']);
+$res = $sol->post('api/add_request.php', ['kind' => 'encadernacao'] + $plast);
+check('tipo de reprografia inválido é recusado', ($res['json']['success'] ?? true) === false, snippet($res));
+$res = $sol->post('api/add_request.php', ['size' => 'A0'] + $plast);
+check('plastificação com tamanho fora da lista é recusada', ($res['json']['success'] ?? true) === false, snippet($res));
+$res = $sol->post('api/add_request.php', ['kind' => 'copia_colorida', 'file' => ''] + $plast);
+check('cópia colorida sem arquivo continua recusada', ($res['json']['success'] ?? true) === false && str_contains($res['json']['message'] ?? '', 'arquivo'), snippet($res));
+// Anexos (sempre opcionais; cópia colorida só PDF)
+$tmpDir = sys_get_temp_dir() . '/sisreq_anexos_' . bin2hex(random_bytes(4));
+mkdir($tmpDir);
+$mkFile = function (string $name, string $bytes, string $mime) use ($tmpDir): CURLFile {
+    file_put_contents("$tmpDir/$name", $bytes);
+    return new CURLFile("$tmpDir/$name", $mime, $name);
+};
+$pdfBytes = "%PDF-1.4\n1 0 obj<</Type/Catalog/Pages 2 0 R>>endobj\n2 0 obj<</Type/Pages/Kids[]/Count 0>>endobj\ntrailer<</Root 1 0 R>>\n%%EOF\n";
+$pngBytes = base64_decode('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==');
+$copyBase = ['type' => 'colorPrint', 'kind' => 'copia_colorida', 'title' => 'Teste anexo PDF', 'end' => $future, 'file' => '', 'qtd' => '5', 'model' => 'A4'];
+$res = $sol->postFiles('api/add_request.php', $copyBase, [$mkFile('certificados.pdf', $pdfBytes, 'application/pdf')]);
+$attReqId = (int)($res['json']['id'] ?? 0);
+if ($attReqId) { $createdIds[] = ['xerox', $attReqId]; }
+$attRow = $attReqId ? $pdo->query("SELECT id, original_name, stored_name, mime FROM request_attachments WHERE request_table = 'xerox' AND request_id = $attReqId")->fetch(PDO::FETCH_ASSOC) : false;
+check('cópia colorida com PDF anexado dispensa "onde está o arquivo"', $attReqId > 0 && $attRow && $attRow['original_name'] === 'certificados.pdf'
+    && is_file(uploadDir() . '/' . $attRow['stored_name']), snippet($res));
+$res = $sol->postFiles('api/add_request.php', $copyBase, [$mkFile('foto.png', $pngBytes, 'image/png')]);
+check('cópia colorida recusa anexo que não é PDF', ($res['json']['success'] ?? true) === false && str_contains($res['json']['message'] ?? '', 'PDF'), snippet($res));
+$res = $sol->postFiles('api/add_request.php', $copyBase, [$mkFile('falso.pdf', 'isto não é um pdf', 'application/pdf')]);
+check('PDF falso (só a extensão) é recusado', ($res['json']['success'] ?? true) === false, snippet($res));
+$res = $sol->postFiles('api/add_request.php', ['type' => 'shopping', 'title' => 'Teste anexo foto', 'end' => $future, 'details' => 'ver foto'], [$mkFile('modelo.png', $pngBytes, 'image/png')]);
+$pngReqId = (int)($res['json']['id'] ?? 0);
+if ($pngReqId) { $createdIds[] = ['shop', $pngReqId]; }
+check('Compras aceita foto anexada', $pngReqId > 0 && (int)$pdo->query("SELECT COUNT(*) FROM request_attachments WHERE request_table = 'shop' AND request_id = $pngReqId")->fetchColumn() === 1, snippet($res));
+foreach (['programa.exe' => "MZ\x90\x00", 'pagina.html' => '<html><script>alert(1)</script></html>'] as $badName => $badBytes) {
+    $res = $sol->postFiles('api/add_request.php', ['type' => 'ti', 'title' => 'Teste anexo proibido', 'end' => $future, 'details' => 'x'], [$mkFile($badName, $badBytes, 'application/octet-stream')]);
+    check("anexo $badName é recusado", ($res['json']['success'] ?? true) === false, snippet($res));
+}
+if ($attRow) {
+    $res = $sol->get('api/attachment.php?id=' . (int)$attRow['id']);
+    check('quem pediu abre o próprio anexo', $res['status'] === 200 && str_starts_with($res['body'], '%PDF-'), 'HTTP ' . $res['status']);
+    $res = $sol->get("request_detail?id=$attReqId&table=xerox");
+    check('página do pedido lista o anexo', str_contains($res['body'], 'api/attachment.php?id=' . (int)$attRow['id']) && str_contains($res['body'], 'certificados.pdf'));
+    $res = $ti->get('api/attachment.php?id=' . (int)$attRow['id']);
+    check('quem não vê o pedido não abre o anexo', $res['status'] === 403 && !str_contains($res['body'], '%PDF-'), 'HTTP ' . $res['status']);
+}
+array_map('unlink', glob("$tmpDir/*"));
+rmdir($tmpDir);
+
+// Dias de compra (Compras só compra às terças e quintas)
+$friday = new DateTimeImmutable('2026-11-13'); // sexta
+$pn = purchaseNotice([4, 2], '2026-11-16', 'Compras', $friday);
+check('dias de compra: de sexta, o próximo é terça; prazo na segunda fica antes', $pn !== null && $pn['days'] === 'terças e quintas'
+    && $pn['next'] === 'terça-feira, 17/11' && $pn['deadline_before'] === true && str_contains($pn['message'], 'segunda-feira, 16/11'), json_encode($pn, JSON_UNESCAPED_UNICODE));
+$pn = purchaseNotice([2, 4], '2026-11-30', 'Compras', new DateTimeImmutable('2026-11-17')); // terça
+check('dias de compra: na terça, o próximo é quinta (hoje não conta)', $pn['next'] === 'quinta-feira, 19/11' && $pn['deadline_before'] === false, json_encode($pn, JSON_UNESCAPED_UNICODE));
+check('setor sem dias de compra não tem aviso', purchaseNotice([], '2026-11-30') === null);
+$res = $sol->post('api/add_request.php', ['type' => 'shopping', 'title' => 'Teste dias de compra', 'end' => $future, 'details' => 'Canetas']);
+$pnId = (int)($res['json']['id'] ?? 0);
+if ($pnId) { $createdIds[] = ['shop', $pnId]; }
+check('pedido de Compras volta com o aviso dos dias de compra', str_contains($res['json']['purchase_notice']['title'] ?? '', 'terças e quintas'), snippet($res));
+$res = $sol->post('api/add_request.php', $base + ['title' => 'Teste sem aviso de compra']);
+$noPnId = (int)($res['json']['id'] ?? 0);
+if ($noPnId) { $createdIds[] = ['ti', $noPnId]; }
+check('pedido de outro setor não traz aviso de compra', $noPnId > 0 && !isset($res['json']['purchase_notice']), snippet($res));
+$res = $sol->post('api/get_form.php', ['action' => 'get', 'id' => (int)$pdo->query("SELECT id FROM ctd_requests_models WHERE form_name = 'form_compra.php'")->fetchColumn()]);
+check('formulário de Compras diz os dias de compra', str_contains($res['json']['form'] ?? '', 'Compras faz compras às terças e quintas') && !str_contains($res['json']['form'] ?? '', '<!--DIAS_COMPRA-->'), snippet($res));
+
+// Itens com link (Compras) e links de referência (Marketing)
+$shopBase = ['type' => 'shopping', 'title' => 'Teste itens', 'end' => $future];
+$res = $sol->post('api/add_request.php', $shopBase + ['details' => '']);
+check('compra sem detalhes e sem itens é recusada', ($res['json']['success'] ?? true) === false, snippet($res));
+$res = $sol->post('api/add_request.php', $shopBase + ['details' => '', 'items' => [
+    ['name' => 'Papel A4', 'qty' => '10 resmas', 'url' => 'www.loja-exemplo.com.br/papel'],
+    ['name' => '', 'qty' => '', 'url' => ''],
+    ['name' => 'Grampeador', 'qty' => '2', 'url' => ''],
+]]);
+$shopId = (int)($res['json']['id'] ?? 0);
+if ($shopId) { $createdIds[] = ['shop', $shopId]; }
+$shopItems = $shopId ? $pdo->query("SELECT name, qty, url FROM request_items WHERE request_table = 'shop' AND request_id = $shopId ORDER BY position")->fetchAll(PDO::FETCH_ASSOC) : [];
+check('compra só com itens é criada (linha vazia ignorada, www vira https)', count($shopItems) === 2
+    && $shopItems[0]['url'] === 'https://www.loja-exemplo.com.br/papel' && $shopItems[1]['url'] === null, snippet($res));
+$res = $sol->get("request_detail?id=$shopId&table=shop");
+check('página do pedido lista os itens com o domínio do link', str_contains($res['body'], 'Grampeador') && str_contains($res['body'], 'loja-exemplo.com.br</a>'), 'HTTP ' . $res['status']);
+$res = $sol->post('api/add_request.php', $shopBase + ['details' => 'x', 'items' => [['name' => 'Caneta', 'url' => 'javascript:alert(1)']]]);
+check('link que não é de site é recusado', ($res['json']['success'] ?? true) === false && str_contains($res['json']['message'] ?? '', 'link'), snippet($res));
+$res = $sol->post('api/add_request.php', $shopBase + ['details' => 'x', 'items' => [['name' => '', 'qty' => '3']]]);
+check('item sem nome é recusado', ($res['json']['success'] ?? true) === false && str_contains($res['json']['message'] ?? '', 'nome do item'), snippet($res));
+$res = $sol->post('api/add_request.php', ['type' => 'mkt', 'model' => ['Banner'], 'items' => [['url' => '', 'name' => 'arte antiga']]] + $base);
+check('link de referência sem o link é recusado', ($res['json']['success'] ?? true) === false && str_contains($res['json']['message'] ?? '', 'link'), snippet($res));
+$res = $sol->post('api/add_request.php', ['type' => 'ti', 'items' => [['name' => 'Ignorado']]] + $base);
+$tiItemsId = (int)($res['json']['id'] ?? 0);
+if ($tiItemsId) { $createdIds[] = ['ti', $tiItemsId]; }
+check('setor sem itens ignora a lista', $tiItemsId > 0 && (int)$pdo->query("SELECT COUNT(*) FROM request_items WHERE request_table = 'ti' AND request_id = $tiItemsId")->fetchColumn() === 0, snippet($res));
+
 $res = $sol->post('api/add_request.php', ['type' => 'mkt', 'model' => ''] + $base);
 check('marketing sem aplicação é recusado', ($res['json']['success'] ?? true) === false);
+$res = $sol->post('api/add_request.php', ['type' => 'mkt', 'model' => ['Instagram', 'Banner', 'Inventado']] + $base);
+$mktId = (int)($res['json']['id'] ?? 0);
+if ($mktId) { $createdIds[] = ['mkt', $mktId]; }
+$mktType = $mktId ? (string)$pdo->query("SELECT `type` FROM ctd_mkt_frm WHERE id = $mktId")->fetchColumn() : '';
+check('marketing grava vários lugares (e ignora o que não está na lista)', $mktType === 'Instagram, Banner', snippet($res) . " type=$mktType");
+$res = $sol->post('api/add_request.php', ['type' => 'mkt', 'model' => ['outros'], 'outros_texto' => ''] + $base);
+check('marketing com "Outro" sem texto é recusado', ($res['json']['success'] ?? true) === false && str_contains($res['json']['message'] ?? '', 'Outro'), snippet($res));
+$res = $sol->post('api/add_request.php', ['type' => 'mkt', 'model' => ['Whatsapp', 'outros'], 'outros_texto' => 'Mural'] + $base);
+$mktId = (int)($res['json']['id'] ?? 0);
+if ($mktId) { $createdIds[] = ['mkt', $mktId]; }
+$mktType = $mktId ? (string)$pdo->query("SELECT `type` FROM ctd_mkt_frm WHERE id = $mktId")->fetchColumn() : '';
+check('marketing grava "Outro" com o texto', $mktType === 'Whatsapp, Outro: Mural', snippet($res) . " type=$mktType");
 $res = $sol->post('api/add_request.php', ['urgent' => '1', 'urgent_reason' => ''] + $base);
 check('urgente sem motivo é recusado', ($res['json']['success'] ?? true) === false && str_contains($res['json']['message'] ?? '', 'urgente'));
 
@@ -637,6 +764,46 @@ check('ajuda devolvida: volta para Em andamento da TI com o recado', $place[0] =
 $res = $ti->post('api/request_actions.php', ['id' => $helpReqId, 'table' => 'ctd_ti_frm', 'action' => 'finish']);
 check('TI conclui depois do retorno', ($res['json']['success'] ?? false) === true, snippet($res));
 
+// Ajuda aceita que não volta: o setor que pediu (ou a coordenação) encerra com motivo e o pedido destrava
+$stuckHelp = function () use ($sol, $apr, $ti, $shop, $base, $pdo, $shopAreaId, &$createdIds): array {
+    $res = $sol->post('api/add_request.php', ['title' => 'Teste ajuda parada'] + $base);
+    $id = (int)($res['json']['id'] ?? 0);
+    $createdIds[] = ['ti', $id];
+    $apr->post('api/approve_request.php', ['action' => 'post', 'id' => $id, 'table' => 'ti', 'value' => 'Y']);
+    $ti->post('api/request_actions.php', ['id' => $id, 'table' => 'ctd_ti_frm', 'action' => 'start_progress']);
+    $ti->post('api/request_forwards.php', ['action' => 'forward', 'id' => $id, 'table' => 'ti', 'to_area_id' => $shopAreaId, 'mode' => 'help', 'message' => 'Precisamos de um cabo para terminar.']);
+    $fwdId = (int)$pdo->query("SELECT id FROM request_forwards WHERE request_id = $id AND request_table = 'ti' ORDER BY id DESC LIMIT 1")->fetchColumn();
+    $shop->post('api/request_forwards.php', ['action' => 'accept', 'forward_id' => $fwdId]);
+    return [$id, $fwdId];
+};
+[$shId, $shFwd] = $stuckHelp();
+$res = $ti->post('api/request_actions.php', ['id' => $shId, 'table' => 'ctd_ti_frm', 'action' => 'finish']);
+check('ajuda aceita: ao concluir, a mensagem diz como sair', ($res['json']['success'] ?? true) === false && str_contains((string)($res['json']['message'] ?? ''), 'Encerrar a ajuda'), snippet($res));
+$res = $ti->get("request_detail?id=$shId&table=ti");
+check('ajuda aceita: TI vê o botão Encerrar a ajuda', str_contains($res['body'], 'Encerrar a ajuda') && str_contains($res['body'], "'help_accepted'"));
+$res = $shop->get("request_detail?id=$shId&table=ti");
+check('ajuda aceita: quem ajuda não vê Encerrar a ajuda', !str_contains($res['body'], "'help_accepted'"));
+$res = $ti->post('api/request_forwards.php', ['action' => 'cancel', 'forward_id' => $shFwd]);
+check('encerrar ajuda aceita sem motivo é bloqueado', ($res['json']['success'] ?? true) === false, snippet($res));
+$res = $shop->post('api/request_forwards.php', ['action' => 'cancel', 'forward_id' => $shFwd, 'reason' => 'Quem ajuda tentando encerrar']);
+check('quem ajuda não encerra a própria ajuda', ($res['json']['success'] ?? true) === false, snippet($res));
+$res = $ti->post('api/request_forwards.php', ['action' => 'cancel', 'forward_id' => $shFwd, 'reason' => 'Resolvemos por conta própria']);
+$row = $pdo->query("SELECT status, response_note FROM request_forwards WHERE id = $shFwd")->fetch(PDO::FETCH_ASSOC);
+check('TI encerra a ajuda aceita com motivo', ($res['json']['success'] ?? false) === true && ($row['status'] ?? '') === 'cancelled' && ($row['response_note'] ?? '') === 'Resolvemos por conta própria', snippet($res));
+$n = (int)$pdo->query("SELECT COUNT(*) FROM notifications n JOIN cfg_user_area cua ON cua.id_user = n.user_id WHERE cua.id_area = $shopAreaId AND n.title = 'Ajuda encerrada (nº $shId)' AND n.message LIKE '%Resolvemos por conta%'")->fetchColumn();
+check('quem ajudava recebe o motivo', $n > 0, (string)$n);
+$res = $ti->get("request_detail?id=$shId&table=ti");
+check('linha do tempo diz que a ajuda foi encerrada', str_contains($res['body'], 'encerrou a ajuda de Compras'));
+$res = $ti->post('api/request_actions.php', ['id' => $shId, 'table' => 'ctd_ti_frm', 'action' => 'finish']);
+check('depois de encerrar a ajuda, TI conclui', ($res['json']['success'] ?? false) === true, snippet($res));
+[$shId2, $shFwd2] = $stuckHelp();
+$res = $apr->get("request_detail?id=$shId2&table=ti");
+check('coordenação vê Encerrar a ajuda', str_contains($res['body'], "'help_accepted'"));
+$res = $apr->post('api/request_forwards.php', ['action' => 'cancel', 'forward_id' => $shFwd2, 'reason' => 'Coordenação liberando o pedido']);
+check('coordenação encerra a ajuda aceita', ($res['json']['success'] ?? false) === true, snippet($res));
+$res = $ti->post('api/request_actions.php', ['id' => $shId2, 'table' => 'ctd_ti_frm', 'action' => 'finish']);
+check('depois da coordenação encerrar, TI conclui', ($res['json']['success'] ?? false) === true, snippet($res));
+
 // ------------------------------------------------------------------
 section('11c. Caixa do setor');
 RequestInbox::clearCache();
@@ -714,6 +881,10 @@ $res = $sol->post('api/get_form.php', ['action' => 'get', 'id' => $tiModel]);
 $formHtml = (string)($res['json']['form'] ?? '');
 check('formulário traz o campo de parceiro, sem o próprio setor', str_contains($formHtml, 'name="partner_area_id"')
     && str_contains($formHtml, 'value="' . $shopAreaId . '"') && !str_contains($formHtml, 'value="' . $tiAreaId . '"'), snippet($res));
+check('parceiro e observação são perguntas Sim/Não sem resposta marcada',
+    str_contains($formHtml, 'name="partner_choice"') && str_contains($formHtml, 'name="obs_choice"')
+    && str_contains($formHtml, 'Mais alguma observação?') && !str_contains($formHtml, 'checked')
+    && str_contains($formHtml, '<textarea disabled name="obs"') && !str_contains($formHtml, '<!--OBS-->'), snippet($res));
 
 [, $res] = $newPartnerReq(['partner_area_id' => $tiAreaId]);
 check('quem pede não sugere o próprio setor do pedido', ($res['json']['success'] ?? true) === false, snippet($res));
@@ -914,6 +1085,146 @@ $sugRows = $pdo->query("SELECT to_area_id FROM request_forwards WHERE request_id
 check('coordenação pode ficar com só uma das sugestões', count($sugRows) === 1 && (int)$sugRows[0] === $mktAreaId, json_encode($sugRows));
 
 // ------------------------------------------------------------------
+section('11e. Áreas: coordenação de mais de uma');
+$areaBySlug = fn(string $slug) => (int)$pdo->query('SELECT id FROM ctd_subdivision WHERE slug = ' . $pdo->quote($slug))->fetchColumn();
+$medioId = $areaBySlug('medio');
+$infantilId = $areaBySlug('infantil');
+$fund2Id = $areaBySlug('fundamental_2');
+check('áreas novas cadastradas', $medioId > 0 && $infantilId > 0 && $fund2Id > 0);
+$homeArea = (int)$pdo->query("SELECT id_subdivision FROM cfg_user_subdivision WHERE id_user = $aprId ORDER BY id_subdivision LIMIT 1")->fetchColumn();
+$reqArea = fn(int $id) => (int)$pdo->query("SELECT subdivision_id FROM ctd_ti_frm WHERE id = $id")->fetchColumn();
+$reqStatus = fn(int $id) => (string)$pdo->query("SELECT status FROM ctd_ti_frm WHERE id = $id")->fetchColumn();
+$tiModel = (int)$pdo->query("SELECT id FROM ctd_requests_models WHERE form_name = 'form_chamado_ti.php'")->fetchColumn();
+
+// O administrador liga a coordenação a duas áreas
+$res = $adm->post('api/update_user_admin.php', ['action' => 'update', 'id' => $aprId, 'subdivisions' => [$homeArea, $medioId]]);
+$aprCount = (int)$pdo->query("SELECT COUNT(*) FROM cfg_user_subdivision WHERE id_user = $aprId")->fetchColumn();
+check('administrador liga a coordenação a duas áreas', ($res['json']['success'] ?? false) === true && $aprCount === 2, snippet($res));
+
+$res = $apr->post('api/get_form.php', ['action' => 'get', 'id' => $tiModel]);
+$form = (string)($res['json']['form'] ?? '');
+check('formulário de quem tem duas áreas leva a área num campo escondido', str_contains($form, 'name="subdivision_id"') && str_contains($form, 'data-area-hidden') && !str_contains($form, '<!--AREA-->'), snippet($res));
+$res = $apr->get('new_request');
+check('quem tem duas áreas escolhe a área antes do setor', str_contains($res['body'], 'data-area-choice') && str_contains($res['body'], 'name="nr_area" value="' . $medioId . '"'), 'HTTP ' . $res['status']);
+$res = $sol->get('new_request');
+check('quem tem uma área não vê a escolha da área', $res['status'] === 200 && !str_contains($res['body'], 'data-area-choice'));
+$res = $sol->post('api/get_form.php', ['action' => 'get', 'id' => $tiModel]);
+$form = (string)($res['json']['form'] ?? '');
+check('quem tem uma área não vê a escolha', $form !== '' && !str_contains($form, 'name="subdivision_id"') && !str_contains($form, '<!--AREA-->'));
+
+$res = $apr->post('api/add_request.php', ['title' => 'Teste área sem escolher'] + $base);
+check('quem tem duas áreas precisa escolher', ($res['json']['success'] ?? true) === false, snippet($res));
+$res = $apr->post('api/add_request.php', ['title' => 'Teste área alheia', 'subdivision_id' => $infantilId] + $base);
+check('não pede por área que não é sua', ($res['json']['success'] ?? true) === false, snippet($res));
+$res = $apr->post('api/add_request.php', ['title' => 'Teste área média', 'subdivision_id' => $medioId] + $base);
+$aprReq = (int)($res['json']['id'] ?? 0);
+if ($aprReq) { $createdIds[] = ['ti', $aprReq]; }
+check('pedido fica na área escolhida', $aprReq > 0 && $reqArea($aprReq) === $medioId, snippet($res));
+
+$res = $sol->post('api/add_request.php', ['title' => 'Teste área ignorada', 'subdivision_id' => $medioId] + $base);
+$solReq = (int)($res['json']['id'] ?? 0);
+if ($solReq) { $createdIds[] = ['ti', $solReq]; }
+check('quem tem uma área não troca de área pelo POST', $solReq > 0 && $reqArea($solReq) === $homeArea, snippet($res));
+
+// Outra coordenação, só da primeira área
+$tmpCoordLogin = 'tmp_teste_coord';
+$tmpMultiLogin = 'tmp_teste_coord_multi';
+$dropTmp = function (string $login) use ($pdo): void {
+    $id = (int)$pdo->query('SELECT id FROM ctd_users WHERE login = ' . $pdo->quote($login))->fetchColumn();
+    if ($id) {
+        $pdo->prepare('DELETE FROM cfg_user_subdivision WHERE id_user = ?')->execute([$id]);
+        $pdo->prepare('DELETE FROM notifications WHERE user_id = ?')->execute([$id]);
+        $pdo->prepare('DELETE FROM ctd_users WHERE id = ?')->execute([$id]);
+    }
+};
+$dropTmp($tmpCoordLogin);
+$dropTmp($tmpMultiLogin);
+$res = $adm->post('api/create_user.php', ['new_name' => 'Teste Coord Multi', 'new_login' => $tmpMultiLogin, 'new_password' => $password, 'new_role' => 'adm_sub', 'new_subdivisions' => [$fund2Id, $infantilId]]);
+$multiId = (int)($res['json']['id'] ?? 0);
+check('cadastro aceita coordenação de duas áreas', $multiId > 0 && (int)$pdo->query("SELECT COUNT(*) FROM cfg_user_subdivision WHERE id_user = $multiId")->fetchColumn() === 2, snippet($res));
+$adm->post('api/create_user.php', ['new_name' => 'Teste Coord', 'new_login' => $tmpCoordLogin, 'new_password' => $password, 'new_role' => 'adm_sub', 'new_subdivisions' => [$homeArea]]);
+$coord = new Client($baseUrl);
+check('coordenação de uma área entra', ($coord->login($tmpCoordLogin, $password)['json']['success'] ?? false) === true);
+
+$res = $coord->post('api/approve_request.php', ['action' => 'post', 'id' => $aprReq, 'table' => 'ti', 'value' => 'Y']);
+check('coordenação de outra área não aprova, mesmo quem pediu sendo da sua', $res['status'] === 403 && $reqStatus($aprReq) === 'P', snippet($res));
+$res = $coord->get('approve');
+check('coordenação de outra área não vê o pedido em Aprovar', $res['status'] === 200 && !str_contains($res['body'], 'Teste área média'));
+
+$res = $apr->post('api/approve_request.php', ['action' => 'post', 'id' => $solReq, 'table' => 'ti', 'value' => 'Y']);
+check('coordenação de duas áreas aprova a primeira', ($res['json']['success'] ?? false) === true, snippet($res));
+
+// Segunda área: o pedido é de outra pessoa, para não cair na regra de não aprovar o próprio
+$res = $coord->post('api/add_request.php', ['title' => 'Teste área segunda'] + $base);
+$secondReq = (int)($res['json']['id'] ?? 0);
+if ($secondReq) { $createdIds[] = ['ti', $secondReq]; }
+$pdo->prepare('UPDATE ctd_ti_frm SET subdivision_id = ? WHERE id = ?')->execute([$medioId, $secondReq]);
+$res = $apr->get('approve');
+check('coordenação de duas áreas vê a segunda em Aprovar', $res['status'] === 200 && str_contains($res['body'], 'Teste área segunda'));
+$res = $apr->post('api/approve_request.php', ['action' => 'post', 'id' => $secondReq, 'table' => 'ti', 'value' => 'Y']);
+check('coordenação de duas áreas aprova a segunda', ($res['json']['success'] ?? false) === true, snippet($res));
+
+// Pedido antigo, sem área: continua com a coordenação da área de quem pediu
+$res = $sol->post('api/add_request.php', ['title' => 'Teste área vazia'] + $base);
+$noAreaReq = (int)($res['json']['id'] ?? 0);
+if ($noAreaReq) { $createdIds[] = ['ti', $noAreaReq]; }
+$pdo->prepare('UPDATE ctd_ti_frm SET subdivision_id = NULL WHERE id = ?')->execute([$noAreaReq]);
+$res = $coord->post('api/approve_request.php', ['action' => 'post', 'id' => $noAreaReq, 'table' => 'ti', 'value' => 'Y']);
+check('pedido sem área fica com a coordenação de quem pediu', ($res['json']['success'] ?? false) === true, snippet($res));
+
+$res = $adm->post('api/update_user_admin.php', ['action' => 'update', 'id' => $aprId, 'subdivisions' => [$homeArea]]);
+check('coordenação volta a uma área', ($res['json']['success'] ?? false) === true, snippet($res));
+$dropTmp($tmpCoordLogin);
+$dropTmp($tmpMultiLogin);
+
+section('11f. Áreas: administrar');
+$areaApi = fn(Client $who, array $data) => $who->post('api/subdivisions.php', $data);
+$areaRow = fn(int $id) => $pdo->query("SELECT name, slug, status FROM ctd_subdivision WHERE id = $id")->fetch(PDO::FETCH_ASSOC);
+$res = $areaApi($apr, ['action' => 'create', 'name' => 'Teste Área Coordenação']);
+check('coordenação não cria área', $res['status'] === 403, snippet($res));
+$res = $areaApi($adm, ['action' => 'create', 'name' => '  Área   de <b>Téste</b> ']);
+$newArea = (int)($res['json']['id'] ?? 0);
+$row = $newArea ? $areaRow($newArea) : [];
+check('administrador cria área, com código sem acento', $newArea > 0 && $row['name'] === 'Área de <b>Téste</b>' && $row['slug'] === 'area_de_b_teste_b', snippet($res));
+$res = $adm->get('accounts');
+check('nome da área sai escapado na tela', str_contains($res['body'], 'Área de &lt;b&gt;Téste&lt;/b&gt;') && !str_contains($res['body'], 'Área de <b>Téste</b>'));
+$res = $areaApi($adm, ['action' => 'create', 'name' => 'AREA DE <B>TESTE</B>']);
+check('nome repetido é recusado, mesmo com outra caixa e sem acento', ($res['json']['success'] ?? true) === false, snippet($res));
+$res = $areaApi($adm, ['action' => 'create', 'name' => 'x']);
+check('nome curto é recusado', ($res['json']['success'] ?? true) === false, snippet($res));
+$res = $areaApi($adm, ['action' => 'rename', 'id' => $newArea, 'name' => 'Área Teste Renomeada']);
+$row = $areaRow($newArea);
+check('renomear muda o nome e mantém o código', ($res['json']['success'] ?? false) === true && $row['name'] === 'Área Teste Renomeada' && $row['slug'] === 'area_de_b_teste_b', snippet($res));
+
+// Área em uso: com pessoas não sai; com pedidos só desativa
+$res = $adm->post('api/update_user_admin.php', ['action' => 'update', 'id' => $solId, 'subdivisions' => [$newArea]]);
+check('pessoa entra na área nova', ($res['json']['success'] ?? false) === true, snippet($res));
+$res = $areaApi($adm, ['action' => 'set_status', 'id' => $newArea, 'active' => 0]);
+check('área com pessoas não desativa', ($res['json']['success'] ?? true) === false && (int)$areaRow($newArea)['status'] === 1, snippet($res));
+$res = $areaApi($adm, ['action' => 'delete', 'id' => $newArea]);
+check('área com pessoas não é excluída', ($res['json']['success'] ?? true) === false && $areaRow($newArea) !== false, snippet($res));
+$res = $sol->post('api/add_request.php', ['title' => 'Teste área nova'] + $base);
+$newAreaReq = (int)($res['json']['id'] ?? 0);
+if ($newAreaReq) { $createdIds[] = ['ti', $newAreaReq]; }
+check('pedido entra na área nova', $newAreaReq > 0 && $reqArea($newAreaReq) === $newArea, snippet($res));
+$res = $adm->post('api/update_user_admin.php', ['action' => 'update', 'id' => $solId, 'subdivisions' => [$homeArea]]);
+check('pessoa volta à área de antes', ($res['json']['success'] ?? false) === true, snippet($res));
+$res = $areaApi($adm, ['action' => 'delete', 'id' => $newArea]);
+check('área com pedidos não é excluída', ($res['json']['success'] ?? true) === false && $areaRow($newArea) !== false, snippet($res));
+$res = $areaApi($adm, ['action' => 'set_status', 'id' => $newArea, 'active' => 0]);
+check('área só com pedidos desativa', ($res['json']['success'] ?? false) === true && (int)$areaRow($newArea)['status'] === 0, snippet($res));
+$res = $adm->post('api/update_user_admin.php', ['action' => 'update', 'id' => $solId, 'subdivisions' => [$newArea]]);
+check('área desativada não recebe pessoas', ($res['json']['success'] ?? true) === false, snippet($res));
+$res = $sol->get("request_detail?id=$newAreaReq&table=ti");
+check('pedido da área desativada continua abrindo', $res['status'] === 200 && str_contains($res['body'], 'Teste área nova'));
+$res = $areaApi($adm, ['action' => 'set_status', 'id' => $newArea, 'active' => 1]);
+check('área reativa', ($res['json']['success'] ?? false) === true && (int)$areaRow($newArea)['status'] === 1, snippet($res));
+
+// Sem pessoas e sem pedidos: exclui
+$pdo->prepare('UPDATE ctd_ti_frm SET subdivision_id = NULL WHERE id = ?')->execute([$newAreaReq]);
+$res = $areaApi($adm, ['action' => 'delete', 'id' => $newArea]);
+check('área sem pessoas e sem pedidos é excluída', ($res['json']['success'] ?? false) === true && $areaRow($newArea) === false, snippet($res));
+
 section('12. Todas as páginas abrem para cada perfil');
 $pages = ['home', 'new_request', 'myRequests', 'myRequests?tab=concluidas', 'myRequests?q=teste', 'approve', 'approve?q=teste', 'inbox', 'inbox?tab=esperando', 'inbox?tab=historico', 'inbox?q=teste', 'myAccount', 'accounts', 'ajuda', "request_detail?id=$reqId&table=ti", "request_detail?id=$reqId&table=ti&from=inbox&tab=historico", "request_detail?id=$reqId&table=ti&from=approve", 'home?status=C', 'home?q=teste'];
 foreach (['solicitante' => $sol, 'coordenação' => $apr, 'gestor TI' => $ti, 'admin' => $adm] as $who => $client) {
@@ -939,11 +1250,16 @@ foreach ($leftovers as $row) {
     $createdIds[] = [$row[0], (int)$row[1]];
 }
 foreach ($createdIds as [$t, $id]) {
+    // Anexos: arquivo em disco e linha (RequestAttachments)
+    foreach ($pdo->query("SELECT stored_name FROM request_attachments WHERE request_table = " . $pdo->quote($t) . " AND request_id = " . (int)$id)->fetchAll(PDO::FETCH_COLUMN) as $stored) {
+        @unlink(uploadDir() . "/" . $stored);
+    }
+    $pdo->prepare("DELETE FROM request_attachments WHERE request_table = ? AND request_id = ?")->execute([$t, $id]);
     if ($id <= 0) {
         continue;
     }
     $pdo->prepare("DELETE FROM ctd_{$t}_frm WHERE id = ?")->execute([$id]);
-    foreach (['request_comments', 'request_history', 'request_forwards', 'request_partner_suggestions'] as $tbl) {
+    foreach (['request_comments', 'request_history', 'request_forwards', 'request_partner_suggestions', 'request_items'] as $tbl) {
         $pdo->prepare("DELETE FROM $tbl WHERE request_id = ? AND request_table = ?")->execute([$id, $t]);
     }
     $pdo->prepare('DELETE FROM notifications WHERE link = ?')->execute(["request_detail?id=$id&table=$t"]);

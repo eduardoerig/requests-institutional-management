@@ -124,3 +124,10 @@ $waitingText = fn(int $n) => $n === 1 ? '1 pedido esperando sua decisão' : $n .
     <span class="undo-toast__text"><span data-undo-text></span><span class="undo-toast__secs" data-undo-secs aria-hidden="true"></span></span>
     <button type="button" class="undo-toast__btn" data-undo>Desfazer</button>
 </div>
+
+<!-- Decisão que não chegou ao servidor (sem internet): fica à vista até enviar de novo (approve.js) -->
+<div class="send-fail" data-send-fail role="alert" hidden>
+    <i class="fa-solid fa-triangle-exclamation" aria-hidden="true"></i>
+    <span class="send-fail__text" data-send-fail-text></span>
+    <button type="button" class="btn btn--sm btn--primary send-fail__btn" data-send-retry><i class="fa-solid fa-rotate-right" aria-hidden="true"></i> Tentar de novo</button>
+</div>

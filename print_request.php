@@ -8,6 +8,8 @@ require_once __DIR__ . '/config/session.php';
 require_once __DIR__ . '/config/conn.php';
 require_once __DIR__ . '/config/security.php';
 require_once __DIR__ . '/classes/RequestForwardService.php';
+require_once __DIR__ . '/classes/RequestItems.php';
+require_once __DIR__ . '/classes/RequestAttachments.php';
 requireLoginJson($pdo);
 
 $role = $_SESSION['role'] ?? 'solicitante';
@@ -51,14 +53,7 @@ $created  = !empty($req['created_at']) ? date('d/m/Y \à\s H:i', strtotime((stri
 $number   = str_pad((string)$req_id, 4, '0', STR_PAD_LEFT);
 
 // Campos do tipo de pedido (os mesmos da tela do pedido)
-$extra = [];
-if ($req_table === 'xerox') {
-    $extra['Arquivo'] = $req['arquive'] ?? '';
-    $extra['Cópias'] = $req['qtd'] ?? '';
-    $extra['Tamanho do papel'] = $req['type'] ?? '';
-} elseif ($req_table === 'mkt') {
-    $extra['Onde será usada'] = $req['type'] ?? '';
-}
+$extra = requestTypeFields($req_table, $req);
 
 $facts = [
     'Setor' => sectorLabel($req_table),
@@ -163,6 +158,8 @@ $dotColor = ['P' => '#B45309', 'W' => '#2563EB', 'C' => '#15803D', 'N' => '#B91C
         .history { width: 100%; border-collapse: collapse; font-size: 9.5pt; }
         .history td { padding: 5px 8px 5px 0; border-bottom: 1px solid var(--linha); vertical-align: top; }
         .history tr { break-inside: avoid; }
+        .history td.wrap { overflow-wrap: anywhere; }
+        .history.items td:first-child { width: auto; white-space: normal; color: inherit; }
         .history td:first-child { width: 30mm; color: var(--tinta-2); white-space: nowrap; font-variant-numeric: tabular-nums; }
         .history td:nth-child(2) { width: 42mm; font-weight: 600; }
 
@@ -218,6 +215,28 @@ $dotColor = ['P' => '#B45309', 'W' => '#2563EB', 'C' => '#15803D', 'N' => '#B91C
 
     <h2>O que foi pedido</h2>
     <div class="desc"><?= e(trim((string)($req['descp'] ?? '')) !== '' ? $req['descp'] : 'Sem descrição.') ?></div>
+
+    <?php $items = RequestItems::forRequest($pdo, $req_table, $req_id); ?>
+    <?php if ($items): // no papel o link vai inteiro (não dá para clicar) ?>
+        <h2><?= e(RequestItems::heading($req_table)) ?></h2>
+        <table class="history items">
+            <tbody>
+                <?php foreach ($items as $it): ?>
+                    <tr>
+                        <td><?= e((string)($it['name'] ?? '')) ?></td>
+                        <td><?= e((string)($it['qty'] ?? '')) ?></td>
+                        <td class="wrap"><?= e((string)($it['url'] ?? '')) ?></td>
+                    </tr>
+                <?php endforeach; ?>
+            </tbody>
+        </table>
+    <?php endif; ?>
+
+    <?php $files = RequestAttachments::forRequest($pdo, $req_table, $req_id); ?>
+    <?php if ($files): ?>
+        <h2>Anexos</h2>
+        <div class="desc"><?= e(implode(' · ', array_map(fn($f) => $f['original_name'] . ' (' . RequestAttachments::sizeLabel((int)$f['size_bytes']) . ')', $files))) ?></div>
+    <?php endif; ?>
 
     <?php if (!empty($req['obs'])): ?>
         <h2>Observações</h2>

@@ -5,7 +5,7 @@ $user = $stmt->fetch();
 
 $role_labels = [
     'admin' => 'Administrador', 'adm' => 'Administrador', 'coord' => 'Coordenação',
-    'adm_sub' => 'Coordenação de subdivisão',
+    'adm_sub' => 'Coordenação de área',
     'gestor' => 'Setor de TI', 'ti' => 'Setor de TI', 'xerox' => 'Setor de Reprografia',
     'service' => 'Setor de Manutenção', 'shop' => 'Setor de Compras',
     'mkt' => 'Setor de Marketing', 'marketing' => 'Setor de Marketing',
@@ -39,7 +39,7 @@ $role_labels = [
             <dl class="info-grid profile-info">
                 <div class="info-item"><dt>Usuário para entrar</dt><dd><?= e($user['login'] ?? '') ?></dd></div>
                 <?php if (!empty($_SESSION['subdivision_names'])): ?>
-                    <div class="info-item"><dt>Subdivisão</dt><dd><?= e(implode(', ', $_SESSION['subdivision_names'])) ?></dd></div>
+                    <div class="info-item"><dt><?= count($_SESSION['subdivision_names']) > 1 ? 'Áreas' : 'Área' ?></dt><dd><?= e(implode(', ', $_SESSION['subdivision_names'])) ?></dd></div>
                 <?php endif; ?>
             </dl>
         </div>

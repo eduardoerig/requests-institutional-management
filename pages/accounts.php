@@ -3,6 +3,7 @@
  * Usuários e setores (somente administrador geral).
  * Pessoas: lista só de leitura; tocar/clicar abre a edição (folha no celular, painel lateral no PC).
  * Setores: um cartão por setor com pedidos abertos e responsáveis.
+ * Áreas: um cartão por divisão de quem pede (ctd_subdivision), com a coordenação; gravação em api/subdivisions.php.
  * Comportamento em assets/js/pages/accounts.js; estilos em assets/css/pages/accounts.css.
  */
 if (!isGlobalAdminRole($_SESSION['role'] ?? '')) {
@@ -26,8 +27,15 @@ $accUsers = $pdo->query("
 ")->fetchAll(PDO::FETCH_ASSOC);
 
 $accSubdivisions = [];
-foreach ($pdo->query("SELECT id, name FROM ctd_subdivision ORDER BY name ASC")->fetchAll(PDO::FETCH_ASSOC) as $row) {
+$accActiveSubdivisions = []; // só as ativas entram na escolha de área de uma pessoa
+$accInactiveSubdivisions = [];
+foreach ($pdo->query("SELECT id, name, status FROM ctd_subdivision ORDER BY name ASC")->fetchAll(PDO::FETCH_ASSOC) as $row) {
     $accSubdivisions[(int)$row['id']] = (string)$row['name'];
+    if ((int)$row['status'] === 1) {
+        $accActiveSubdivisions[(int)$row['id']] = (string)$row['name'];
+    } else {
+        $accInactiveSubdivisions[(int)$row['id']] = (string)$row['name'];
+    }
 }
 $accAreas = areaTitles($pdo);
 $accAreaDescriptions = areaDescriptions($pdo);
@@ -157,6 +165,31 @@ foreach ($accAreas as $areaId => $title) {
     ];
 }
 
+// Áreas: ativas primeiro; pessoas ligadas e pedidos de cada uma, numa consulta só
+$accAreaRequests = [];
+try {
+    $parts = array_map(fn($table) => "SELECT subdivision_id, status FROM `ctd_{$table}_frm` WHERE subdivision_id IS NOT NULL", allowedRequestTables());
+    $accRequestRows = $pdo->query("SELECT subdivision_id, COUNT(*) AS total, SUM(status = 'P') AS pending FROM (" . implode(' UNION ALL ', $parts) . ") r GROUP BY subdivision_id");
+    foreach ($accRequestRows->fetchAll(PDO::FETCH_ASSOC) as $row) {
+        $accAreaRequests[(int)$row['subdivision_id']] = ['total' => (int)$row['total'], 'pending' => (int)$row['pending']];
+    }
+} catch (PDOException $e) {
+    error_log('accounts.php (pedidos por área): ' . $e->getMessage());
+}
+$accAreaCards = [];
+foreach ($accActiveSubdivisions + $accInactiveSubdivisions as $subId => $subName) {
+    $members = array_filter($accPeople, fn($p) => in_array($subId, $p['subs'], true));
+    $accAreaCards[] = [
+        'id' => $subId,
+        'name' => $subName,
+        'active' => isset($accActiveSubdivisions[$subId]),
+        'people' => count($members),
+        'coordinators' => array_values(array_filter($members, fn($p) => $p['kind'] === 'coord' && $p['active'])),
+        'requests' => $accAreaRequests[$subId]['total'] ?? 0,
+        'pending' => $accAreaRequests[$subId]['pending'] ?? 0,
+    ];
+}
+
 $accScheme = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off') ? 'https' : 'http';
 $accAppUrl = $accScheme . '://' . ($_SERVER['HTTP_HOST'] ?? 'localhost') . ($basePath ?? '/');
 
@@ -173,7 +206,7 @@ $accData = [
     <header class="acc-head">
         <div class="acc-head__title">
             <h1>Usuários e setores</h1>
-            <p>Quem usa o sistema, o que cada pessoa faz e quem responde por cada setor.</p>
+            <p>Quem usa o sistema, o que cada pessoa faz e quem responde por cada setor e área.</p>
         </div>
         <div class="acc-head__actions">
             <a href="api/export_accounts_csv.php" class="btn acc-head__export" download><i class="fa-solid fa-file-csv" aria-hidden="true"></i> Exportar planilha</a>
@@ -187,6 +220,9 @@ $accData = [
         </button>
         <button type="button" class="acc-tab" role="tab" id="accTabSectors" aria-controls="accPanelSectors" aria-selected="false" tabindex="-1" data-acc-tab="setores">
             <i class="fa-solid fa-building" aria-hidden="true"></i> Setores · <?= count($accSectorCards) ?>
+        </button>
+        <button type="button" class="acc-tab" role="tab" id="accTabAreas" aria-controls="accPanelAreas" aria-selected="false" tabindex="-1" data-acc-tab="areas">
+            <i class="fa-solid fa-layer-group" aria-hidden="true"></i> Áreas · <?= count($accActiveSubdivisions) ?>
         </button>
     </div>
 
@@ -276,7 +312,7 @@ $accData = [
                         <div class="acc-field" data-acc-ed-group="subs">
                             <span class="acc-label" id="accEdSubsLabel">Área</span>
                             <div class="acc-choices" role="group" aria-labelledby="accEdSubsLabel" id="accEdSubs">
-                                <?php foreach ($accSubdivisions as $subId => $subName): ?>
+                                <?php foreach ($accActiveSubdivisions as $subId => $subName): ?>
                                     <button type="button" class="acc-choice" aria-pressed="false" data-value="<?= (int)$subId ?>"><?= e($subName) ?></button>
                                 <?php endforeach; ?>
                             </div>
@@ -406,6 +442,80 @@ $accData = [
 
         </div>
     </section>
+
+    <!-- ===================== Áreas ===================== -->
+    <section class="acc-panel" id="accPanelAreas" role="tabpanel" aria-labelledby="accTabAreas" hidden>
+        <div class="acc-areas-intro">
+            <p class="acc-muted">Cada pessoa que faz pedidos pertence a uma área, e a coordenação da área aprova os pedidos dela. Quem coordena se escolhe na própria pessoa, em Pessoas.</p>
+            <button type="button" class="btn btn--primary" data-acc-action="toggle-new-area" aria-expanded="false"><i class="fa-solid fa-plus" aria-hidden="true"></i> Nova área</button>
+        </div>
+        <form class="card acc-add-form acc-area-new" data-acc-form="area-new" hidden>
+            <label for="accNewArea">Nome da nova área</label>
+            <input type="text" id="accNewArea" name="name" maxlength="100" required placeholder="Ex.: Ensino Técnico" autocomplete="off">
+            <div class="acc-add-form__actions">
+                <button type="button" class="btn" data-acc-action="toggle-new-area">Cancelar</button>
+                <button type="submit" class="btn btn--primary">Criar área</button>
+            </div>
+        </form>
+        <div class="acc-sectors">
+            <?php foreach ($accAreaCards as $a):
+                $canDelete = $a['people'] === 0 && $a['requests'] === 0;
+                $peopleLabel = $a['people'] === 1 ? '1 pessoa' : $a['people'] . ' pessoas';
+                $requestsLabel = $a['requests'] === 1 ? '1 pedido' : $a['requests'] . ' pedidos';
+            ?>
+                <article class="card acc-sector acc-area<?= $a['active'] ? '' : ' is-off' ?>" data-area-sub-id="<?= (int)$a['id'] ?>" data-area-sub-name="<?= e($a['name']) ?>">
+                    <header class="acc-sector__head">
+                        <h3 data-area-title><i class="fa-solid fa-layer-group" aria-hidden="true"></i> <?= e($a['name']) ?></h3>
+                        <?php if (!$a['active']): ?>
+                            <span class="acc-state acc-state--off">Desativada</span>
+                        <?php elseif ($a['pending'] > 0): ?>
+                            <span class="acc-sector__open"><?= (int)$a['pending'] ?> para aprovar</span>
+                        <?php endif; ?>
+                    </header>
+                    <p class="acc-muted acc-area__count"><?= e($peopleLabel) ?> · <?= e($requestsLabel) ?> no total</p>
+
+                    <form class="acc-add-form" data-acc-form="area-rename" hidden>
+                        <label for="accAreaName<?= (int)$a['id'] ?>">Novo nome <small>(os pedidos antigos passam a mostrar este nome)</small></label>
+                        <input type="text" id="accAreaName<?= (int)$a['id'] ?>" name="name" maxlength="100" required value="<?= e($a['name']) ?>" autocomplete="off">
+                        <div class="acc-add-form__actions">
+                            <button type="button" class="btn" data-acc-action="toggle-area-rename">Cancelar</button>
+                            <button type="submit" class="btn btn--primary">Salvar</button>
+                        </div>
+                    </form>
+
+                    <?php if ($a['active']): ?>
+                        <p class="acc-label">Coordenação</p>
+                        <?php if (!empty($a['coordinators'])): ?>
+                            <ul class="acc-resp">
+                                <?php foreach ($a['coordinators'] as $c): ?>
+                                    <li>
+                                        <span class="acc-avatar acc-avatar--sm acc-avatar--coord" aria-hidden="true"><?= e($c['initials']) ?></span>
+                                        <span class="acc-resp__name"><?= e($c['name']) ?></span>
+                                    </li>
+                                <?php endforeach; ?>
+                            </ul>
+                        <?php else: ?>
+                            <p class="acc-note"><i class="fa-solid fa-circle-info" aria-hidden="true"></i> Sem coordenação: só o administrador aprova os pedidos desta área.</p>
+                        <?php endif; ?>
+                    <?php else: ?>
+                        <p class="acc-note"><i class="fa-solid fa-circle-info" aria-hidden="true"></i> Não aparece mais ao cadastrar pessoas. Os pedidos antigos continuam com este nome.</p>
+                    <?php endif; ?>
+
+                    <footer class="acc-sector__foot acc-area__foot">
+                        <button type="button" class="btn btn--sm btn--ghost" data-acc-action="toggle-area-rename" aria-expanded="false" aria-label="Renomear <?= e($a['name']) ?>"><i class="fa-solid fa-pen" aria-hidden="true"></i> Renomear</button>
+                        <?php if (!$a['active']): ?>
+                            <button type="button" class="btn btn--sm btn--ghost" data-acc-action="area-status" data-active="1"><i class="fa-solid fa-rotate-left" aria-hidden="true"></i> Reativar</button>
+                        <?php elseif ($a['people'] === 0 && !$canDelete): ?>
+                            <button type="button" class="btn btn--sm btn--ghost" data-acc-action="area-status" data-active="0"><i class="fa-solid fa-box-archive" aria-hidden="true"></i> Desativar</button>
+                        <?php endif; ?>
+                        <?php if ($canDelete): ?>
+                            <button type="button" class="btn btn--sm btn--ghost acc-danger-text" data-acc-action="delete-area"><i class="fa-solid fa-trash" aria-hidden="true"></i> Excluir</button>
+                        <?php endif; ?>
+                    </footer>
+                </article>
+            <?php endforeach; ?>
+        </div>
+    </section>
 </div>
 
 <!-- ===================== Nova pessoa (assistente) ===================== -->
@@ -464,7 +574,7 @@ $accData = [
             <div class="acc-wz-step" data-acc-step="3" hidden>
                 <p class="acc-wz-hint" id="accWzWhereHint"></p>
                 <div class="acc-choices" role="group" aria-labelledby="accWzTitle" id="accWzSubs" data-acc-wz-group="subs">
-                    <?php foreach ($accSubdivisions as $subId => $subName): ?>
+                    <?php foreach ($accActiveSubdivisions as $subId => $subName): ?>
                         <button type="button" class="acc-choice" aria-pressed="false" data-value="<?= (int)$subId ?>"><?= e($subName) ?></button>
                     <?php endforeach; ?>
                 </div>

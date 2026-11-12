@@ -20,6 +20,8 @@
 
 require_once __DIR__ . '/../classes/RequestForwardService.php';
 require_once __DIR__ . '/../classes/RequestChat.php';
+require_once __DIR__ . '/../classes/RequestItems.php';
+require_once __DIR__ . '/../classes/RequestAttachments.php';
 require_once __DIR__ . '/request_card.php';
 require_once __DIR__ . '/partner_picker.php';
 require_once __DIR__ . '/request_view/timeline.php';
@@ -179,14 +181,7 @@ function renderRequestView(PDO $pdo, array $req, string $sector, string $context
     }
 
     // Campos do tipo de pedido
-    $extra = [];
-    if ($sector === 'xerox') {
-        $extra['Arquivo'] = $req['arquive'] ?? '';
-        $extra['Cópias'] = $req['qtd'] ?? '';
-        $extra['Tamanho do papel'] = $req['type'] ?? '';
-    } elseif ($sector === 'mkt') {
-        $extra['Onde será usada'] = $req['type'] ?? '';
-    }
+    $extra = requestTypeFields($sector, $req);
 
     $subdivision = (string)($req['subdivision_name'] ?? '');
     if ($subdivision === '' && !array_key_exists('subdivision_name', $req) && !empty($req['subdivision_id'])) {
@@ -233,6 +228,12 @@ function renderRequestView(PDO $pdo, array $req, string $sector, string $context
         $candidates[] = ['main', '<button type="button" class="btn %s" onclick="requestAct(\'start_progress\', ' . $reqId . ', \'' . e($fullTable) . '\')"><i class="fa-solid fa-play" aria-hidden="true"></i> Começar atendimento</button>'];
     } elseif ($canWork && $status === 'W' && !$open) {
         $candidates[] = ['main', '<button type="button" class="btn %s" onclick="requestAct(\'finish\', ' . $reqId . ', \'' . e($fullTable) . '\')"><i class="fa-solid fa-check-double" aria-hidden="true"></i> Concluir</button>'];
+    }
+    // Ajuda aceita e não devolvida trava Concluir e Encaminhar: quem pediu a ajuda ou a coordenação encerra, com motivo
+    $canCloseHelp = $open && !$openIsPartner && $open['mode'] === 'help' && $open['status'] === 'accepted'
+        && ($canManagePartner || ($isGestor && $openIsFromMe && !in_array((int)$open['to_area_id'], $viewerAreas, true)));
+    if ($canCloseHelp) {
+        $candidates[] = ['side', '<button type="button" class="btn" onclick="forwardAct(\'cancel\', ' . (int)$open['id'] . ', \'help_accepted\', \'' . e(addslashes((string)$open['to_label'])) . '\')"><i class="fa-solid fa-ban" aria-hidden="true"></i> Encerrar a ajuda</button>'];
     }
     if ($canForward) {
         $candidates[] = ['side', '<button type="button" class="btn" onclick="openForwardWizard(' . $reqId . ', \'' . $jsSector . '\')"><i class="fa-solid fa-share-from-square" aria-hidden="true"></i> Encaminhar</button>'];
@@ -314,11 +315,11 @@ function renderRequestView(PDO $pdo, array $req, string $sector, string $context
     // O que foi pedido, no topo: a descrição; sem ela (reprografia), o essencial dos campos do tipo
     $ask = $desc;
     if ($ask === '' && $sector === 'xerox') {
-        $ask = implode(' · ', array_filter([
-            trim((string)($req['qtd'] ?? '')) !== '' ? (int)$req['qtd'] . ' cópias' : '',
-            trim((string)($req['type'] ?? '')) !== '' ? 'papel ' . trim((string)$req['type']) : '',
-        ]));
+        $ask = xeroxSummary($req);
     }
+    // Itens de Compras e links de referência do Marketing
+    $itemsHtml = RequestItems::html(RequestItems::forRequest($pdo, $sector, $reqId), $sector);
+    $filesHtml = RequestAttachments::html(RequestAttachments::forRequest($pdo, $sector, $reqId));
     // Motivo da urgência: primeira linha das observações ("Urgente: ...", gravada por api/add_request.php)
     $obs = trim((string)($req['obs'] ?? ''));
     $urgentReason = '';
@@ -401,6 +402,18 @@ function renderRequestView(PDO $pdo, array $req, string $sector, string $context
                 <p class="rv-ask__who"><?= e(trim((string)($req['creator_name'] ?? '')) ?: 'Quem pediu') ?> pediu:</p>
                 <p class="rv-ask__body"><?= nl2br(e($ask)) ?></p>
                 <button type="button" class="rv-ask__more" data-rv-ask-more hidden>Ver tudo</button>
+            </div>
+        <?php endif; ?>
+        <?php if ($itemsHtml !== ''): ?>
+            <div class="rv-items">
+                <p class="rv-items__title"><?= e(RequestItems::heading($sector)) ?></p>
+                <?= $itemsHtml ?>
+            </div>
+        <?php endif; ?>
+        <?php if ($filesHtml !== ''): ?>
+            <div class="rv-items">
+                <p class="rv-items__title">Anexos</p>
+                <?= $filesHtml ?>
             </div>
         <?php endif; ?>
         <?php if ($isUrgent): ?>

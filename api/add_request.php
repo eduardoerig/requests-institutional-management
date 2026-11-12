@@ -4,13 +4,29 @@ require_once __DIR__ . '/../config/conn.php';
 require_once __DIR__ . '/../config/security.php';
 require_once __DIR__ . '/../classes/RequestManager.php';
 require_once __DIR__ . '/../classes/RequestForwardService.php';
+require_once __DIR__ . '/../classes/RequestItems.php';
+require_once __DIR__ . '/../classes/RequestAttachments.php';
 requireLoginJson($pdo);
+// Envio maior que o post_max_size chega sem nenhum campo (nem o token): sem isto a pessoa
+// veria "página aberta há muito tempo" em vez do motivo real
+if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST' && RequestAttachments::postTooLarge()) {
+    jsonResponse(['success' => false, 'message' => 'Os arquivos passam do limite de '
+        . RequestAttachments::sizeLabel(RequestAttachments::maxTotalBytes()) . ' por pedido. Anexe menos ou arquivos menores.'], 413);
+}
 requirePostJson();
 
-$subdivision_id = $_SESSION['subdivision_id'] ?? null;
+// A área do pedido define quem aprova. Quem responde por mais de uma escolhe no formulário.
+$userAreas = userSubdivisionIds();
+$subdivision_id = $userAreas[0] ?? null;
 $role = $_SESSION['role'] ?? 'solicitante';
 if (in_array($role, ['solicitante', 'adm_sub'], true) && empty($subdivision_id)) {
     jsonResponse(['success' => false, 'message' => 'Seu usuário ainda não está ligado a uma subdivisão. Fale com o administrador.']);
+}
+if (count($userAreas) > 1) {
+    $subdivision_id = (int)($_POST['subdivision_id'] ?? 0);
+    if (!in_array($subdivision_id, $userAreas, true)) {
+        jsonResponse(['success' => false, 'message' => 'Escolha de qual área é este pedido.']);
+    }
 }
 
 /**
@@ -82,12 +98,9 @@ if (!empty($_POST['urgent'])) {
 }
 $urgent = $priority >= 3 ? 1 : 0;
 
-$endDate = DateTime::createFromFormat('!Y-m-d', $end);
-if ($end === '' || !$endDate || $endDate->format('Y-m-d') !== $end) {
-    fail('Informe a data em que você precisa receber.');
-}
-if ($endDate < new DateTime('today')) {
-    fail('A data de entrega não pode ser no passado.');
+$deadlineProblem = deadlineProblem($end);
+if ($deadlineProblem !== null) {
+    fail($deadlineProblem);
 }
 
 // Sugestão de setores parceiros (opcional): a coordenação confirma, troca ou tira ao aprovar
@@ -101,13 +114,24 @@ if (count($partnerAreaIds) !== count(array_unique($partnerAreaIds))) {
     fail('Escolha dois setores parceiros diferentes.');
 }
 
+// Itens com link (Compras) e links de referência (Marketing)
+// Anexos (sempre opcionais): na cópia colorida só PDF; nos outros pedidos, PDF, fotos e Office
+$isColorCopy = $sector === 'xerox' && (postText('kind', 20) ?: 'copia_colorida') === 'copia_colorida';
+try {
+    $items = RequestItems::parse($sector, $_POST['items'] ?? []);
+    $attachments = RequestAttachments::fromUpload($_FILES['attachments'] ?? null, $isColorCopy ? 'pdf' : 'geral');
+} catch (UserMessage $e) {
+    fail($e->getMessage());
+}
+
 // ---- Campos específicos por setor ----
 switch ($sector) {
     case 'service':
     case 'ti':
     case 'shop':
         $details = postLongText('details', 5000, 'A descrição');
-        if ($details === '') {
+        // Em Compras, a lista de itens basta: os detalhes viram opcionais
+        if ($details === '' && !($sector === 'shop' && $items)) {
             fail('Descreva o que você precisa.');
         }
         if ($sector === 'shop') {
@@ -119,29 +143,41 @@ switch ($sector) {
         break;
 
     case 'xerox':
-        $file = postText('file', 255);
+        // Dois tipos: cópia colorida (arquivo, cópias, papel) e plastificação (folhas e tamanho, sem arquivo).
+        // Sem kind (cliente antigo) = cópia colorida.
+        $kind = postText('kind', 20) ?: 'copia_colorida';
+        if (!array_key_exists($kind, xeroxKinds())) {
+            fail('Escolha se é cópia colorida ou plastificação.');
+        }
+        $isCopy = $kind === 'copia_colorida';
+        $unit = $isCopy ? 'cópias' : 'folhas';
+        $file = $isCopy ? postText('file', 255) : '';
         $qtdRaw = trim((string)($_POST['qtd'] ?? ''));
-        $model = postText('model', 50);
-        if ($file === '') {
-            fail('Informe onde está o arquivo para imprimir.');
+        $model = $isCopy ? postText('model', 50) : postText('size', 50);
+        // Com o PDF anexado, "Onde está o arquivo?" pode ficar em branco
+        if ($isCopy && $file === '' && !$attachments) {
+            fail('Informe onde está o arquivo para imprimir (ou anexe o PDF).');
         }
         if ($qtdRaw === '') {
-            fail('Informe quantas cópias você precisa.');
+            fail("Informe quantas $unit você precisa.");
         }
         if (!ctype_digit($qtdRaw)) {
-            fail('Use um número inteiro de cópias, sem vírgula nem ponto (ex.: 30).');
+            fail("Use um número inteiro de $unit, sem vírgula nem ponto (ex.: 30).");
         }
         if ((int)$qtdRaw < 1) {
-            fail('O número de cópias precisa ser maior que zero.');
+            fail("O número de $unit precisa ser maior que zero.");
         }
         if ((int)$qtdRaw > 100000) {
-            fail('O máximo é 100.000 cópias por pedido.');
+            fail("O máximo é 100.000 $unit por pedido.");
         }
-        if ($model === '') {
+        if ($isCopy && $model === '') {
             fail('Escolha o formato da impressão.');
         }
-        $sql = 'INSERT INTO ctd_xerox_frm (created_by, created_at, title, `date`, arquive, qtd, `type`, obs, priority, urgent, subdivision_id) VALUES (?, NOW(), ?, ?, ?, ?, ?, ?, ?, ?, ?)';
-        $params = [$_SESSION['id'], $title, $end, $file, (int)$qtdRaw, $model, $obs, $priority, $urgent, $subdivision_id];
+        if (!$isCopy && !in_array($model, ['A4', 'A3', 'Pequeno'], true)) {
+            fail('Escolha o tamanho da plastificação.');
+        }
+        $sql = 'INSERT INTO ctd_xerox_frm (created_by, created_at, title, `date`, arquive, qtd, `type`, kind, obs, priority, urgent, subdivision_id) VALUES (?, NOW(), ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)';
+        $params = [$_SESSION['id'], $title, $end, $file, (int)$qtdRaw, $model, $kind, $obs, $priority, $urgent, $subdivision_id];
         break;
 
     case 'mkt':
@@ -150,12 +186,33 @@ switch ($sector) {
         if ($details === '') {
             fail('Explique o que você precisa.');
         }
-        $model = postText('model', 255);
-        if ($model === '' || $model === 'outros') {
-            $model = postText('outros_texto', 255);
+        // "Onde vai ser usado?" aceita mais de um lugar (model[]); um texto só (cliente antigo) também vale
+        $rawPlaces = $_POST['model'] ?? [];
+        $rawPlaces = is_array($rawPlaces) ? $rawPlaces : [$rawPlaces];
+        $allowedPlaces = ['Whatsapp', 'Instagram', 'Posts', 'Panfleto', 'Banner', 'Ingressos', 'ClipEscola'];
+        $places = [];
+        $wantsOther = false;
+        foreach ($rawPlaces as $place) {
+            $place = is_string($place) ? trim($place) : '';
+            if ($place === 'outros') {
+                $wantsOther = true;
+            } elseif (in_array($place, $allowedPlaces, true) && !in_array($place, $places, true)) {
+                $places[] = $place;
+            }
         }
-        if ($model === '') {
-            fail('Escolha onde a peça será usada (ou descreva em "Outros").');
+        $otherText = postText('outros_texto', 255);
+        if ($wantsOther && $otherText === '') {
+            fail('Descreva qual é o outro lugar em "Outro".');
+        }
+        if ($wantsOther) {
+            $places[] = 'Outro: ' . $otherText;
+        }
+        if (!$places) {
+            fail('Escolha onde a peça será usada (pode marcar mais de um).');
+        }
+        $model = implode(', ', $places);
+        if (mb_strlen($model) > 255) {
+            fail('A lista de lugares ficou longa demais. Encurte o texto de "Outro".');
         }
         $sql = 'INSERT INTO ctd_mkt_frm (created_by, created_at, title, `date`, descp, `type`, obs, priority, urgent, subdivision_id) VALUES (?, NOW(), ?, ?, ?, ?, ?, ?, ?, ?)';
         $params = [$_SESSION['id'], $title, $end, $details, $model, $obs, $priority, $urgent, $subdivision_id];
@@ -177,11 +234,15 @@ try {
     foreach ($partnerAreaIds as $partnerAreaId) {
         RequestForwardService::saveSuggestion($pdo, $sector, $newId, $partnerAreaId, $userId, $userName);
     }
+    RequestItems::save($pdo, $sector, $newId, $items);
+    $movedFiles = [];
+    RequestAttachments::store($pdo, $sector, $newId, $attachments, $userId, $movedFiles);
     $pdo->commit();
 } catch (Throwable $e) {
     if ($pdo->inTransaction()) {
         $pdo->rollBack();
     }
+    RequestAttachments::unlinkAll($movedFiles ?? []); // pedido desfeito: os arquivos já gravados saem também
     error_log('add_request.php: ' . $e->getMessage());
     jsonResponse(['success' => false, 'message' => 'Não foi possível enviar agora. Tente de novo em instantes.'], 500);
 }
@@ -206,10 +267,14 @@ try {
     error_log("add_request.php: avisos do pedido $sector/$newId: " . $e->getMessage());
 }
 
+// Setor que só compra em certos dias (Compras: terças e quintas): a tela avisa depois do envio
+$purchaseDays = sectorRegistry()[$sector]['purchase_weekdays'] ?? [];
+$purchaseNotice = $purchaseDays ? purchaseNotice($purchaseDays, $end, $sectorLabel) : null;
+
 jsonResponse([
     'success' => true,
     'message' => "Pedido nº $newId enviado! Agora ele aguarda aprovação.",
     'id' => $newId,
     'table' => $sector,
     'link' => $link,
-]);
+] + ($purchaseNotice ? ['purchase_notice' => ['title' => $purchaseNotice['title'], 'message' => $purchaseNotice['message']]] : []));

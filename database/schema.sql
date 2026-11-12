@@ -144,6 +144,7 @@ CREATE TABLE `ctd_xerox_frm` (
   `arquive` varchar(255) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci DEFAULT NULL,
   `qtd` int DEFAULT NULL,
   `type` varchar(50) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci DEFAULT NULL,
+  `kind` varchar(20) COLLATE utf8mb4_unicode_ci DEFAULT NULL COMMENT 'copia_colorida ou plastificacao; NULL = copia_colorida',
   `obs` varchar(2000) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci DEFAULT NULL,
   `status` enum('Y','N','P','W','C','F') CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci NOT NULL DEFAULT 'P',
   `table` varchar(50) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci NOT NULL DEFAULT 'xerox',
@@ -176,6 +177,19 @@ CREATE TABLE `notifications` (
   KEY `idx_user` (`user_id`),
   KEY `idx_read` (`is_read`),
   KEY `idx_user_read_created` (`user_id`,`is_read`,`created_at`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+CREATE TABLE `request_attachments` (
+  `id` int unsigned NOT NULL AUTO_INCREMENT,
+  `request_id` int unsigned NOT NULL COMMENT 'ID do pedido na tabela _frm',
+  `request_table` varchar(20) COLLATE utf8mb4_unicode_ci NOT NULL COMMENT 'mkt, shop, xerox, service, ti',
+  `original_name` varchar(255) COLLATE utf8mb4_unicode_ci NOT NULL COMMENT 'Nome que a pessoa enviou (só para mostrar)',
+  `stored_name` varchar(100) COLLATE utf8mb4_unicode_ci NOT NULL COMMENT 'AAAA/MM/<aleatório>.<ext> dentro de uploadDir()',
+  `mime` varchar(100) COLLATE utf8mb4_unicode_ci NOT NULL,
+  `size_bytes` int unsigned NOT NULL,
+  `uploaded_by` int unsigned NOT NULL,
+  `created_at` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (`id`),
+  KEY `idx_request` (`request_table`,`request_id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 CREATE TABLE `request_comments` (
   `id` int unsigned NOT NULL AUTO_INCREMENT,
@@ -218,6 +232,17 @@ CREATE TABLE `request_forwards` (
   KEY `idx_status` (`status`),
   KEY `idx_req_status` (`request_table`,`request_id`,`status`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+CREATE TABLE `request_items` (
+  `id` int unsigned NOT NULL AUTO_INCREMENT,
+  `request_id` int unsigned NOT NULL COMMENT 'ID do pedido na tabela _frm',
+  `request_table` varchar(20) COLLATE utf8mb4_unicode_ci NOT NULL COMMENT 'mkt, shop, xerox, service, ti',
+  `position` tinyint unsigned NOT NULL DEFAULT '0' COMMENT 'Ordem em que a pessoa listou',
+  `name` varchar(255) COLLATE utf8mb4_unicode_ci DEFAULT NULL COMMENT 'Item (Compras) ou sobre o link (Marketing)',
+  `qty` varchar(50) COLLATE utf8mb4_unicode_ci DEFAULT NULL COMMENT 'Quantidade em texto livre (ex.: 2 caixas)',
+  `url` varchar(1000) COLLATE utf8mb4_unicode_ci DEFAULT NULL COMMENT 'Link http(s)',
+  PRIMARY KEY (`id`),
+  KEY `idx_request` (`request_table`,`request_id`,`position`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 CREATE TABLE `request_partner_suggestions` (
   `request_id` int unsigned NOT NULL COMMENT 'ID do pedido na tabela _frm',
   `request_table` varchar(20) COLLATE utf8mb4_unicode_ci NOT NULL COMMENT 'mkt, shop, xerox, service, ti',
@@ -248,6 +273,11 @@ INSERT INTO `ctd_area` VALUES (2,'mkt','Artes, comunicação e redes');
 INSERT INTO `ctd_area` VALUES (3,'service','Elétrica, hidráulica, móveis e prédio');
 INSERT INTO `ctd_area` VALUES (4,'Reprografia','Cópias, impressões e encadernação');
 INSERT INTO `ctd_area` VALUES (5,'ti','Computadores, internet, projetores e sistemas');
+INSERT INTO `ctd_subdivision` (`name`, `slug`) VALUES ('Ensino Fundamental I','fundamental');
+INSERT INTO `ctd_subdivision` (`name`, `slug`) VALUES ('Administrativo','administrativo');
+INSERT INTO `ctd_subdivision` (`name`, `slug`) VALUES ('Ensino Fundamental II','fundamental_2');
+INSERT INTO `ctd_subdivision` (`name`, `slug`) VALUES ('Ensino Médio','medio');
+INSERT INTO `ctd_subdivision` (`name`, `slug`) VALUES ('Educação Infantil','infantil');
 INSERT INTO `ctd_requests_models` VALUES (1,'Solicitação de Serviço','form_servico.php','Pedido de serviços','#ffcd00','Y','2025-11-26 10:03:22');
 INSERT INTO `ctd_requests_models` VALUES (2,'Solicitação de Compra','form_compra.php','Pedido de materiais','#2ecc71','Y','2025-11-26 10:03:22');
 INSERT INTO `ctd_requests_models` VALUES (3,'Solicitação de Cópia Colorida','form_color_print.php','Liberação de copias coloridas na reprografia','#00cdff','Y','2025-11-26 00:00:00');

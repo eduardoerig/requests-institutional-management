@@ -41,7 +41,8 @@ class RequestManager {
     }
 
     /**
-     * Filtro de subdivisão (coordenação): pedidos da subdivisão ou de quem pertence a ela.
+     * Filtro de subdivisão (coordenação): pedidos da subdivisão; pedido sem subdivisão vale a de quem pediu.
+     * Mesma regra de userCoordinatesRequest().
      * null = sem filtro (admin geral); lista vazia = coordenação sem subdivisão, não vê nada.
      * @return array{0: string, 1: array} trecho SQL (começa com " AND") e parâmetros
      */
@@ -57,12 +58,12 @@ class RequestManager {
         $in = implode(',', array_fill(0, count($ids), '?'));
         return [" AND (
             r.subdivision_id IN ($in)
-            OR EXISTS (
+            OR (COALESCE(r.subdivision_id, 0) = 0 AND EXISTS (
                 SELECT 1
                 FROM cfg_user_subdivision cus
                 WHERE cus.id_user = r.created_by
                   AND cus.id_subdivision IN ($in)
-            )
+            ))
         )", array_merge($ids, $ids)];
     }
 
@@ -409,13 +410,12 @@ class RequestManager {
             $notified[] = $createdBy;
         }
 
-        // 2. Notificar adm_sub da subdivisão principal e das subdivisões vinculadas ao solicitante.
+        // 2. Notificar adm_sub da subdivisão do pedido; pedido sem subdivisão vale a de quem pediu.
         $subAdmins = [];
         if ($subdivisionId) {
             $subAdmins = self::getSubdivisionAdmins($pdo, $subdivisionId);
-        }
-        if ($createdBy) {
-            $subAdmins = array_merge($subAdmins, self::getSubdivisionAdminsForUser($pdo, $createdBy));
+        } elseif ($createdBy) {
+            $subAdmins = self::getSubdivisionAdminsForUser($pdo, $createdBy);
         }
         foreach ($subAdmins as $sa) {
             if (!in_array($sa['id'], $notified)) {

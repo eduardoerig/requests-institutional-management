@@ -544,8 +544,7 @@ class RequestForwardService
             $people = RequestManager::getAdmins($pdo);
             if (!empty($req['subdivision_id'])) {
                 $people = array_merge($people, RequestManager::getSubdivisionAdmins($pdo, (int)$req['subdivision_id']));
-            }
-            if (!empty($req['created_by'])) {
+            } elseif (!empty($req['created_by'])) {
                 $people = array_merge($people, RequestManager::getSubdivisionAdminsForUser($pdo, (int)$req['created_by']));
             }
             $ids = array_values(array_unique(array_map('intval', array_column($people, 'id'))));
@@ -647,19 +646,35 @@ class RequestForwardService
         return ['success' => true, 'message' => 'Encaminhamento recusado. O setor que enviou recebeu o motivo.'];
     }
 
-    /** Cancelar um envio pendente (quem enviou, setor de origem ou admin). Parceiro: só a coordenação, mesmo depois de aceitar. */
-    public static function cancel(PDO $pdo, int $forwardId, int $userId, string $userName, string $role): array
+    /**
+     * Cancelar um envio pendente (quem enviou, setor de origem ou admin). Parceiro: só a coordenação, mesmo depois de aceitar.
+     * Ajuda comum já aceita e não devolvida travaria a conclusão: quem pediu a ajuda (setor de origem), a coordenação
+     * do pedido ou o admin encerram, com motivo ($reason), que vai para o setor que estava ajudando.
+     */
+    public static function cancel(PDO $pdo, int $forwardId, int $userId, string $userName, string $role, string $reason = ''): array
     {
         $fwd = self::getById($pdo, $forwardId);
+        $acceptedHelp = $fwd && !self::isPartner($fwd) && $fwd['mode'] === 'help' && $fwd['status'] === self::ST_ACCEPTED;
         // Parceiro que aceitou e não devolve travaria a conclusão: a coordenação também pode tirá-lo
-        if (!$fwd || ($fwd['status'] !== 'pending' && !(self::isPartner($fwd) && self::isOpen($fwd)))) {
+        if (!$fwd || ($fwd['status'] !== 'pending' && !(self::isPartner($fwd) && self::isOpen($fwd)) && !$acceptedHelp)) {
             return self::fail('Só dá para cancelar enquanto o outro setor não respondeu.');
+        }
+        $reason = trim($reason);
+        if ($acceptedHelp && mb_strlen($reason) < 5) {
+            return self::fail('Explique por que a ajuda vai ser encerrada, para o outro setor entender.');
         }
         // O parceiro foi decisão da coordenação: o setor responsável não desfaz
         if (self::isPartner($fwd)) {
             $req = getRequestRow($pdo, (string)$fwd['request_table'], (int)$fwd['request_id']);
             if (!$req || !userCanManageOriginalRequest($pdo, $req, (string)$fwd['request_table'], $userId, $role)) {
                 return self::fail('Só a coordenação do pedido pode tirar o setor parceiro.');
+            }
+        } elseif ($acceptedHelp) {
+            $fromSide = isGestorRole($role) && ((int)$fwd['forwarded_by'] === $userId || self::userInArea($pdo, $userId, (int)$fwd['from_area_id']));
+            $req = $fromSide || isGlobalAdminRole($role) ? null : getRequestRow($pdo, (string)$fwd['request_table'], (int)$fwd['request_id']);
+            if (!isGlobalAdminRole($role) && !$fromSide
+                && !($req && userCanManageOriginalRequest($pdo, $req, (string)$fwd['request_table'], $userId, $role))) {
+                return self::fail('Só o setor que pediu a ajuda ou a coordenação do pedido podem encerrar a ajuda.');
             }
         } elseif (!isGlobalAdminRole($role) && ($role === 'adm_sub' || ((int)$fwd['forwarded_by'] !== $userId && !self::userInArea($pdo, $userId, (int)$fwd['from_area_id'])))) {
             return self::fail('Só quem enviou pode cancelar.');
@@ -670,15 +685,27 @@ class RequestForwardService
 
         try {
             $pdo->beginTransaction();
-            self::changeForward($pdo, $forwardId, $fwd['status'], 'cancelled', $userId, null);
+            self::changeForward($pdo, $forwardId, $fwd['status'], 'cancelled', $userId, $acceptedHelp ? $reason : null);
             if ($fwd['mode'] === 'transfer') {
                 $back = in_array($fwd['previous_status'], ['Y', 'W'], true) ? $fwd['previous_status'] : 'Y';
                 self::setRequestStatus($pdo, $sector, $reqId, 'F', $back);
             }
-            RequestManager::addHistory($pdo, $reqId, $sector, $userId, $userName, "Cancelou o encaminhamento para $toLabel", null, $toLabel, 'forward_cancelled');
+            RequestManager::addHistory($pdo, $reqId, $sector, $userId, $userName,
+                $acceptedHelp ? "Encerrou a ajuda de $toLabel" : "Cancelou o encaminhamento para $toLabel", null, $toLabel, 'forward_cancelled');
             $pdo->commit();
         } catch (Throwable $e) {
             return self::rollback($pdo, $e, 'cancel');
+        }
+
+        if ($acceptedHelp) {
+            self::notifyArea($pdo, (int)$fwd['to_area_id'], $userId, "Ajuda encerrada (nº $reqId)",
+                "$userName encerrou a ajuda de vocês. Motivo: " . self::preview($reason), self::link($reqId, $sector));
+            if (!self::userInArea($pdo, $userId, (int)$fwd['from_area_id'])) {
+                // Coordenação ou admin encerrou: o setor responsável fica sabendo que já pode concluir
+                self::notifyArea($pdo, (int)$fwd['from_area_id'], $userId, "Ajuda encerrada (nº $reqId)",
+                    "$userName encerrou a ajuda de $toLabel. O pedido não espera mais por eles.", self::link($reqId, $sector));
+            }
+            return ['success' => true, 'message' => "Ajuda de $toLabel encerrada. $toLabel recebeu o motivo."];
         }
 
         self::notifyArea($pdo, (int)$fwd['to_area_id'], $userId, "Encaminhamento cancelado (nº $reqId)",

@@ -232,7 +232,7 @@ try {
 
         if (!empty($subdivisionSync)) {
             $placeholders = implode(',', array_fill(0, count($subdivisionSync), '?'));
-            $stmtValidSubs = $pdo->prepare("SELECT COUNT(*) FROM ctd_subdivision WHERE id IN ($placeholders)");
+            $stmtValidSubs = $pdo->prepare("SELECT COUNT(*) FROM ctd_subdivision WHERE status = 1 AND id IN ($placeholders)");
             $stmtValidSubs->execute($subdivisionSync);
             if ((int)$stmtValidSubs->fetchColumn() !== count($subdivisionSync)) {
                 echo json_encode(['success' => false, 'message' => 'Uma ou mais subdivisoes informadas sao invalidas.']);

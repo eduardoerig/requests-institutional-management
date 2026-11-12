@@ -666,6 +666,7 @@ function clearFieldErrors(form) {
 function validateRequestForm(form) {
     clearFieldErrors(form);
     const messages = {
+        subdivision_id: 'Escolha de qual área é este pedido.',
         title: 'Escreva um título curto.',
         end: 'Escolha a data em que você precisa.',
         details: 'Explique o que você precisa.',
@@ -673,25 +674,34 @@ function validateRequestForm(form) {
         qtd: 'Informe quantas cópias (número maior que zero).',
         model: 'Escolha uma opção.',
         outros_texto: 'Descreva qual é a outra opção.',
-        urgent_reason: 'Conte por que é urgente.'
+        urgent_reason: 'Conte por que é urgente.',
+        obs_choice: 'Responda sim ou não.',
+        partner_choice: 'Responda sim ou não.',
+        obs: 'Escreva a observação ou marque Não.',
+        partner_area_id: 'Escolha o setor ou marque Não.',
+        'model[]': 'Escolha pelo menos um lugar.',
+        kind: 'Escolha o que você precisa.',
+        size: 'Escolha o tamanho.'
     };
     let firstInvalid = null;
     const checkedGroups = new Set();
 
-    form.querySelectorAll('[required]').forEach(field => {
-        if (field.type === 'radio') {
+    // data-required-group: grupo de caixas de marcar em que pelo menos uma precisa estar marcada
+    form.querySelectorAll('[required], [data-required-group]').forEach(field => {
+        if (field.disabled) return; // parte fechada do formulário (Não, outro tipo): não vai no envio
+        if (field.type === 'radio' || field.hasAttribute('data-required-group')) {
             if (checkedGroups.has(field.name)) return;
             checkedGroups.add(field.name);
-            if (!form.querySelector(`input[name="${field.name}"]:checked`)) {
-                showFieldError(field, messages[field.name] || 'Escolha uma opção.');
+            if (!form.querySelector(`input[name="${CSS.escape(field.name)}"]:checked`)) {
+                showFieldError(field, field.dataset.message || messages[field.name] || 'Escolha uma opção.');
                 firstInvalid = firstInvalid || field;
             }
             return;
         }
         const value = field.value.trim();
         let invalid = value === '';
-        if (!invalid && field.type === 'date' && value < todayIso()) {
-            showFieldError(field, 'A data não pode ser no passado.');
+        if (!invalid && field.type === 'date' && value <= todayIso()) {
+            showFieldError(field, 'Escolha uma data a partir de amanhã.');
             firstInvalid = firstInvalid || field;
             return;
         }
@@ -709,7 +719,7 @@ function validateRequestForm(form) {
             }
         }
         if (invalid) {
-            showFieldError(field, messages[field.name] || 'Preencha este campo.');
+            showFieldError(field, field.dataset.message || messages[field.name] || 'Preencha este campo.');
             firstInvalid = firstInvalid || field;
         }
     });
@@ -720,6 +730,164 @@ function validateRequestForm(form) {
         return false;
     }
     return true;
+}
+
+// Mostra (e liga) ou esconde (e desliga) uma parte do formulário. Campo desligado não vai no envio
+// nem é conferido; data-yesno-required vira obrigatório só enquanto a parte está aberta.
+function setFormPartOpen(part, open) {
+    part.hidden = !open;
+    part.querySelectorAll('input, select, textarea').forEach(field => {
+        field.disabled = !open;
+        if (field.hasAttribute('data-yesno-required')) field.required = open;
+    });
+}
+
+// Perguntas Sim/Não (api/get_form.php, yesNoField): Sim abre o painel; Não fecha e mostra a frase em vermelho
+function bindYesNo(form) {
+    form.querySelectorAll('[data-yesno]').forEach(box => {
+        const yes = box.querySelector('[data-yesno-yes]');
+        const no = box.querySelector('[data-yesno-no]');
+        const panel = box.querySelector('[data-yesno-panel]');
+        const note = box.querySelector('[data-yesno-note]');
+        const apply = (focus) => {
+            setFormPartOpen(panel, yes.checked);
+            note.hidden = !no.checked;
+            if (focus && yes.checked) panel.querySelector('input:not([type="hidden"]), select, textarea')?.focus();
+        };
+        yes.addEventListener('change', () => apply(true));
+        no.addEventListener('change', () => apply(false));
+        apply(false); // resposta que voltou ao trocar de setor
+    });
+}
+
+// Tipo do pedido escolhido no topo do formulário (Reprografia: cópia colorida | plastificação):
+// só a parte do tipo escolhido fica aberta; data-kind-part="*" abre com qualquer tipo
+function bindKindChoice(form) {
+    const box = form.querySelector('[data-kind-choice]');
+    if (!box) return;
+    const apply = (focus) => {
+        const kind = box.querySelector('input:checked')?.value || '';
+        form.querySelectorAll('[data-kind-part]').forEach(part => {
+            const want = part.dataset.kindPart;
+            setFormPartOpen(part, kind !== '' && (want === '*' || want === kind));
+        });
+        if (focus) form.querySelector(`[data-kind-part="${CSS.escape(kind)}"] input:not([type="hidden"])`)?.focus();
+    };
+    box.addEventListener('change', () => apply(true));
+    apply(false);
+}
+
+// Lista de linhas (itens de Compras, links do Marketing): "+ Adicionar" copia o <template>; cada
+// campo vira items[n][nome]. Linha começada exige o campo principal (data-key). Com
+// data-repeater-details, o campo Detalhes só é obrigatório enquanto não há linha preenchida.
+function bindRepeater(form) {
+    form.querySelectorAll('[data-repeater]').forEach(box => {
+        const rows = box.querySelector('[data-repeater-rows]');
+        const tpl = box.querySelector('template[data-repeater-template]');
+        const add = box.querySelector('[data-repeater-add]');
+        const max = parseInt(box.dataset.max || '30', 10);
+        const details = box.dataset.repeaterDetails ? form.querySelector(`[name="${box.dataset.repeaterDetails}"]`) : null;
+        const detailsReq = details ? form.querySelector('[data-details-req]') : null;
+        if (!rows || !tpl || !add) return;
+
+        const sync = () => {
+            const list = Array.from(rows.querySelectorAll('[data-repeater-row]'));
+            let filled = 0;
+            list.forEach((row, i) => {
+                const fields = Array.from(row.querySelectorAll('[data-field]'));
+                const started = fields.some(f => f.value.trim() !== '');
+                if (started) filled++;
+                fields.forEach(f => {
+                    f.name = `items[${i}][${f.dataset.field}]`;
+                    if (f.hasAttribute('data-key')) f.required = started;
+                });
+            });
+            add.hidden = list.length >= max;
+            if (details) {
+                details.required = filled === 0;
+                if (detailsReq) detailsReq.hidden = filled > 0;
+            }
+        };
+
+        add.addEventListener('click', () => {
+            rows.appendChild(tpl.content.cloneNode(true));
+            sync();
+            rows.lastElementChild?.querySelector('[data-field]')?.focus();
+        });
+        rows.addEventListener('click', (e) => {
+            const btn = e.target.closest('[data-repeater-remove]');
+            if (!btn) return;
+            btn.closest('[data-repeater-row]')?.remove();
+            sync();
+            add.focus();
+        });
+        rows.addEventListener('input', sync);
+        sync();
+    });
+}
+
+// Anexos (api/get_form.php): cada escolha soma à lista (não substitui); o navegador já recusa tipo
+// e tamanho fora do permitido, com a mesma regra do servidor (RequestAttachments). Na cópia colorida,
+// com PDF anexado, "Onde está o arquivo?" deixa de ser obrigatório (data-attach-relaxes).
+function bindAttachments(form) {
+    const sizeLabel = (b) => b >= 1048576 ? `${(b / 1048576).toFixed(b >= 10485760 ? 0 : 1).replace('.', ',')} MB` : `${Math.max(1, Math.round(b / 1024))} KB`;
+    form.querySelectorAll('[data-attach]').forEach(box => {
+        const input = box.querySelector('[data-attach-input]');
+        const list = box.querySelector('[data-attach-list]');
+        if (!input || !list || typeof DataTransfer === 'undefined') return;
+        const exts = (box.dataset.ext || '').split(',');
+        const maxFile = parseInt(box.dataset.maxFile, 10) || Infinity;
+        const maxTotal = parseInt(box.dataset.maxTotal, 10) || Infinity;
+        const maxFiles = parseInt(box.dataset.maxFiles, 10) || 5;
+        const relaxes = box.dataset.attachRelaxes ? form.querySelector(`[name="${box.dataset.attachRelaxes}"]`) : null;
+        const relaxesStar = relaxes ? form.querySelector(`label[for="${relaxes.id}"] .req`) : null;
+        let chosen = [];
+
+        const render = () => {
+            const dt = new DataTransfer();
+            chosen.forEach(f => dt.items.add(f));
+            input.files = dt.files;
+            list.innerHTML = '';
+            chosen.forEach((f, i) => {
+                const li = document.createElement('li');
+                li.className = 'attach__item';
+                li.innerHTML = '<i class="fa-solid fa-file" aria-hidden="true"></i> <span class="attach__name"></span> <small></small>'
+                    + '<button type="button" class="btn btn--sm btn--ghost attach__remove" aria-label="Tirar este arquivo"><i class="fa-solid fa-xmark" aria-hidden="true"></i></button>';
+                li.querySelector('.attach__name').textContent = f.name;
+                li.querySelector('small').textContent = sizeLabel(f.size);
+                li.querySelector('button').addEventListener('click', () => { chosen.splice(i, 1); render(); input.focus(); });
+                list.appendChild(li);
+            });
+            if (relaxes) {
+                relaxes.required = chosen.length === 0;
+                if (relaxesStar) relaxesStar.hidden = chosen.length > 0;
+                if (chosen.length) {
+                    const group = relaxes.closest('.form-group');
+                    group?.classList.remove('has-error');
+                    group?.querySelector('.field-error')?.remove();
+                }
+            }
+        };
+
+        input.addEventListener('change', () => {
+            const picked = Array.from(input.files || []);
+            const problems = [];
+            picked.forEach(f => {
+                const ext = (f.name.split('.').pop() || '').toLowerCase();
+                const total = chosen.reduce((s, x) => s + x.size, 0) + f.size;
+                if (!exts.includes(ext)) problems.push(exts.length === 1 && exts[0] === 'pdf' ? `"${f.name}" não é PDF. Aqui só vale PDF.` : `O tipo de "${f.name}" não é aceito.`);
+                else if (f.size === 0) problems.push(`"${f.name}" está vazio.`);
+                else if (f.size > maxFile) problems.push(`"${f.name}" passa de ${box.dataset.sizeLabel || sizeLabel(maxFile)}.`);
+                else if (chosen.length >= maxFiles) problems.push(`Cabem até ${maxFiles} arquivos.`);
+                else if (total > maxTotal) problems.push(`Os arquivos juntos passam de ${sizeLabel(maxTotal)}.`);
+                else if (!chosen.some(x => x.name === f.name && x.size === f.size)) chosen.push(f);
+            });
+            render();
+            box.classList.remove('has-error');
+            box.querySelector('.field-error')?.remove();
+            if (problems.length) showFieldError(input, [...new Set(problems)].join(' '));
+        });
+    });
 }
 
 // Data de hoje + n dias, no formato do campo de data
@@ -733,24 +901,13 @@ function bindFormRequests() {
     const form_requests = document.querySelector('.form_request');
     if (!form_requests) return;
 
-    // Data mínima = hoje
-    form_requests.querySelectorAll('input[type="date"]').forEach(input => { input.min = todayIso(); });
+    // Prazo só pelo calendário, a partir de amanhã (hoje não dá: feedback da CTAP)
+    form_requests.querySelectorAll('input[type="date"]').forEach(input => { input.min = isoInDays(1); });
 
-    // Atalhos de data: um toque preenche o campo
-    form_requests.querySelectorAll('[data-date-quick]').forEach(box => {
-        const input = box.closest('.form-group').querySelector('input[type="date"]');
-        [['Amanhã', 1], ['Em 1 semana', 7], ['Em 2 semanas', 14]].forEach(([label, days]) => {
-            const btn = document.createElement('button');
-            btn.type = 'button';
-            btn.className = 'chip-btn';
-            btn.textContent = label;
-            btn.addEventListener('click', () => {
-                input.value = isoInDays(days);
-                input.dispatchEvent(new Event('input', { bubbles: true }));
-            });
-            box.appendChild(btn);
-        });
-    });
+    bindYesNo(form_requests);
+    bindKindChoice(form_requests);
+    bindRepeater(form_requests);
+    bindAttachments(form_requests);
 
     // "É urgente" pede o motivo
     const urgent = form_requests.querySelector('[data-urgent]');
@@ -806,7 +963,24 @@ function bindFormRequests() {
 
         const data = await fetchAjax("api/add_request.php", formData);
         if (data && data.success) {
-            flashToast(`Pedido nº ${parseInt(data.id, 10)} enviado. Você recebe um aviso quando a coordenação aprovar.`);
+            const number = parseInt(data.id, 10);
+            // Setor que só compra em certos dias (Compras): confirmação e, ao fechar, o alerta dos dias
+            if (data.purchase_notice && typeof window.showAlert === 'function') {
+                await window.showAlert({
+                    title: `Pedido nº ${number} enviado`,
+                    message: 'Agora ele aguarda a aprovação da coordenação. Você recebe um aviso quando ela aprovar.',
+                    type: 'success',
+                    confirmLabel: 'Entendi'
+                });
+                await window.showAlert({
+                    title: data.purchase_notice.title,
+                    message: data.purchase_notice.message,
+                    type: 'warning',
+                    confirmLabel: 'Entendi'
+                });
+            } else {
+                flashToast(`Pedido nº ${number} enviado. Você recebe um aviso quando a coordenação aprovar.`);
+            }
             window.location.href = safeInternalLink(data.link);
             return;
         }
@@ -987,8 +1161,14 @@ async function refreshAfterChange(opts = {}) {
             if (twin) el.replaceWith(twin);
         });
         document.body.classList.remove('has-bulk');
+        return true;
     } catch (err) {
-        location.reload();
+        // Sem resposta (sem internet): recarregar levaria à página de erro do navegador e apagaria
+        // o que está na tela. Fica a lista atual, com o aviso (sem cobrir um erro mais importante)
+        if (!document.querySelector('.toast.error.show')) {
+            showToast('Não deu para atualizar a lista. Confira a internet; o que está na tela pode estar desatualizado.', 'error');
+        }
+        return false;
     }
 }
 
@@ -1230,11 +1410,11 @@ async function addPartnerNow(id, table, button) {
     if (data.success) await refreshAfterChange({ message: data.message });
 }
 
-function forwardAct(action, forwardId, mode = 'help') {
-    return runPedidoAction(() => forwardActNow(action, forwardId, mode));
+function forwardAct(action, forwardId, mode = 'help', toLabel = '') {
+    return runPedidoAction(() => forwardActNow(action, forwardId, mode, toLabel));
 }
 
-async function forwardActNow(action, forwardId, mode = 'help') {
+async function forwardActNow(action, forwardId, mode = 'help', toLabel = '') {
     const fields = { action, forward_id: forwardId };
     if (action === 'accept') {
         const ok = await showConfirm(mode === 'partner'
@@ -1258,6 +1438,17 @@ async function forwardActNow(action, forwardId, mode = 'help') {
         });
         if (note === false) return;
         fields.note = note;
+    } else if (action === 'cancel' && mode === 'help_accepted') {
+        // Ajuda já aceita que não volta: encerrar libera Concluir; o outro setor recebe o motivo
+        const who = toLabel || 'O outro setor';
+        const reason = await showConfirm({
+            title: 'Encerrar a ajuda?',
+            message: `${who} deixa de ajudar neste pedido e recebe o motivo. Depois disso, o pedido pode ser concluído sem esperar a devolução.`,
+            type: 'warning', confirmLabel: 'Encerrar a ajuda', cancelLabel: 'Voltar', isDanger: true,
+            input: { label: 'Por que encerrar a ajuda? *', placeholder: 'Ex.: resolvemos por conta própria', required: true, minLength: 5 }
+        });
+        if (reason === false) return;
+        fields.reason = reason;
     } else if (action === 'cancel') {
         const ok = await showConfirm({ title: mode === 'partner' ? 'Tirar setor parceiro' : 'Cancelar envio', message: mode === 'partner' ? 'Este setor deixa de ver o pedido, e o setor responsável não precisa mais esperar a parte dele.' : 'O outro setor deixa de ver este encaminhamento.', type: 'warning', confirmLabel: mode === 'partner' ? 'Tirar parceiro' : 'Cancelar envio', cancelLabel: 'Voltar' });
         if (!ok) return;

@@ -5,6 +5,8 @@ require_once __DIR__ . '/../config/security.php';
 requireLoginJson($pdo);
 require_once __DIR__ . '/../classes/RequestManager.php';
 require_once __DIR__ . '/../classes/RequestForwardService.php';
+require_once __DIR__ . '/../classes/RequestItems.php';
+require_once __DIR__ . '/../classes/RequestAttachments.php';
 
 header('Content-Type: application/json');
 
@@ -151,7 +153,9 @@ try {
                 $openList = RequestForwardService::openForwards($pdo, (int)$id, $sector);
                 throw new UserMessage(RequestForwardService::isPartner($openForward)
                     ? 'Aguarde ' . RequestForwardService::partnerNames($openList) . (count($openList) > 1 ? ' devolverem as partes' : ' devolver a parte') . ' para concluir. Só a coordenação pode tirar o setor parceiro.'
-                    : 'Há um encaminhamento em aberto com ' . $openForward['to_label'] . '. Aguarde a resposta ou cancele antes de concluir.');
+                    : ($openForward['status'] === 'accepted'
+                        ? $openForward['to_label'] . ' ainda está ajudando. Peça na conversa para devolverem, ou toque em Encerrar a ajuda, antes de concluir.'
+                        : 'Há um encaminhamento em aberto com ' . $openForward['to_label'] . '. Aguarde a resposta ou cancele o envio antes de concluir.'));
             }
 
             $pdo->beginTransaction();
@@ -240,8 +244,11 @@ try {
             $pdo->prepare("DELETE FROM request_history WHERE request_id = ? AND request_table = ?")->execute([$id, $sector]);
             $pdo->prepare("DELETE FROM request_forwards WHERE request_id = ? AND request_table = ?")->execute([$id, $sector]);
             $pdo->prepare("DELETE FROM request_partner_suggestions WHERE request_id = ? AND request_table = ?")->execute([$id, $sector]);
+            RequestItems::deleteForRequest($pdo, $sector, $id);
+            $filesToDelete = RequestAttachments::deleteForRequest($pdo, $sector, $id);
             $pdo->prepare("DELETE FROM notifications WHERE link = ?")->execute(["request_detail?id=$id&table=$sector"]);
             $pdo->commit();
+            RequestAttachments::unlinkAll($filesToDelete); // só depois do commit: se desfizer, o arquivo continua
 
             $msg = "Requisição excluída com sucesso.";
             break;

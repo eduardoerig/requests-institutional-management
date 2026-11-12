@@ -80,7 +80,7 @@ try {
 
     if (!empty($subdivisions)) {
         $placeholders = implode(',', array_fill(0, count($subdivisions), '?'));
-        $stmtValidSubs = $pdo->prepare("SELECT COUNT(*) FROM ctd_subdivision WHERE id IN ($placeholders)");
+        $stmtValidSubs = $pdo->prepare("SELECT COUNT(*) FROM ctd_subdivision WHERE status = 1 AND id IN ($placeholders)");
         $stmtValidSubs->execute($subdivisions);
         if ((int)$stmtValidSubs->fetchColumn() !== count($subdivisions)) {
             jsonResponse(['success' => false, 'message' => 'Uma ou mais áreas informadas são inválidas.', 'field' => 'subdivisions']);

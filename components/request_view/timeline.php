@@ -184,7 +184,10 @@ function renderRequestFeed(PDO $pdo, array $req, string $sector, int $viewerId, 
                 $items[] = [
                     'at' => (string)$f['responded_at'], 'type' => 'event',
                     'who' => (string)(($f['responded_by_name'] ?? '') ?: $f['to_label']),
-                    'text' => $partner && $f['status'] === 'cancelled' ? 'tirou ' . $f['to_label'] . ' como setor parceiro' : $responses[$f['status']] . ($f['status'] === 'cancelled' ? '' : ' (' . $f['to_label'] . ')'),
+                    // Ajuda cancelada com motivo = ajuda já aceita que o setor de origem ou a coordenação encerrou
+                    'text' => $partner && $f['status'] === 'cancelled' ? 'tirou ' . $f['to_label'] . ' como setor parceiro'
+                        : ($f['status'] === 'cancelled' && trim((string)($f['response_note'] ?? '')) !== '' ? 'encerrou a ajuda de ' . $f['to_label']
+                        : $responses[$f['status']] . ($f['status'] === 'cancelled' ? '' : ' (' . $f['to_label'] . ')')),
                     'note' => (string)($f['response_note'] ?? ''), 'bad' => $f['status'] === 'refused',
                 ];
             }

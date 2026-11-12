@@ -23,9 +23,13 @@
     const btnSend = root.querySelector('[data-step-send]');
     const sectorOut = root.querySelector('[data-sector-name-out]');
     const desk = window.matchMedia('(min-width: 900px)');
+    // Quem tem mais de uma área escolhe a área antes do setor (o campo fica fora do <form> do setor)
+    const areaBox = root.querySelector('[data-area-choice]');
+    const areaError = root.querySelector('[data-area-error]');
 
-    const titles = ['Para qual setor?', 'O que você precisa?', 'Urgência e revisão'];
+    const titles = [areaBox ? 'Área e setor' : 'Para qual setor?', 'O que você precisa?', 'Urgência e revisão'];
     const kept = ['title', 'details', 'end', 'obs', 'file', 'qtd', 'urgent_reason'];
+    const keptRadios = ['obs_choice']; // respostas que valem para qualquer setor
     const cache = {};
     let step = 1;
     let chosen = null;
@@ -76,8 +80,45 @@
         return part ? validateRequestForm(part) : true;
     }
 
+    // ---------------------------------------------------------------
+    // Área do pedido (só para quem tem mais de uma)
+    // ---------------------------------------------------------------
+    const areaRadio = () => areaBox?.querySelector('input[name="nr_area"]:checked') || null;
+
+    // Leva a área escolhida para o campo escondido do formulário do setor
+    function syncArea() {
+        const hidden = holder.querySelector('[data-area-hidden]');
+        if (hidden) hidden.value = areaRadio()?.value || '';
+    }
+
+    // Sem área escolhida: mostra o aviso no passo 1 e não deixa seguir
+    function areaOk() {
+        if (!areaBox || areaRadio()) return true;
+        if (step !== 1) setStep(1, { focus: false });
+        areaError.hidden = false;
+        areaBox.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        areaBox.querySelector('input[name="nr_area"]')?.focus({ preventScroll: true });
+        return false;
+    }
+
+    if (areaBox) {
+        areaBox.addEventListener('change', () => {
+            areaError.hidden = true;
+            dirty = true;
+            syncArea();
+            if (step === 3) renderReview();
+        });
+        // Computador: o botão Enviar do formulário não passa pelo passo 1; confere a área antes do envio do script.js
+        holder.addEventListener('submit', (e) => {
+            if (areaOk()) return;
+            e.preventDefault();
+            e.stopPropagation();
+        }, true);
+    }
+
     async function goNext() {
         if (step === 1) {
+            if (!areaOk()) return;
             if (!chosen) {
                 sectorError.hidden = false;
                 cards[0]?.focus();
@@ -141,18 +182,20 @@
         const form = currentForm();
         const box = form?.querySelector('[data-review]');
         if (!box || !chosen) return;
-        const title = (form.querySelector('[name="title"]')?.value || '').trim();
+        const title = (form.querySelector('[name="title"]:not(:disabled)')?.value || '').trim();
         const due = formatDate(form.querySelector('[name="end"]')?.value);
         const urgent = !!form.querySelector('[name="urgent"]')?.checked;
         const sectorName = chosen.dataset.sectorName || chosen.dataset.label || '';
+        const areaName = (areaRadio()?.parentElement?.textContent || '').trim();
         const partnerName = ['partner_area_id', 'partner2_area_id']
             .map(name => form.querySelector(`[name="${name}"]`))
-            .filter(select => select?.value)
+            .filter(select => select?.value && !select.disabled)
             .map(select => select.selectedOptions[0]?.textContent || '')
             .join(' e ');
         box.innerHTML =
             '<span class="nr-review__label">Revisão</span>' +
             `<strong class="nr-review__title">Pedido para ${escapeHtml(chosen.dataset.label || sectorName)}</strong>` +
+            (areaName ? `<span class="nr-review__line">Área: ${escapeHtml(areaName)}</span>` : '') +
             (title ? `<span class="nr-review__line">${escapeHtml(title)}</span>` : '') +
             (due ? `<span class="nr-review__line">Para ${escapeHtml(due)}${urgent ? ' · <b>urgente</b>' : ''}</span>` : '') +
             (partnerName ? `<span class="nr-review__line">Sugestão de parceiro: ${escapeHtml(partnerName)}</span>` : '') +
@@ -160,42 +203,15 @@
     }
 
     // ---------------------------------------------------------------
-    // Prazo: atalhos com estado + "Escolher data"
+    // Prazo: só o calendário; embaixo, a data por extenso ("Prazo: quinta-feira, 20/11")
     // ---------------------------------------------------------------
     function enhanceDate(form) {
-        const box = form.querySelector('[data-date-quick]');
         const input = form.querySelector('input[name="end"]');
-        if (!box || !input) return;
-        const group = input.closest('.form-group');
-        const chosenText = group.querySelector('[data-date-chosen]');
-        const quick = Array.from(box.querySelectorAll('.chip-btn')); // criados pelo bindFormRequests
-        const days = [1, 7, 14];
-
-        const pick = document.createElement('button');
-        pick.type = 'button';
-        pick.className = 'chip-btn';
-        pick.textContent = 'Escolher data';
-        box.appendChild(pick);
-        const all = quick.concat(pick);
-        all.forEach(b => b.setAttribute('aria-pressed', 'false'));
-
+        if (!input) return;
+        const chosenText = input.closest('.form-group').querySelector('[data-date-chosen]');
         function sync() {
-            const value = input.value;
-            const idx = days.findIndex(n => isoInDays(n) === value);
-            const custom = value !== '' && idx === -1;
-            all.forEach((b, i) => b.setAttribute('aria-pressed', String(i === idx || (custom && b === pick))));
-            if (custom) group.classList.add('is-picking');
-            if (chosenText) chosenText.textContent = value ? `Prazo: ${formatDate(value)}` : '';
+            if (chosenText) chosenText.textContent = input.value ? `Prazo: ${formatDate(input.value)}` : '';
         }
-
-        quick.forEach(b => b.addEventListener('click', () => group.classList.remove('is-picking')));
-        pick.addEventListener('click', () => {
-            group.classList.add('is-picking');
-            pick.setAttribute('aria-pressed', 'true');
-            quick.forEach(b => b.setAttribute('aria-pressed', 'false'));
-            input.focus();
-            try { if (typeof input.showPicker === 'function') input.showPicker(); } catch (e) { /* alguns navegadores só abrem com toque direto */ }
-        });
         input.addEventListener('input', sync);
         input.addEventListener('change', sync);
         sync();
@@ -258,6 +274,11 @@
             const field = holder.querySelector(`[name="${name}"]`);
             if (field && field.value.trim() !== '') typed[name] = field.value;
         });
+        const keptChoices = {};
+        keptRadios.forEach(name => {
+            const radio = holder.querySelector(`[name="${name}"]:checked`);
+            if (radio) keptChoices[name] = radio.value;
+        });
         const wasUrgent = !!holder.querySelector('[name="urgent"]')?.checked;
 
         chosen = card;
@@ -286,7 +307,11 @@
             const field = holder.querySelector(`[name="${name}"]`);
             if (field) field.value = value;
         });
-        if (typed.obs) holder.querySelector('.form-more')?.setAttribute('open', '');
+        Object.entries(keptChoices).forEach(([name, value]) => {
+            const radio = holder.querySelector(`[name="${name}"][value="${CSS.escape(value)}"]`);
+            if (radio) radio.checked = true;
+        });
+        syncArea();
 
         bindFormRequests(); // script.js: data mínima, atalhos de data, urgência, "Outro", validação e envio
 

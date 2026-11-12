@@ -281,3 +281,141 @@ function isValidLoginFormat(string $login): bool
 {
     return (bool)preg_match('/^[A-Za-z0-9._-]{2,100}$/', $login);
 }
+
+/**
+ * Prazo de um pedido novo (AAAA-MM-DD): o que está errado, ou null se pode usar.
+ * O prazo começa amanhã: quem pede não marca para o mesmo dia (feedback da CTAP).
+ */
+function deadlineProblem(string $iso): ?string
+{
+    $date = DateTime::createFromFormat('!Y-m-d', $iso);
+    if ($iso === '' || !$date || $date->format('Y-m-d') !== $iso) {
+        return 'Informe a data em que você precisa receber.';
+    }
+    if ($date <= new DateTime('today')) {
+        return 'O prazo precisa ser a partir de amanhã.';
+    }
+    return null;
+}
+
+/**
+ * Tipos de pedido da Reprografia (ctd_xerox_frm.kind). NULL nos pedidos antigos = cópia colorida.
+ */
+function xeroxKinds(): array
+{
+    return ['copia_colorida' => 'Cópia colorida', 'plastificacao' => 'Plastificação'];
+}
+
+/**
+ * Campos próprios do tipo de pedido, na ordem em que aparecem (página do pedido e impressão).
+ * @return array<string, string> rótulo => valor (vazio = não mostrar)
+ */
+function requestTypeFields(string $sector, array $req): array
+{
+    if ($sector === 'xerox') {
+        $kind = (string)($req['kind'] ?? '') ?: 'copia_colorida';
+        if ($kind === 'plastificacao') {
+            return [
+                'Tipo' => 'Plastificação',
+                'Folhas' => (string)($req['qtd'] ?? ''),
+                'Tamanho' => (string)($req['type'] ?? ''),
+            ];
+        }
+        return [
+            'Tipo' => 'Cópia colorida',
+            'Arquivo' => (string)($req['arquive'] ?? ''),
+            'Cópias' => (string)($req['qtd'] ?? ''),
+            'Tamanho do papel' => (string)($req['type'] ?? ''),
+        ];
+    }
+    if ($sector === 'mkt') {
+        return ['Onde será usada' => (string)($req['type'] ?? '')];
+    }
+    return [];
+}
+
+/**
+ * Resumo do pedido da Reprografia, que não tem descrição: "30 cópias · papel A4" ou
+ * "10 folhas para plastificar · A4".
+ */
+function xeroxSummary(array $req): string
+{
+    $qtd = trim((string)($req['qtd'] ?? '')) !== '' ? (int)$req['qtd'] : 0;
+    $size = trim((string)($req['type'] ?? ''));
+    if (((string)($req['kind'] ?? '')) === 'plastificacao') {
+        return implode(' · ', array_filter([$qtd ? "$qtd folhas para plastificar" : 'Plastificação', $size]));
+    }
+    return implode(' · ', array_filter([$qtd ? "$qtd cópias" : '', $size !== '' ? "papel $size" : '']));
+}
+
+/**
+ * Pasta dos anexos (fora do que a web serve): UPLOAD_DIR no ambiente ou upload_dir em
+ * config/conn.local.php. Padrão: <raiz>/uploads (está no .gitignore e bloqueada no .htaccess).
+ */
+function uploadDir(): string
+{
+    $dir = getenv('UPLOAD_DIR');
+    if ($dir === false || $dir === '') {
+        $file = __DIR__ . '/../config/conn.local.php';
+        $local = is_file($file) ? (require $file) : [];
+        $dir = is_array($local) ? (string)($local['upload_dir'] ?? '') : '';
+    }
+    return rtrim($dir !== '' ? $dir : dirname(__DIR__) . '/uploads', '/' . DIRECTORY_SEPARATOR);
+}
+
+/** "20M" / "512K" / "1G" do php.ini em bytes */
+function iniBytes(string $value): int
+{
+    $value = trim($value);
+    $n = (int)$value;
+    switch (strtolower(substr($value, -1))) {
+        case 'g': return $n * 1024 ** 3;
+        case 'm': return $n * 1024 ** 2;
+        case 'k': return $n * 1024;
+        default: return $n;
+    }
+}
+
+/**
+ * Aviso dos dias de compra (setor com purchase_weekdays em config/sectors.php), mostrado
+ * depois de enviar o pedido. O próximo dia de compra é sempre depois de hoje (o pedido
+ * ainda passa pela aprovação). $weekdays: 1 = segunda ... 7 = domingo.
+ * @return array{days: string, next: string, deadline_before: bool, title: string, message: string}|null
+ */
+function purchaseNotice(array $weekdays, string $deadlineIso, string $sectorLabel = 'Compras', ?DateTimeImmutable $today = null): ?array
+{
+    $weekdays = array_values(array_unique(array_filter(array_map('intval', $weekdays), fn($d) => $d >= 1 && $d <= 7)));
+    sort($weekdays);
+    if (!$weekdays) {
+        return null;
+    }
+    $plural = [1 => 'segundas', 2 => 'terças', 3 => 'quartas', 4 => 'quintas', 5 => 'sextas', 6 => 'sábados', 7 => 'domingos'];
+    $long = [1 => 'segunda-feira', 2 => 'terça-feira', 3 => 'quarta-feira', 4 => 'quinta-feira', 5 => 'sexta-feira', 6 => 'sábado', 7 => 'domingo'];
+    $names = array_map(fn($d) => $plural[$d], $weekdays);
+    $days = count($names) > 1 ? implode(', ', array_slice($names, 0, -1)) . ' e ' . end($names) : $names[0];
+
+    $today = ($today ?? new DateTimeImmutable('today'))->setTime(0, 0);
+    $next = $today;
+    for ($i = 1; $i <= 7; $i++) {
+        $next = $today->modify("+$i day");
+        if (in_array((int)$next->format('N'), $weekdays, true)) {
+            break;
+        }
+    }
+    $nextLabel = $long[(int)$next->format('N')] . ', ' . $next->format('d/m');
+    $deadline = DateTimeImmutable::createFromFormat('!Y-m-d', $deadlineIso) ?: null;
+    $before = $deadline !== null && $deadline < $next;
+
+    $message = "Depois de aprovado, seu pedido entra no próximo dia de compra: $nextLabel.";
+    if ($before) {
+        $message .= ' O prazo que você escolheu (' . $long[(int)$deadline->format('N')] . ', ' . $deadline->format('d/m')
+            . ") é antes disso. Se não puder esperar, fale com $sectorLabel pela conversa do pedido.";
+    }
+    return [
+        'days' => $days,
+        'next' => $nextLabel,
+        'deadline_before' => $before,
+        'title' => "$sectorLabel só compra às $days",
+        'message' => $message,
+    ];
+}

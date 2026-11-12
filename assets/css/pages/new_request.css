@@ -38,6 +38,14 @@
 .nr-sector__hint { font-size: var(--t-xs); color: var(--texto-2); line-height: 1.35; }
 .nr-sectors__error { margin-top: 10px; }
 
+/* Área do pedido (quem tem mais de uma): vem antes dos setores */
+.nr-area { margin: 0 0 20px; padding: 0; border: 0; min-width: 0; }
+.nr-area__title { padding: 0; margin: 0 0 4px; font-size: var(--t-md); font-weight: 600; }
+.nr-area__hint { margin: 0 0 10px; font-size: var(--t-xs); color: var(--texto-2); }
+.nr-area .field-error { margin-top: 10px; }
+.nr-sectors.has-area .nr-sectors__title { display: block; margin: 0 0 10px; font-size: var(--t-md); font-weight: 600; }
+@media (max-width: 899px) { .nr-sectors__num { display: none; } }
+
 /* ---------- Formulário ---------- */
 .nr-form .form_request { display: flex; flex-direction: column; gap: 0; }
 .nr-form .form-step { display: flex; flex-direction: column; gap: 0; }
@@ -45,28 +53,34 @@
 .nr-form .form-group > label,
 .nr-form .form-group > legend { font-size: 15px; }
 .nr-form input[type="text"],
+.nr-form input[type="url"],
 .nr-form input[type="number"],
 .nr-form input[type="date"] { min-height: var(--h-lg); padding: 0 16px; font-size: 17px; }
 .nr-form textarea { padding: 14px 16px; font-size: 17px; }
 .nr-form .aplication_select label { font-size: var(--t-md); }
 
-/* Prazo: atalhos em pílula; o calendário só aparece em "Escolher data" (ou se houver erro) */
+/* Tipo do pedido (Reprografia: cópia colorida | plastificação): dois cartões grandes */
+.kind-choice__options { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+.kind-choice__card {
+    position: relative;
+    display: flex; flex-direction: column; gap: 4px;
+    min-height: 88px; padding: 14px;
+    border: 2px solid var(--linha); border-radius: 14px;
+    background: var(--superficie); cursor: pointer;
+}
+.kind-choice__card:hover { border-color: var(--linha-forte); }
+.kind-choice__card:has(input:checked) { border-color: var(--laranja); background: var(--laranja-claro); }
+.kind-choice__card:has(input:focus-visible) { box-shadow: var(--anel); }
+.kind-choice__card input { position: absolute; opacity: 0; pointer-events: none; }
+.kind-choice__name { display: flex; align-items: center; gap: 8px; font-size: var(--t-md); font-weight: 600; }
+.kind-choice__name i { color: var(--texto-2); width: 16px; text-align: center; }
+.kind-choice__card:has(input:checked) .kind-choice__name i { color: var(--laranja-escuro); }
+.kind-choice__hint { font-size: var(--t-xs); color: var(--texto-2); line-height: 1.35; }
+.form-group.has-error .kind-choice__card { border-color: var(--perigo); }
+
+/* Prazo: só o calendário (a partir de amanhã); embaixo, a data por extenso */
 .nr-form .date-field { display: flex; flex-direction: column; align-items: stretch; gap: 10px; }
 .nr-form .date-field input[type="date"] { width: 100%; min-width: 0; flex: none; }
-.date-group:not(.is-picking):not(.has-error) .date-field input[type="date"] { display: none; }
-.nr-form .date-quick { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
-.nr-form .date-quick .chip-btn {
-    min-height: 48px;
-    padding: 0 12px;
-    border: 1px solid var(--linha);
-    border-radius: var(--r-2);
-    background: var(--superficie);
-    color: var(--texto);
-    font-size: 15px;
-    font-weight: 600;
-}
-.nr-form .date-quick .chip-btn[aria-pressed="true"] { background: var(--grafite); border-color: var(--grafite); color: var(--texto-inv); }
-.nr-form .date-quick .chip-btn:focus-visible { outline: none; box-shadow: var(--anel); }
 .date-chosen { margin: 0; font-size: var(--t-sm); color: var(--texto-2); }
 .date-chosen:empty { display: none; }
 
@@ -192,12 +206,10 @@
 
     .nr-form .form_request { gap: 24px; }
     .nr-form .form-group > label, .nr-form .form-group > legend { font-size: var(--t-sm); }
-    .nr-form input[type="text"], .nr-form input[type="number"], .nr-form input[type="date"] { min-height: var(--h-md); font-size: var(--t-md); padding: 0 14px; }
+    .nr-form input[type="text"], .nr-form input[type="url"], .nr-form input[type="number"], .nr-form input[type="date"] { min-height: var(--h-md); font-size: var(--t-md); padding: 0 14px; }
     .nr-form textarea { font-size: var(--t-md); padding: 12px 14px; }
     .nr-form .date-field { flex-direction: row; flex-wrap: wrap; align-items: center; }
     .nr-form .date-field input[type="date"] { width: auto; min-width: 200px; }
-    .nr-form .date-quick { display: flex; flex-wrap: wrap; }
-    .nr-form .date-quick .chip-btn { min-height: 44px; padding: 0 16px; font-size: var(--t-sm); }
 
     .urgent-switch.check-line { justify-content: flex-start; }
     .urgent-switch input[type="checkbox"] { order: -1; }

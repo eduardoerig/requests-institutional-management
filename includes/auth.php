@@ -177,6 +177,17 @@ function userCanAccessCreatorSubdivision(PDO $pdo, int $createdBy): bool
     return (int)$stmt->fetchColumn() > 0;
 }
 
+/**
+ * A coordenação responde por este pedido? Vale a área do pedido: quem está em várias áreas pede por uma
+ * delas, e a coordenação das outras não entra. Só pedido sem área cai na área de quem pediu.
+ */
+function userCoordinatesRequest(PDO $pdo, ?int $requestSubdivisionId, int $createdBy): bool
+{
+    return $requestSubdivisionId
+        ? userHasSubdivisionAccess($requestSubdivisionId)
+        : userCanAccessCreatorSubdivision($pdo, $createdBy);
+}
+
 function getRequestRow(PDO $pdo, string $sector, int $id): ?array
 {
     $normalizedSector = normalizeRequestTable($sector);
@@ -344,8 +355,7 @@ function userCanViewRequest(PDO $pdo, array $request, string $sector, int $userI
     }
 
     if ($role === 'adm_sub') {
-        return userHasSubdivisionAccess($requestSubdivisionId)
-            || userCanAccessCreatorSubdivision($pdo, $createdBy);
+        return userCoordinatesRequest($pdo, $requestSubdivisionId, $createdBy);
     }
 
     if (isGestorRole($role)) {
@@ -376,8 +386,7 @@ function userCanManageOriginalRequest(PDO $pdo, array $request, string $sector, 
     }
 
     if ($role === 'adm_sub') {
-        return userHasSubdivisionAccess($requestSubdivisionId)
-            || userCanAccessCreatorSubdivision($pdo, (int)($request['created_by'] ?? 0));
+        return userCoordinatesRequest($pdo, $requestSubdivisionId, (int)($request['created_by'] ?? 0));
     }
 
     return false;

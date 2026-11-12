@@ -32,9 +32,13 @@ if ($canManage) {
 // O número diz o que conta: na Caixa, os que chegaram e ninguém começou; em Aprovar, os que esperam decisão
 $badgeHint = fn(string $href, int $n) => $href === 'approve' ? "$n para aprovar" : ($n === 1 ? '1 novo para atender' : "$n novos para atender");
 $menuItem = function (string $href, string $icon, string $label, int $badge = 0, string $badgeClass = '', bool $active = false) use ($badgeHint) {
-    $badgeHtml = $badge > 0 ? '<span class="sidebar-badge ' . e($badgeClass) . '" title="' . e($badgeHint($href, $badge)) . '" aria-label="' . e($badgeHint($href, $badge)) . '">' . $badge . '</span>' : '';
+    // Na tela no máximo "99+"; o leitor de tela e o title dizem o número real
+    $badgeHtml = $badge > 0
+        ? '<span class="sidebar-badge ' . e($badgeClass) . '" title="' . e($badgeHint($href, $badge)) . '" aria-hidden="true">' . ($badge > 99 ? '99+' : $badge) . '</span>'
+            . '<span class="visually-hidden">' . e($badgeHint($href, $badge)) . '</span>'
+        : '';
     return '<a href="' . e($href) . '" class="menu-link' . ($active ? ' is-active' : '') . '"' . ($active ? ' aria-current="page"' : '') . '>'
-        . '<i class="fa-solid ' . e($icon) . '" aria-hidden="true"></i><span>' . e($label) . '</span>' . $badgeHtml . '</a>';
+        . '<i class="fa-solid ' . e($icon) . '" aria-hidden="true"></i><span title="' . e($label) . '">' . e($label) . '</span>' . $badgeHtml . '</a>';
 };
 ?>
 <aside id="main-sidebar" class="sidebar" aria-label="Menu">
@@ -66,9 +70,9 @@ $menuItem = function (string $href, string $icon, string $label, int $badge = 0,
         <?php endif; ?>
         <?= $menuItem('myAccount', 'fa-user', 'Minha conta', 0, '', $currentPage === 'myAccount') ?>
         <?= $menuItem('ajuda', 'fa-circle-question', 'Como usar', 0, '', $currentPage === 'ajuda') ?>
-        <a href="#" class="menu-link logout" id="btn_logout" data-logout><i class="fa-solid fa-arrow-right-from-bracket" aria-hidden="true"></i><span>Sair</span></a>
+        <a href="#" class="menu-link logout" id="btn_logout" role="button" data-logout><i class="fa-solid fa-arrow-right-from-bracket" aria-hidden="true"></i><span>Sair</span></a>
     </nav>
     <footer>
-        <p>SisReq &copy; 2026</p>
+        <p>SisReq &copy; <?= date('Y') ?></p>
     </footer>
 </aside>
