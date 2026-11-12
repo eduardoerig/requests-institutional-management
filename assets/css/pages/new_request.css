@@ -8,7 +8,6 @@
 .nr-head__count { margin: 0; font-size: var(--t-xs); color: var(--texto-2); }
 .nr-head__title { margin: 0; font-size: 20px; font-weight: 700; letter-spacing: -0.01em; }
 .nr-head__title:focus { outline: none; }
-.nr-head__title--desk { display: none; }
 .nr-progress { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 6px; margin: 10px 0 0; padding: 0; list-style: none; }
 .nr-progress li { height: 4px; border-radius: 2px; background: var(--linha); transition: background-color var(--dur-2); }
 .nr-progress li.is-on { background: var(--laranja); }
@@ -44,7 +43,7 @@
 .nr-area__hint { margin: 0 0 10px; font-size: var(--t-xs); color: var(--texto-2); }
 .nr-area .field-error { margin-top: 10px; }
 .nr-sectors.has-area .nr-sectors__title { display: block; margin: 0 0 10px; font-size: var(--t-md); font-weight: 600; }
-@media (max-width: 899px) { .nr-sectors__num { display: none; } }
+.nr-sectors__num { display: none; } /* o número do passo já está no cabeçalho */
 
 /* ---------- Formulário ---------- */
 .nr-form .form_request { display: flex; flex-direction: column; gap: 0; }
@@ -146,14 +145,17 @@
 /* "O que acontece depois" (só no computador) */
 .nr-after { display: none; }
 
-/* ---------- Celular: passos e barra fixa ---------- */
-@media (max-width: 899.98px) {
-    .nr:not([data-step="1"]) .nr-sectors { display: none; }
-    .nr[data-step="1"] .nr-form { display: none; }
-    .nr[data-step="2"] [data-form-step="3"],
-    .nr[data-step="3"] [data-form-step="2"] { display: none; }
-    .nr-form .form-submit-bar { display: none; }
+/* ---------- Passos: um por vez, no celular e no computador ---------- */
+.nr:not([data-step="1"]) .nr-sectors { display: none; }
+.nr[data-step="1"] .nr-form { display: none; }
+.nr[data-step="2"] [data-form-step="3"],
+.nr[data-step="3"] [data-form-step="2"] { display: none; }
+.nr-form .form-submit-bar { display: none; } /* quem envia é o "Enviar pedido" da barra de passos */
+.nr-nav { display: flex; gap: 10px; }
+.nr-nav .btn { font-weight: 600; }
 
+/* ---------- Celular: barra fixa ---------- */
+@media (max-width: 899.98px) {
     /* Fica logo acima da barra de navegação do app (e da área segura do iPhone) */
     .nr-nav {
         position: fixed;
@@ -172,10 +174,13 @@
     .nr-nav__next, .nr-nav__send { flex: 1; justify-content: center; font-size: 17px; }
 }
 
-/* ---------- Computador: tudo numa página ---------- */
+/* ---------- Computador: mesmos passos, barra no fim da coluna ---------- */
 @media (min-width: 900px) {
     .nr { padding-bottom: 0; gap: 24px; }
-    .nr-nav { display: none; }
+    .nr-head { max-width: 720px; }
+    .nr-nav { justify-content: space-between; padding-top: 20px; border-top: 1px solid var(--linha); }
+    .nr-nav .btn { min-height: 46px; padding: 0 22px; }
+    .nr-nav__next, .nr-nav__send { margin-left: auto; min-width: 180px; justify-content: center; }
     .nr-head__back {
         display: inline-flex; align-items: center; gap: 8px;
         align-self: flex-start;
@@ -183,8 +188,7 @@
         color: var(--texto-2); font-size: var(--t-sm); font-weight: 600; text-decoration: none;
     }
     .nr-head__back:hover { color: var(--texto); }
-    .nr-head__count, .nr-progress, .nr-head__title[data-step-title] { display: none; }
-    .nr-head__title--desk { display: block; font-size: 26px; letter-spacing: -0.02em; }
+    .nr-head__title { font-size: 24px; letter-spacing: -0.02em; }
 
     .nr-layout { flex-direction: row; flex-wrap: wrap; align-items: flex-start; gap: 24px; }
     .nr-main { flex: 999 1 480px; }
@@ -200,7 +204,7 @@
     .nr-after h2 { margin: 0; font-size: 15px; font-weight: 600; }
     .nr-after ol { margin: 0; padding-left: 20px; display: flex; flex-direction: column; gap: 10px; font-size: var(--t-sm); line-height: 1.5; color: #3F3F46; }
 
-    .nr-sectors__title, .form-step__title { display: block; margin: 0 0 12px; font-size: 15px; font-weight: 600; }
+    .nr-main { max-width: 720px; }
     .nr-sector-grid { grid-template-columns: repeat(auto-fill, minmax(170px, 1fr)); }
     .type-card.nr-sector { min-height: 84px; }
 
@@ -216,9 +220,6 @@
     .urgent-switch__title { font-size: 15px; }
     .urgent-switch__hint { font-size: 13px; }
 
-    .nr-review { display: none; }
-    .nr-form .form-submit-bar { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; }
-    .nr-form .form-submit-bar .btn { min-height: 46px; }
 }
 
 /* Troca de setor: se o formulário novo demorar, o atual esmaece (o atraso evita piscar quando é rápido) */

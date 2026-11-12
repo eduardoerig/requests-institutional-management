@@ -2,7 +2,7 @@
 /**
  * Nova requisição (UI 2.0).
  * Celular: 3 passos curtos (setor → o que precisa → urgência e revisão), com Voltar/Continuar fixos embaixo.
- * Computador (≥900px): tudo numa página, com a coluna "O que acontece depois".
+ * Computador (≥900px): os mesmos 3 passos, com a barra no fim da coluna e "O que acontece depois" ao lado.
  * O passo a passo é só apresentação (assets/js/pages/new_request.js); o formulário do setor
  * vem de api/get_form.php e é enviado pelo bindFormRequests() de assets/js/script.js.
  */
@@ -27,7 +27,6 @@ if (count($sessionAreaIds) > 1) {
         <a class="nr-head__back" href="<?= e($backHref) ?>"><i class="fa-solid fa-arrow-left" aria-hidden="true"></i> Meus pedidos</a>
         <p class="nr-head__count" data-step-count>Passo 1 de 3</p>
         <h1 class="nr-head__title" data-step-title>Para qual setor?</h1>
-        <h1 class="nr-head__title nr-head__title--desk">Novo pedido</h1>
         <ol class="nr-progress" aria-hidden="true">
             <li class="is-on"></li><li></li><li></li>
         </ol>
@@ -65,6 +64,13 @@ if (count($sessionAreaIds) > 1) {
             <section class="nr-form" id="formContainer" aria-label="Formulário do pedido" hidden>
                 <div id="dynamicForm"></div>
             </section>
+
+            <!-- Celular: fixa embaixo da tela. Computador: no fim da coluna -->
+            <div class="nr-nav" data-step-nav>
+                <button type="button" class="btn nr-nav__back" data-step-back hidden>Voltar</button>
+                <button type="button" class="btn btn--primary nr-nav__next" data-step-next>Continuar</button>
+                <button type="button" class="btn btn--primary nr-nav__send" data-step-send hidden><i class="fa-solid fa-paper-plane" aria-hidden="true"></i> Enviar pedido</button>
+            </div>
         </div>
 
         <aside class="nr-after" aria-labelledby="depoisTitulo">
@@ -76,11 +82,5 @@ if (count($sessionAreaIds) > 1) {
                 <li>Você recebe um aviso a cada etapa.</li>
             </ol>
         </aside>
-    </div>
-
-    <div class="nr-nav" data-step-nav>
-        <button type="button" class="btn nr-nav__back" data-step-back hidden>Voltar</button>
-        <button type="button" class="btn btn--primary nr-nav__next" data-step-next>Continuar</button>
-        <button type="button" class="btn btn--primary nr-nav__send" data-step-send hidden><i class="fa-solid fa-paper-plane" aria-hidden="true"></i> Enviar pedido</button>
     </div>
 </div>
