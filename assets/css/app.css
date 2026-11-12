@@ -49,8 +49,8 @@
     /* Tipografia */
     --fonte: "Inter", system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
     --fonte-num: "Inter", system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
-    --t-xs: 0.8125rem;
-    --t-sm: 0.875rem;
+    --t-xs: 0.875rem;   /* 14px: o menor texto do sistema (usuário leigo, leitura lenta) */
+    --t-sm: 0.9375rem;  /* 15px */
     --t-md: 1rem;
     --t-lg: 1.125rem;
     --t-xl: 1.375rem;
