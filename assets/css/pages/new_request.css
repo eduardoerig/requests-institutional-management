@@ -53,6 +53,7 @@
 .nr-form .form-group > label,
 .nr-form .form-group > legend { font-size: 15px; }
 .nr-form input[type="text"],
+.nr-form input[type="url"],
 .nr-form input[type="number"],
 .nr-form input[type="date"] { min-height: var(--h-lg); padding: 0 16px; font-size: 17px; }
 .nr-form textarea { padding: 14px 16px; font-size: 17px; }
@@ -205,7 +206,7 @@
 
     .nr-form .form_request { gap: 24px; }
     .nr-form .form-group > label, .nr-form .form-group > legend { font-size: var(--t-sm); }
-    .nr-form input[type="text"], .nr-form input[type="number"], .nr-form input[type="date"] { min-height: var(--h-md); font-size: var(--t-md); padding: 0 14px; }
+    .nr-form input[type="text"], .nr-form input[type="url"], .nr-form input[type="number"], .nr-form input[type="date"] { min-height: var(--h-md); font-size: var(--t-md); padding: 0 14px; }
     .nr-form textarea { font-size: var(--t-md); padding: 12px 14px; }
     .nr-form .date-field { flex-direction: row; flex-wrap: wrap; align-items: center; }
     .nr-form .date-field input[type="date"] { width: auto; min-width: 200px; }
