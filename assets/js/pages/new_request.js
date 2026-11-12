@@ -1,10 +1,10 @@
 /**
  * Nova requisição (UI 2.0)
  * - Escolha do setor carrega o formulário (api/get_form.php) e liga o envio via bindFormRequests() (script.js).
- * - Celular: passo a passo só de apresentação (mostra/oculta partes do mesmo <form>).
- * - Computador (≥900px): tudo visível numa página; a navegação de passos fica escondida pelo CSS.
+ * - Passo a passo só de apresentação (mostra/oculta partes do mesmo <form>), no celular e no computador.
+ * - Computador (≥900px): mesma navegação, com a barra Voltar/Continuar no fim da coluna (não fixa).
  * Nada aqui muda nomes de campos nem o envio: quem envia é o listener de submit do script.js.
- * Celular: cada passo entra no histórico, então o "voltar" do aparelho volta um passo em vez de sair.
+ * Cada passo entra no histórico, então o "voltar" do aparelho/navegador volta um passo em vez de sair.
  * Com algo digitado e ainda não enviado, sair da página (F5, fechar, link) pede confirmação.
  */
 (function () {
@@ -22,7 +22,6 @@
     const btnNext = root.querySelector('[data-step-next]');
     const btnSend = root.querySelector('[data-step-send]');
     const sectorOut = root.querySelector('[data-sector-name-out]');
-    const desk = window.matchMedia('(min-width: 900px)');
     // Quem tem mais de uma área escolhe a área antes do setor (o campo fica fora do <form> do setor)
     const areaBox = root.querySelector('[data-area-choice]');
     const areaError = root.querySelector('[data-area-error]');
@@ -46,11 +45,11 @@
     stepTitle.setAttribute('tabindex', '-1');
 
     // ---------------------------------------------------------------
-    // Passos (celular)
+    // Passos (celular e computador)
     // ---------------------------------------------------------------
     function setStep(n, opts = {}) {
-        // Celular: avançar empilha o passo; voltar pelo botão desempilha (o "voltar" do aparelho faz o mesmo)
-        if (!opts.fromPop && !desk.matches) {
+        // Avançar empilha o passo; voltar pelo botão desempilha (o "voltar" do aparelho ou do navegador faz o mesmo)
+        if (!opts.fromPop) {
             if (n > step) {
                 try { history.pushState({ nrStep: n }, ''); pushed++; } catch (e) { /* sem histórico */ }
             } else if (n < step && pushed > 0) {
@@ -69,7 +68,7 @@
         btnNext.hidden = n === 3;
         btnSend.hidden = n !== 3;
         if (n === 3) renderReview();
-        if (!desk.matches && opts.focus !== false) {
+        if (opts.focus !== false) {
             window.scrollTo({ top: 0, behavior: 'auto' });
             stepTitle.focus({ preventScroll: true });
         }
@@ -329,19 +328,15 @@
             }
             enhanceDate(form);
             mirrorSend(form);
-            // Celular: Enter num campo avança o passo em vez de enviar sem passar pela revisão
+            // Enter num campo avança o passo em vez de enviar sem passar pela revisão
             form.addEventListener('keydown', (e) => {
-                if (e.key !== 'Enter' || desk.matches || step === 3) return;
+                if (e.key !== 'Enter' || step === 3) return;
                 if (e.target.tagName === 'TEXTAREA' || e.target.type === 'submit' || e.target.type === 'button') return;
                 e.preventDefault();
                 goNext();
             });
             form.addEventListener('input', () => { if (step === 3) renderReview(); });
             form.addEventListener('change', () => { if (step === 3) renderReview(); });
-        }
-
-        if (desk.matches) {
-            holder.querySelector('#title')?.focus({ preventScroll: true });
         }
     }
 
@@ -351,6 +346,6 @@
     const idle = window.requestIdleCallback || ((fn) => setTimeout(fn, 300));
     idle(() => cards.forEach(card => fetchForm(card.dataset.id)));
 
-    // Ao passar para o computador no meio do caminho, nada fica escondido (o CSS mostra tudo)
+    // Começa no passo 1 (sem roubar o foco ao abrir a página)
     setStep(1, { focus: false });
 })();

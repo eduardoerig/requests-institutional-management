@@ -12,24 +12,8 @@
             <label for="details">Detalhes <span class="req">*</span></label>
             <textarea name="details" id="details" required rows="4" maxlength="5000" placeholder="Textos que devem aparecer, cores, tamanho e qualquer referência."></textarea>
         </div>
-        <fieldset class="form-group repeater" data-repeater data-max="30">
-            <legend>Links de referência <small>(opcional)</small></legend>
-            <small class="form-hint">Exemplos de arte, posts ou materiais parecidos com o que você quer.</small>
-            <div class="repeater__rows" data-repeater-rows></div>
-            <button type="button" class="btn btn--sm repeater__add" data-repeater-add><i class="fa-solid fa-plus" aria-hidden="true"></i> Adicionar link</button>
-            <template data-repeater-template>
-                <div class="repeater__row" data-repeater-row>
-                    <div class="repeater__fields repeater__fields--link">
-                        <input type="url" data-field="url" data-key data-message="Cole o link (ou tire a linha)." maxlength="1000" inputmode="url" placeholder="Link (https://...)" aria-label="Link de referência">
-                        <input type="text" data-field="name" maxlength="255" placeholder="Sobre o link (opcional)" aria-label="Sobre o link">
-                    </div>
-                    <button type="button" class="btn btn--sm btn--ghost repeater__remove" data-repeater-remove aria-label="Tirar esta linha"><i class="fa-solid fa-xmark" aria-hidden="true"></i></button>
-                </div>
-            </template>
-        </fieldset>
         <fieldset class="form-group">
-            <legend>Onde vai ser usado? <span class="req">*</span></legend>
-            <small class="form-hint">Pode marcar mais de um.</small>
+            <legend>Onde vai ser usado? <span class="req">*</span> <small>(pode marcar mais de um)</small></legend>
             <div class="aplication_select">
                 <label><input type="checkbox" class="model_radius" name="model[]" value="Whatsapp" data-required-group> WhatsApp</label>
                 <label><input type="checkbox" class="model_radius" name="model[]" value="Instagram"> Instagram</label>
@@ -42,7 +26,24 @@
                 <input type="text" id="input_outros" name="outros_texto" maxlength="255" placeholder="Qual?" aria-label="Qual outro lugar?" hidden>
             </div>
         </fieldset>
+        <div class="form-extras">
+        <fieldset class="form-group repeater" data-repeater data-max="30">
+            <legend>Links de referência</legend>
+            <small class="form-hint">Exemplos de arte, posts ou materiais parecidos com o que você quer.</small>
+            <div class="repeater__rows" data-repeater-rows></div>
+            <button type="button" class="link-add repeater__add" data-repeater-add><i class="fa-solid fa-plus" aria-hidden="true"></i> Adicionar link de referência</button>
+            <template data-repeater-template>
+                <div class="repeater__row" data-repeater-row>
+                    <div class="repeater__fields repeater__fields--link">
+                        <input type="url" data-field="url" data-key data-message="Cole o link (ou tire a linha)." maxlength="1000" inputmode="url" placeholder="Link (https://...)" aria-label="Link de referência">
+                        <input type="text" data-field="name" maxlength="255" placeholder="Sobre o link (opcional)" aria-label="Sobre o link">
+                    </div>
+                    <button type="button" class="icon-x repeater__remove" data-repeater-remove aria-label="Tirar esta linha"><i class="fa-solid fa-xmark" aria-hidden="true"></i></button>
+                </div>
+            </template>
+        </fieldset>
 <!--ANEXOS-->
+        </div>
         <div class="form-group date-group">
             <label for="end">Para quando? <span class="req">*</span></label>
             <div class="date-field">

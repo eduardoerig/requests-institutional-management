@@ -803,6 +803,7 @@ function bindRepeater(form) {
                 });
             });
             add.hidden = list.length >= max;
+            box.classList.toggle('has-rows', list.length > 0); // título e ajuda só aparecem com linhas
             if (details) {
                 details.required = filled === 0;
                 if (detailsReq) detailsReq.hidden = filled > 0;
@@ -841,6 +842,7 @@ function bindAttachments(form) {
         const maxFiles = parseInt(box.dataset.maxFiles, 10) || 5;
         const relaxes = box.dataset.attachRelaxes ? form.querySelector(`[name="${box.dataset.attachRelaxes}"]`) : null;
         const relaxesStar = relaxes ? form.querySelector(`label[for="${relaxes.id}"] .req`) : null;
+        const hint = box.querySelector('[data-attach-hint]');
         let chosen = [];
 
         const render = () => {
@@ -852,12 +854,13 @@ function bindAttachments(form) {
                 const li = document.createElement('li');
                 li.className = 'attach__item';
                 li.innerHTML = '<i class="fa-solid fa-file" aria-hidden="true"></i> <span class="attach__name"></span> <small></small>'
-                    + '<button type="button" class="btn btn--sm btn--ghost attach__remove" aria-label="Tirar este arquivo"><i class="fa-solid fa-xmark" aria-hidden="true"></i></button>';
+                    + '<button type="button" class="icon-x attach__remove" aria-label="Tirar este arquivo"><i class="fa-solid fa-xmark" aria-hidden="true"></i></button>';
                 li.querySelector('.attach__name').textContent = f.name;
                 li.querySelector('small').textContent = sizeLabel(f.size);
                 li.querySelector('button').addEventListener('click', () => { chosen.splice(i, 1); render(); input.focus(); });
                 list.appendChild(li);
             });
+            box.classList.toggle('has-files', chosen.length > 0);
             if (relaxes) {
                 relaxes.required = chosen.length === 0;
                 if (relaxesStar) relaxesStar.hidden = chosen.length > 0;
@@ -886,6 +889,7 @@ function bindAttachments(form) {
             box.classList.remove('has-error');
             box.querySelector('.field-error')?.remove();
             if (problems.length) showFieldError(input, [...new Set(problems)].join(' '));
+            if (hint) hint.hidden = !chosen.length && !problems.length; // regras só depois de usar
         });
     });
 }
