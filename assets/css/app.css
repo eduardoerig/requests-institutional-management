@@ -29,8 +29,9 @@
     --laranja-escuro: #9A3412;
     --laranja-claro: #FFF7ED;
     --laranja-borda: #FED7AA;
-    --anel: 0 0 0 3px rgb(240 138 44 / .4);
-    --anel-dentro: inset 0 0 0 3px rgb(240 138 44 / .4);
+    /* Foco: laranja cheio (5:1 sobre branco) com folga branca; o de 40% tinha 1,4:1 e quase não se via */
+    --anel: 0 0 0 2px var(--superficie), 0 0 0 4px var(--laranja);
+    --anel-dentro: inset 0 0 0 2px var(--laranja);
     --anel-campo: 0 0 0 3px rgb(24 24 27 / .06); /* foco de campo: borda grafite + halo cinza leve (o laranja fica para ações) */
 
     /* Semânticas */
