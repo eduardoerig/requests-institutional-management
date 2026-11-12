@@ -90,12 +90,9 @@ if (!empty($_POST['urgent'])) {
 }
 $urgent = $priority >= 3 ? 1 : 0;
 
-$endDate = DateTime::createFromFormat('!Y-m-d', $end);
-if ($end === '' || !$endDate || $endDate->format('Y-m-d') !== $end) {
-    fail('Informe a data em que você precisa receber.');
-}
-if ($endDate < new DateTime('today')) {
-    fail('A data de entrega não pode ser no passado.');
+$deadlineProblem = deadlineProblem($end);
+if ($deadlineProblem !== null) {
+    fail($deadlineProblem);
 }
 
 // Sugestão de setores parceiros (opcional): a coordenação confirma, troca ou tira ao aprovar

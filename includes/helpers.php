@@ -281,3 +281,19 @@ function isValidLoginFormat(string $login): bool
 {
     return (bool)preg_match('/^[A-Za-z0-9._-]{2,100}$/', $login);
 }
+
+/**
+ * Prazo de um pedido novo (AAAA-MM-DD): o que está errado, ou null se pode usar.
+ * O prazo começa amanhã: quem pede não marca para o mesmo dia (feedback da CTAP).
+ */
+function deadlineProblem(string $iso): ?string
+{
+    $date = DateTime::createFromFormat('!Y-m-d', $iso);
+    if ($iso === '' || !$date || $date->format('Y-m-d') !== $iso) {
+        return 'Informe a data em que você precisa receber.';
+    }
+    if ($date <= new DateTime('today')) {
+        return 'O prazo precisa ser a partir de amanhã.';
+    }
+    return null;
+}

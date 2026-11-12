@@ -29,7 +29,6 @@
         <div class="form-group date-group">
             <label for="end">Para quando? <span class="req">*</span></label>
             <div class="date-field">
-                <span class="date-quick" data-date-quick role="group" aria-label="Atalhos de prazo"></span>
                 <input type="date" name="end" id="end" required>
             </div>
             <p class="date-chosen" data-date-chosen aria-live="polite"></p>

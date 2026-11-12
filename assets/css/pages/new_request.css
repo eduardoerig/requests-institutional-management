@@ -50,23 +50,9 @@
 .nr-form textarea { padding: 14px 16px; font-size: 17px; }
 .nr-form .aplication_select label { font-size: var(--t-md); }
 
-/* Prazo: atalhos em pílula; o calendário só aparece em "Escolher data" (ou se houver erro) */
+/* Prazo: só o calendário (a partir de amanhã); embaixo, a data por extenso */
 .nr-form .date-field { display: flex; flex-direction: column; align-items: stretch; gap: 10px; }
 .nr-form .date-field input[type="date"] { width: 100%; min-width: 0; flex: none; }
-.date-group:not(.is-picking):not(.has-error) .date-field input[type="date"] { display: none; }
-.nr-form .date-quick { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
-.nr-form .date-quick .chip-btn {
-    min-height: 48px;
-    padding: 0 12px;
-    border: 1px solid var(--linha);
-    border-radius: var(--r-2);
-    background: var(--superficie);
-    color: var(--texto);
-    font-size: 15px;
-    font-weight: 600;
-}
-.nr-form .date-quick .chip-btn[aria-pressed="true"] { background: var(--grafite); border-color: var(--grafite); color: var(--texto-inv); }
-.nr-form .date-quick .chip-btn:focus-visible { outline: none; box-shadow: var(--anel); }
 .date-chosen { margin: 0; font-size: var(--t-sm); color: var(--texto-2); }
 .date-chosen:empty { display: none; }
 
@@ -196,8 +182,6 @@
     .nr-form textarea { font-size: var(--t-md); padding: 12px 14px; }
     .nr-form .date-field { flex-direction: row; flex-wrap: wrap; align-items: center; }
     .nr-form .date-field input[type="date"] { width: auto; min-width: 200px; }
-    .nr-form .date-quick { display: flex; flex-wrap: wrap; }
-    .nr-form .date-quick .chip-btn { min-height: 44px; padding: 0 16px; font-size: var(--t-sm); }
 
     .urgent-switch.check-line { justify-content: flex-start; }
     .urgent-switch input[type="checkbox"] { order: -1; }

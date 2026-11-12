@@ -217,7 +217,9 @@ $base = ['type' => 'ti', 'title' => 'Teste automático', 'end' => $future, 'deta
 $res = $sol->post('api/add_request.php', ['title' => ''] + $base);
 check('sem título é recusado', ($res['json']['success'] ?? true) === false && str_contains($res['json']['message'] ?? '', 'título'));
 $res = $sol->post('api/add_request.php', ['end' => '2020-01-01'] + $base);
-check('data no passado é recusada', ($res['json']['success'] ?? true) === false && str_contains($res['json']['message'] ?? '', 'passado'));
+check('data no passado é recusada', ($res['json']['success'] ?? true) === false && str_contains($res['json']['message'] ?? '', 'amanhã'));
+$res = $sol->post('api/add_request.php', ['end' => date('Y-m-d')] + $base);
+check('prazo para hoje é recusado (só a partir de amanhã)', ($res['json']['success'] ?? true) === false && str_contains($res['json']['message'] ?? '', 'amanhã'), snippet($res));
 $res = $sol->post('api/add_request.php', ['type' => 'colorPrint', 'qtd' => '0', 'model' => 'A4', 'file' => 'a.pdf'] + $base);
 check('impressão com 0 cópias é recusada', ($res['json']['success'] ?? true) === false);
 $res = $sol->post('api/add_request.php', ['type' => 'mkt', 'model' => ''] + $base);

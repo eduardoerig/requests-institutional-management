@@ -25,6 +25,7 @@ if (!$botEnabled) {
 }
 
 require_once dirname(__DIR__) . '/config/conn.php';
+require_once dirname(__DIR__) . '/includes/helpers.php'; // deadlineProblem()
 require_once dirname(__DIR__) . '/includes/auth.php'; // sectorLabel() (config/sectors.php)
 
 // =========================================
@@ -92,6 +93,13 @@ if (empty($title) || empty($details) || empty($end)) {
 if (!preg_match('/^\d{4}-\d{2}-\d{2}$/', $end)) {
     http_response_code(400);
     echo json_encode(['success' => false, 'code' => 'INVALID_DATE', 'message' => 'O campo "end" deve estar no formato YYYY-MM-DD.']);
+    exit;
+}
+// Mesma regra da tela: prazo a partir de amanhã
+$deadlineProblem = deadlineProblem($end);
+if ($deadlineProblem !== null) {
+    http_response_code(400);
+    echo json_encode(['success' => false, 'code' => 'INVALID_DATE', 'message' => $deadlineProblem]);
     exit;
 }
 

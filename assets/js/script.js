@@ -691,8 +691,8 @@ function validateRequestForm(form) {
         }
         const value = field.value.trim();
         let invalid = value === '';
-        if (!invalid && field.type === 'date' && value < todayIso()) {
-            showFieldError(field, 'A data não pode ser no passado.');
+        if (!invalid && field.type === 'date' && value <= todayIso()) {
+            showFieldError(field, 'Escolha uma data a partir de amanhã.');
             firstInvalid = firstInvalid || field;
             return;
         }
@@ -734,24 +734,8 @@ function bindFormRequests() {
     const form_requests = document.querySelector('.form_request');
     if (!form_requests) return;
 
-    // Data mínima = hoje
-    form_requests.querySelectorAll('input[type="date"]').forEach(input => { input.min = todayIso(); });
-
-    // Atalhos de data: um toque preenche o campo
-    form_requests.querySelectorAll('[data-date-quick]').forEach(box => {
-        const input = box.closest('.form-group').querySelector('input[type="date"]');
-        [['Amanhã', 1], ['Em 1 semana', 7], ['Em 2 semanas', 14]].forEach(([label, days]) => {
-            const btn = document.createElement('button');
-            btn.type = 'button';
-            btn.className = 'chip-btn';
-            btn.textContent = label;
-            btn.addEventListener('click', () => {
-                input.value = isoInDays(days);
-                input.dispatchEvent(new Event('input', { bubbles: true }));
-            });
-            box.appendChild(btn);
-        });
-    });
+    // Prazo só pelo calendário, a partir de amanhã (hoje não dá: feedback da CTAP)
+    form_requests.querySelectorAll('input[type="date"]').forEach(input => { input.min = isoInDays(1); });
 
     // "É urgente" pede o motivo
     const urgent = form_requests.querySelector('[data-urgent]');

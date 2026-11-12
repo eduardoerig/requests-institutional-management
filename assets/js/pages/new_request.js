@@ -163,42 +163,15 @@
     }
 
     // ---------------------------------------------------------------
-    // Prazo: atalhos com estado + "Escolher data"
+    // Prazo: só o calendário; embaixo, a data por extenso ("Prazo: quinta-feira, 20/11")
     // ---------------------------------------------------------------
     function enhanceDate(form) {
-        const box = form.querySelector('[data-date-quick]');
         const input = form.querySelector('input[name="end"]');
-        if (!box || !input) return;
-        const group = input.closest('.form-group');
-        const chosenText = group.querySelector('[data-date-chosen]');
-        const quick = Array.from(box.querySelectorAll('.chip-btn')); // criados pelo bindFormRequests
-        const days = [1, 7, 14];
-
-        const pick = document.createElement('button');
-        pick.type = 'button';
-        pick.className = 'chip-btn';
-        pick.textContent = 'Escolher data';
-        box.appendChild(pick);
-        const all = quick.concat(pick);
-        all.forEach(b => b.setAttribute('aria-pressed', 'false'));
-
+        if (!input) return;
+        const chosenText = input.closest('.form-group').querySelector('[data-date-chosen]');
         function sync() {
-            const value = input.value;
-            const idx = days.findIndex(n => isoInDays(n) === value);
-            const custom = value !== '' && idx === -1;
-            all.forEach((b, i) => b.setAttribute('aria-pressed', String(i === idx || (custom && b === pick))));
-            if (custom) group.classList.add('is-picking');
-            if (chosenText) chosenText.textContent = value ? `Prazo: ${formatDate(value)}` : '';
+            if (chosenText) chosenText.textContent = input.value ? `Prazo: ${formatDate(input.value)}` : '';
         }
-
-        quick.forEach(b => b.addEventListener('click', () => group.classList.remove('is-picking')));
-        pick.addEventListener('click', () => {
-            group.classList.add('is-picking');
-            pick.setAttribute('aria-pressed', 'true');
-            quick.forEach(b => b.setAttribute('aria-pressed', 'false'));
-            input.focus();
-            try { if (typeof input.showPicker === 'function') input.showPicker(); } catch (e) { /* alguns navegadores só abrem com toque direto */ }
-        });
         input.addEventListener('input', sync);
         input.addEventListener('change', sync);
         sync();
