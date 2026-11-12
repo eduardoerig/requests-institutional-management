@@ -676,7 +676,7 @@ select option { color: var(--texto); }
 .form-group label small, .form-group legend small { font-weight: 400; color: var(--texto-2); }
 .form-hint { margin-top: -4px; font-size: var(--t-sm); color: var(--texto-2); }
 .req { color: var(--perigo); font-weight: 700; }
-.form-group.has-error input, .form-group.has-error textarea, .form-group.has-error .aplication_select { border-color: var(--perigo); }
+.form-group.has-error input:not([type="radio"]):not([type="checkbox"]), .form-group.has-error textarea { border-color: var(--perigo); }
 .field-error { color: var(--perigo); font-weight: 600; font-size: var(--t-sm); margin: 0; }
 .field-error::before { content: "⚠ "; }
 
@@ -684,24 +684,29 @@ select option { color: var(--texto); }
 .search-box > i { position: absolute; left: 12px; color: var(--texto-3); pointer-events: none; }
 .search-box input { padding-left: 38px; }
 
-/* Opções como botões */
-.aplication_select { display: flex; flex-wrap: wrap; gap: 8px; border-radius: var(--r-2); }
+/* Opções como lista de marcar: bolinha/quadradinho + texto, em 2 colunas, sem caixa.
+   Só a marcada ganha fundo; no erro, uma barra vermelha à esquerda do grupo. */
+.aplication_select { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 2px 12px; }
+@media (max-width: 359.98px) { .aplication_select { grid-template-columns: minmax(0, 1fr); } }
 .aplication_select label {
-    display: inline-flex;
+    display: flex;
     align-items: center;
-    gap: 8px;
-    min-height: var(--h-md);
-    padding: 0 14px;
-    border: 1px solid var(--linha-forte);
+    gap: 10px;
+    min-height: 44px;
+    padding: 0 10px;
+    border: 1px solid transparent;
     border-radius: var(--r-2);
-    background: var(--superficie);
-    font-weight: 600;
+    font-weight: 500;
     cursor: pointer;
+    transition: background-color var(--dur-1), border-color var(--dur-1);
 }
-.aplication_select label:has(input:checked) { border-color: var(--laranja); background: var(--laranja-claro); }
+.aplication_select label:hover { background: var(--fundo-2); }
+.aplication_select label:has(input:checked) { border-color: var(--laranja); background: var(--laranja-claro); font-weight: 600; }
+.aplication_select label:has(input:focus-visible) { box-shadow: var(--anel); }
 .aplication_select input[type="radio"],
-.aplication_select input[type="checkbox"] { width: 18px; height: 18px; margin: 0; accent-color: var(--laranja); }
-.aplication_select #input_outros { flex-basis: 100%; }
+.aplication_select input[type="checkbox"] { flex: none; width: 18px; height: 18px; margin: 0; accent-color: var(--laranja); }
+.aplication_select #input_outros { grid-column: 1 / -1; }
+.form-group.has-error .aplication_select { padding-left: 10px; border-left: 3px solid var(--perigo); }
 
 /* Abas e filtros em pílula */
 .tabs { display: flex; gap: 8px; overflow-x: auto; padding: 3px; margin: -3px; scrollbar-width: none; }
@@ -966,7 +971,8 @@ details.panel[open] > summary::after { transform: rotate(180deg); }
 
 /* Pergunta Sim/Não (api/get_form.php, yesNoField): sem resposta marcada; Não mostra a frase em vermelho */
 .yesno { margin: 4px 0 12px; }
-.yesno__options label { min-width: 104px; justify-content: center; }
+.yesno__options { grid-template-columns: repeat(2, max-content); gap: 2px 8px; } /* Sim e Não lado a lado */
+.yesno__options label { min-width: 88px; }
 .yesno__no { margin: 8px 0 0; font-size: var(--t-sm); font-weight: 600; color: var(--perigo); }
 .yesno__panel { margin-top: 12px; }
 .yesno__panel textarea { min-height: 72px; }
