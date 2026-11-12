@@ -14,6 +14,7 @@
  */
 require_once __DIR__ . '/request_card.php';
 require_once __DIR__ . '/partner_picker.php';
+require_once __DIR__ . '/../classes/RequestItems.php';
 
 if (!function_exists('renderApproveRow')) {
     /**
@@ -186,6 +187,10 @@ if (!function_exists('renderApproveRow')) {
         if ($what !== '') {
             $html .= '<div class="ap-facts__what"><dt>O que precisa</dt><dd><p class="ap-text">' . e($what) . '</p>'
                 . ($cut ? '<a class="ap-more" href="' . e($item['href']) . '">Ver o pedido completo</a>' : '') . '</dd></div>';
+        }
+        if (!empty($row['items'])) { // itens de Compras, links do Marketing (RequestInbox::approvals)
+            $html .= '<div class="ap-facts__what"><dt>' . e(RequestItems::heading($sector)) . '</dt><dd>'
+                . RequestItems::html($row['items'], $sector) . '</dd></div>';
         }
         if ($obs !== '') {
             $html .= '<div class="ap-facts__what"><dt>Observações</dt><dd><p class="ap-text">' . e($obs) . '</p></dd></div>';

@@ -4,6 +4,7 @@ require_once __DIR__ . '/../config/conn.php';
 require_once __DIR__ . '/../config/security.php';
 require_once __DIR__ . '/../classes/RequestManager.php';
 require_once __DIR__ . '/../classes/RequestForwardService.php';
+require_once __DIR__ . '/../classes/RequestItems.php';
 requireLoginJson($pdo);
 requirePostJson();
 
@@ -106,13 +107,21 @@ if (count($partnerAreaIds) !== count(array_unique($partnerAreaIds))) {
     fail('Escolha dois setores parceiros diferentes.');
 }
 
+// Itens com link (Compras) e links de referência (Marketing)
+try {
+    $items = RequestItems::parse($sector, $_POST['items'] ?? []);
+} catch (UserMessage $e) {
+    fail($e->getMessage());
+}
+
 // ---- Campos específicos por setor ----
 switch ($sector) {
     case 'service':
     case 'ti':
     case 'shop':
         $details = postLongText('details', 5000, 'A descrição');
-        if ($details === '') {
+        // Em Compras, a lista de itens basta: os detalhes viram opcionais
+        if ($details === '' && !($sector === 'shop' && $items)) {
             fail('Descreva o que você precisa.');
         }
         if ($sector === 'shop') {
@@ -214,6 +223,7 @@ try {
     foreach ($partnerAreaIds as $partnerAreaId) {
         RequestForwardService::saveSuggestion($pdo, $sector, $newId, $partnerAreaId, $userId, $userName);
     }
+    RequestItems::save($pdo, $sector, $newId, $items);
     $pdo->commit();
 } catch (Throwable $e) {
     if ($pdo->inTransaction()) {

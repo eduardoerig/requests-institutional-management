@@ -8,6 +8,7 @@ require_once __DIR__ . '/config/session.php';
 require_once __DIR__ . '/config/conn.php';
 require_once __DIR__ . '/config/security.php';
 require_once __DIR__ . '/classes/RequestForwardService.php';
+require_once __DIR__ . '/classes/RequestItems.php';
 requireLoginJson($pdo);
 
 $role = $_SESSION['role'] ?? 'solicitante';
@@ -211,6 +212,22 @@ $dotColor = ['P' => '#B45309', 'W' => '#2563EB', 'C' => '#15803D', 'N' => '#B91C
 
     <h2>O que foi pedido</h2>
     <div class="desc"><?= e(trim((string)($req['descp'] ?? '')) !== '' ? $req['descp'] : 'Sem descrição.') ?></div>
+
+    <?php $items = RequestItems::forRequest($pdo, $req_table, $req_id); ?>
+    <?php if ($items): // no papel o link vai inteiro (não dá para clicar) ?>
+        <h2><?= e(RequestItems::heading($req_table)) ?></h2>
+        <table class="history">
+            <tbody>
+                <?php foreach ($items as $it): ?>
+                    <tr>
+                        <td><?= e((string)($it['name'] ?? '')) ?></td>
+                        <td><?= e((string)($it['qty'] ?? '')) ?></td>
+                        <td style="overflow-wrap:anywhere"><?= e((string)($it['url'] ?? '')) ?></td>
+                    </tr>
+                <?php endforeach; ?>
+            </tbody>
+        </table>
+    <?php endif; ?>
 
     <?php if (!empty($req['obs'])): ?>
         <h2>Observações</h2>

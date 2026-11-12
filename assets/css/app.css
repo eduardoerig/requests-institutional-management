@@ -931,6 +931,25 @@ details.panel[open] > summary::after { transform: rotate(180deg); }
 .form-more summary small { font-weight: 400; }
 .form-more[open] summary { margin-bottom: 8px; }
 .form-more textarea { min-height: 72px; }
+/* Lista de linhas no formulário (itens de Compras, links do Marketing): bindRepeater() */
+.repeater__rows { display: flex; flex-direction: column; gap: 10px; }
+.repeater__rows:empty { display: none; }
+.repeater__row { display: flex; align-items: flex-start; gap: 8px; padding: 10px; border: 1px solid var(--linha); border-radius: var(--r-2); background: var(--superficie); }
+.repeater__fields { flex: 1; display: grid; gap: 8px; min-width: 0; }
+.repeater__fields input { width: 100%; min-width: 0; }
+@media (min-width: 600px) {
+    .repeater__fields--item { grid-template-columns: minmax(0, 2fr) minmax(0, 1fr); }
+    .repeater__fields--item [data-field="url"] { grid-column: 1 / -1; }
+    .repeater__fields--link { grid-template-columns: minmax(0, 3fr) minmax(0, 2fr); }
+}
+.repeater__remove { flex: none; min-width: 40px; }
+.repeater__add { align-self: flex-start; }
+/* Itens e links já gravados (página do pedido, Aprovar) */
+.req-items { margin: 0; padding-left: 18px; display: flex; flex-direction: column; gap: 4px; }
+.req-items a { font-weight: 600; overflow-wrap: anywhere; }
+.rv-items { display: grid; gap: 4px; }
+.rv-items__title { margin: 0; font-size: var(--t-xs); color: var(--texto-2); }
+
 /* Pergunta Sim/Não (api/get_form.php, yesNoField): sem resposta marcada; Não mostra a frase em vermelho */
 .yesno { margin: 4px 0 12px; }
 .yesno__options label { min-width: 104px; justify-content: center; }

@@ -693,7 +693,7 @@ function validateRequestForm(form) {
             if (checkedGroups.has(field.name)) return;
             checkedGroups.add(field.name);
             if (!form.querySelector(`input[name="${CSS.escape(field.name)}"]:checked`)) {
-                showFieldError(field, messages[field.name] || 'Escolha uma opção.');
+                showFieldError(field, field.dataset.message || messages[field.name] || 'Escolha uma opção.');
                 firstInvalid = firstInvalid || field;
             }
             return;
@@ -719,7 +719,7 @@ function validateRequestForm(form) {
             }
         }
         if (invalid) {
-            showFieldError(field, messages[field.name] || 'Preencha este campo.');
+            showFieldError(field, field.dataset.message || messages[field.name] || 'Preencha este campo.');
             firstInvalid = firstInvalid || field;
         }
     });
@@ -777,6 +777,55 @@ function bindKindChoice(form) {
     apply(false);
 }
 
+// Lista de linhas (itens de Compras, links do Marketing): "+ Adicionar" copia o <template>; cada
+// campo vira items[n][nome]. Linha começada exige o campo principal (data-key). Com
+// data-repeater-details, o campo Detalhes só é obrigatório enquanto não há linha preenchida.
+function bindRepeater(form) {
+    form.querySelectorAll('[data-repeater]').forEach(box => {
+        const rows = box.querySelector('[data-repeater-rows]');
+        const tpl = box.querySelector('template[data-repeater-template]');
+        const add = box.querySelector('[data-repeater-add]');
+        const max = parseInt(box.dataset.max || '30', 10);
+        const details = box.dataset.repeaterDetails ? form.querySelector(`[name="${box.dataset.repeaterDetails}"]`) : null;
+        const detailsReq = details ? form.querySelector('[data-details-req]') : null;
+        if (!rows || !tpl || !add) return;
+
+        const sync = () => {
+            const list = Array.from(rows.querySelectorAll('[data-repeater-row]'));
+            let filled = 0;
+            list.forEach((row, i) => {
+                const fields = Array.from(row.querySelectorAll('[data-field]'));
+                const started = fields.some(f => f.value.trim() !== '');
+                if (started) filled++;
+                fields.forEach(f => {
+                    f.name = `items[${i}][${f.dataset.field}]`;
+                    if (f.hasAttribute('data-key')) f.required = started;
+                });
+            });
+            add.hidden = list.length >= max;
+            if (details) {
+                details.required = filled === 0;
+                if (detailsReq) detailsReq.hidden = filled > 0;
+            }
+        };
+
+        add.addEventListener('click', () => {
+            rows.appendChild(tpl.content.cloneNode(true));
+            sync();
+            rows.lastElementChild?.querySelector('[data-field]')?.focus();
+        });
+        rows.addEventListener('click', (e) => {
+            const btn = e.target.closest('[data-repeater-remove]');
+            if (!btn) return;
+            btn.closest('[data-repeater-row]')?.remove();
+            sync();
+            add.focus();
+        });
+        rows.addEventListener('input', sync);
+        sync();
+    });
+}
+
 // Data de hoje + n dias, no formato do campo de data
 function isoInDays(n) {
     const d = new Date();
@@ -793,6 +842,7 @@ function bindFormRequests() {
 
     bindYesNo(form_requests);
     bindKindChoice(form_requests);
+    bindRepeater(form_requests);
 
     // "É urgente" pede o motivo
     const urgent = form_requests.querySelector('[data-urgent]');

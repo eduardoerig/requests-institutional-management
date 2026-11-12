@@ -236,6 +236,33 @@ $res = $sol->post('api/add_request.php', ['size' => 'A0'] + $plast);
 check('plastificação com tamanho fora da lista é recusada', ($res['json']['success'] ?? true) === false, snippet($res));
 $res = $sol->post('api/add_request.php', ['kind' => 'copia_colorida', 'file' => ''] + $plast);
 check('cópia colorida sem arquivo continua recusada', ($res['json']['success'] ?? true) === false && str_contains($res['json']['message'] ?? '', 'arquivo'), snippet($res));
+// Itens com link (Compras) e links de referência (Marketing)
+$shopBase = ['type' => 'shopping', 'title' => 'Teste itens', 'end' => $future];
+$res = $sol->post('api/add_request.php', $shopBase + ['details' => '']);
+check('compra sem detalhes e sem itens é recusada', ($res['json']['success'] ?? true) === false, snippet($res));
+$res = $sol->post('api/add_request.php', $shopBase + ['details' => '', 'items' => [
+    ['name' => 'Papel A4', 'qty' => '10 resmas', 'url' => 'www.loja-exemplo.com.br/papel'],
+    ['name' => '', 'qty' => '', 'url' => ''],
+    ['name' => 'Grampeador', 'qty' => '2', 'url' => ''],
+]]);
+$shopId = (int)($res['json']['id'] ?? 0);
+if ($shopId) { $createdIds[] = ['shop', $shopId]; }
+$shopItems = $shopId ? $pdo->query("SELECT name, qty, url FROM request_items WHERE request_table = 'shop' AND request_id = $shopId ORDER BY position")->fetchAll(PDO::FETCH_ASSOC) : [];
+check('compra só com itens é criada (linha vazia ignorada, www vira https)', count($shopItems) === 2
+    && $shopItems[0]['url'] === 'https://www.loja-exemplo.com.br/papel' && $shopItems[1]['url'] === null, snippet($res));
+$res = $sol->get("request_detail?id=$shopId&table=shop");
+check('página do pedido lista os itens com o domínio do link', str_contains($res['body'], 'Grampeador') && str_contains($res['body'], 'loja-exemplo.com.br</a>'), 'HTTP ' . $res['status']);
+$res = $sol->post('api/add_request.php', $shopBase + ['details' => 'x', 'items' => [['name' => 'Caneta', 'url' => 'javascript:alert(1)']]]);
+check('link que não é de site é recusado', ($res['json']['success'] ?? true) === false && str_contains($res['json']['message'] ?? '', 'link'), snippet($res));
+$res = $sol->post('api/add_request.php', $shopBase + ['details' => 'x', 'items' => [['name' => '', 'qty' => '3']]]);
+check('item sem nome é recusado', ($res['json']['success'] ?? true) === false && str_contains($res['json']['message'] ?? '', 'nome do item'), snippet($res));
+$res = $sol->post('api/add_request.php', ['type' => 'mkt', 'model' => ['Banner'], 'items' => [['url' => '', 'name' => 'arte antiga']]] + $base);
+check('link de referência sem o link é recusado', ($res['json']['success'] ?? true) === false && str_contains($res['json']['message'] ?? '', 'link'), snippet($res));
+$res = $sol->post('api/add_request.php', ['type' => 'ti', 'items' => [['name' => 'Ignorado']]] + $base);
+$tiItemsId = (int)($res['json']['id'] ?? 0);
+if ($tiItemsId) { $createdIds[] = ['ti', $tiItemsId]; }
+check('setor sem itens ignora a lista', $tiItemsId > 0 && (int)$pdo->query("SELECT COUNT(*) FROM request_items WHERE request_table = 'ti' AND request_id = $tiItemsId")->fetchColumn() === 0, snippet($res));
+
 $res = $sol->post('api/add_request.php', ['type' => 'mkt', 'model' => ''] + $base);
 check('marketing sem aplicação é recusado', ($res['json']['success'] ?? true) === false);
 $res = $sol->post('api/add_request.php', ['type' => 'mkt', 'model' => ['Instagram', 'Banner', 'Inventado']] + $base);
@@ -1155,7 +1182,7 @@ foreach ($createdIds as [$t, $id]) {
         continue;
     }
     $pdo->prepare("DELETE FROM ctd_{$t}_frm WHERE id = ?")->execute([$id]);
-    foreach (['request_comments', 'request_history', 'request_forwards', 'request_partner_suggestions'] as $tbl) {
+    foreach (['request_comments', 'request_history', 'request_forwards', 'request_partner_suggestions', 'request_items'] as $tbl) {
         $pdo->prepare("DELETE FROM $tbl WHERE request_id = ? AND request_table = ?")->execute([$id, $t]);
     }
     $pdo->prepare('DELETE FROM notifications WHERE link = ?')->execute(["request_detail?id=$id&table=$t"]);

@@ -219,6 +219,17 @@ CREATE TABLE `request_forwards` (
   KEY `idx_status` (`status`),
   KEY `idx_req_status` (`request_table`,`request_id`,`status`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+CREATE TABLE `request_items` (
+  `id` int unsigned NOT NULL AUTO_INCREMENT,
+  `request_id` int unsigned NOT NULL COMMENT 'ID do pedido na tabela _frm',
+  `request_table` varchar(20) COLLATE utf8mb4_unicode_ci NOT NULL COMMENT 'mkt, shop, xerox, service, ti',
+  `position` tinyint unsigned NOT NULL DEFAULT '0' COMMENT 'Ordem em que a pessoa listou',
+  `name` varchar(255) COLLATE utf8mb4_unicode_ci DEFAULT NULL COMMENT 'Item (Compras) ou sobre o link (Marketing)',
+  `qty` varchar(50) COLLATE utf8mb4_unicode_ci DEFAULT NULL COMMENT 'Quantidade em texto livre (ex.: 2 caixas)',
+  `url` varchar(1000) COLLATE utf8mb4_unicode_ci DEFAULT NULL COMMENT 'Link http(s)',
+  PRIMARY KEY (`id`),
+  KEY `idx_request` (`request_table`,`request_id`,`position`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 CREATE TABLE `request_partner_suggestions` (
   `request_id` int unsigned NOT NULL COMMENT 'ID do pedido na tabela _frm',
   `request_table` varchar(20) COLLATE utf8mb4_unicode_ci NOT NULL COMMENT 'mkt, shop, xerox, service, ti',

@@ -516,9 +516,12 @@ class RequestInbox
         }
         $today = strtotime(date('Y-m-d'));
         $suggestions = RequestForwardService::suggestionsFor($pdo);
+        require_once __DIR__ . '/RequestItems.php';
+        $items = RequestItems::forMany($pdo, array_map(fn($r) => [requestSlug((string)($r['table'] ?? '')), (int)$r['id']], $all));
         foreach ($all as &$r) {
             $r['table'] = requestSlug((string)($r['table'] ?? ''));
             $r['suggested_partners'] = $suggestions[$r['table'] . ':' . (int)$r['id']] ?? [];
+            $r['items'] = $items[$r['table'] . ':' . (int)$r['id']] ?? [];
             // Há quanto tempo o pedido espera a decisão
             $days = (int)round(($today - strtotime(date('Y-m-d', strtotime((string)$r['created_at'])))) / 86400);
             $r['context'] = [$days <= 0 ? 'Hoje' : ($days === 1 ? 'Ontem' : 'Há ' . $days . ' dias'), $days >= 3 ? 'in' : ''];

@@ -5,6 +5,7 @@ require_once __DIR__ . '/../config/security.php';
 requireLoginJson($pdo);
 require_once __DIR__ . '/../classes/RequestManager.php';
 require_once __DIR__ . '/../classes/RequestForwardService.php';
+require_once __DIR__ . '/../classes/RequestItems.php';
 
 header('Content-Type: application/json');
 
@@ -242,6 +243,7 @@ try {
             $pdo->prepare("DELETE FROM request_history WHERE request_id = ? AND request_table = ?")->execute([$id, $sector]);
             $pdo->prepare("DELETE FROM request_forwards WHERE request_id = ? AND request_table = ?")->execute([$id, $sector]);
             $pdo->prepare("DELETE FROM request_partner_suggestions WHERE request_id = ? AND request_table = ?")->execute([$id, $sector]);
+            RequestItems::deleteForRequest($pdo, $sector, $id);
             $pdo->prepare("DELETE FROM notifications WHERE link = ?")->execute(["request_detail?id=$id&table=$sector"]);
             $pdo->commit();
 

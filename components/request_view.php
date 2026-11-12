@@ -20,6 +20,7 @@
 
 require_once __DIR__ . '/../classes/RequestForwardService.php';
 require_once __DIR__ . '/../classes/RequestChat.php';
+require_once __DIR__ . '/../classes/RequestItems.php';
 require_once __DIR__ . '/request_card.php';
 require_once __DIR__ . '/partner_picker.php';
 require_once __DIR__ . '/request_view/timeline.php';
@@ -315,6 +316,8 @@ function renderRequestView(PDO $pdo, array $req, string $sector, string $context
     if ($ask === '' && $sector === 'xerox') {
         $ask = xeroxSummary($req);
     }
+    // Itens de Compras e links de referência do Marketing
+    $itemsHtml = RequestItems::html(RequestItems::forRequest($pdo, $sector, $reqId), $sector);
     // Motivo da urgência: primeira linha das observações ("Urgente: ...", gravada por api/add_request.php)
     $obs = trim((string)($req['obs'] ?? ''));
     $urgentReason = '';
@@ -397,6 +400,12 @@ function renderRequestView(PDO $pdo, array $req, string $sector, string $context
                 <p class="rv-ask__who"><?= e(trim((string)($req['creator_name'] ?? '')) ?: 'Quem pediu') ?> pediu:</p>
                 <p class="rv-ask__body"><?= nl2br(e($ask)) ?></p>
                 <button type="button" class="rv-ask__more" data-rv-ask-more hidden>Ver tudo</button>
+            </div>
+        <?php endif; ?>
+        <?php if ($itemsHtml !== ''): ?>
+            <div class="rv-items">
+                <p class="rv-items__title"><?= e(RequestItems::heading($sector)) ?></p>
+                <?= $itemsHtml ?>
             </div>
         <?php endif; ?>
         <?php if ($isUrgent): ?>
