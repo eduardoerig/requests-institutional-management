@@ -85,7 +85,7 @@
 /* Avatar e selo de perfil (cor por perfil) */
 .acc-avatar {
     flex: none; width: 44px; height: 44px; border-radius: 50%; display: grid; place-items: center;
-    font-size: 15px; font-weight: 600; background: var(--fundo-2); color: var(--texto-2);
+    font-size: 16px; font-weight: 600; background: var(--fundo-2); color: var(--texto-2);
 }
 .acc-avatar--lg { width: 56px; height: 56px; font-size: var(--t-xl); font-weight: 700; }
 .acc-avatar--sm { width: 32px; height: 32px; font-size: var(--t-xs); }
@@ -95,7 +95,7 @@
 .acc-avatar--admin, .acc-role--admin { background: var(--grafite); color: var(--texto-inv); }
 .acc-role, .acc-where, .acc-state {
     display: inline-flex; align-items: center; gap: 6px; min-height: 24px; padding: 0 8px;
-    border-radius: var(--r-pill); font-size: 13px; font-weight: 600; white-space: nowrap;
+    border-radius: var(--r-pill); font-size: 14px; font-weight: 600; white-space: nowrap;
 }
 .acc-where { background: var(--fundo-2); color: var(--texto-2); white-space: normal; }
 .acc-state--on { background: var(--ok-claro); color: var(--ok); }
@@ -134,7 +134,7 @@
 
 .acc-sec { display: flex; flex-direction: column; gap: 14px; padding: 18px 0; border-bottom: 1px solid var(--linha-suave); }
 .acc-sec:last-child { border-bottom: 0; }
-.acc-sec h3 { display: flex; align-items: center; gap: 8px; font-size: 15px; font-weight: 600; }
+.acc-sec h3 { display: flex; align-items: center; gap: 8px; font-size: 16px; font-weight: 600; }
 .acc-sec h3 i { color: var(--texto-4); width: 18px; text-align: center; }
 .acc-field { display: flex; flex-direction: column; gap: 6px; min-width: 0; }
 .acc-field > label, .acc-label { font-size: var(--t-sm); font-weight: 600; }
@@ -189,7 +189,7 @@
 .acc-sector__desc-text.is-empty { font-style: italic; color: var(--texto-4); }
 .acc-sector__desc .btn { flex: none; }
 .acc-add-form label small { font-weight: 400; color: var(--texto-2); }
-.acc-sector .acc-label { font-size: 13px; font-weight: 600; color: var(--texto-2); }
+.acc-sector .acc-label { font-size: 14px; font-weight: 600; color: var(--texto-2); }
 .acc-resp { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 8px; }
 .acc-resp li { display: flex; align-items: center; gap: 10px; min-height: var(--h-md); }
 .acc-resp__name { flex: 1; min-width: 0; display: flex; flex-direction: column; font-size: var(--t-sm); font-weight: 600; overflow-wrap: anywhere; }
@@ -287,7 +287,7 @@ html.acc-lock, html.acc-lock body { overflow: hidden; }
 
     .acc-tabs { display: flex; gap: 4px; }
     .acc-tab i { display: inline-block; color: var(--texto-4); }
-    .acc-tab { min-height: 34px; padding: 0 14px; font-size: 13.5px; }
+    .acc-tab { min-height: 34px; padding: 0 14px; font-size: 14px; }
     .acc-tab.is-active i { color: var(--laranja-escuro); }
 
     /* Lista + painel lateral */
@@ -298,9 +298,9 @@ html.acc-lock, html.acc-lock body { overflow: hidden; }
     .acc-search { flex: 1 1 220px; }
     .acc-search input { min-height: var(--h-md); }
     .acc-filters { flex-wrap: wrap; overflow: visible; }
-    .acc-pill { min-height: 32px; font-size: 13px; }
+    .acc-pill { min-height: 32px; font-size: 14px; }
     .acc-state-tabs { gap: 4px; padding: 0; }
-    .acc-state-tab { min-height: 32px; padding: 0 12px; border: 0; border-radius: var(--r-pill); font-size: 13px; font-weight: 500; }
+    .acc-state-tab { min-height: 32px; padding: 0 12px; border: 0; border-radius: var(--r-pill); font-size: 14px; font-weight: 500; }
     .acc-state-tab:hover { background: var(--fundo-2); }
     .acc-state-tab.is-active { background: var(--laranja-claro); font-weight: 600; }
 
@@ -308,7 +308,7 @@ html.acc-lock, html.acc-lock body { overflow: hidden; }
         display: grid; align-items: center; column-gap: 14px;
         grid-template-columns: 40px minmax(0, 2fr) minmax(0, 1.4fr) minmax(0, 1.2fr) 120px;
     }
-    .acc-rows-head { padding: 0 12px 10px; border-bottom: 1px solid var(--linha-suave); font-size: 13px; font-weight: 500; color: var(--texto-4); }
+    .acc-rows-head { padding: 0 12px 10px; border-bottom: 1px solid var(--linha-suave); font-size: 14px; font-weight: 500; color: var(--texto-4); }
     .acc-rows-head span:first-child { grid-column: span 2; }
     /* Com o editor aberto a lista estreita: sai "Último acesso" para o perfil e a área caberem */
     .acc-people.has-editor .acc-rows-head,
@@ -326,7 +326,7 @@ html.acc-lock, html.acc-lock body { overflow: hidden; }
     .acc-avatar--lg { width: 48px; height: 48px; font-size: var(--t-lg); }
     .acc-avatar--sm { width: 32px; height: 32px; font-size: var(--t-xs); }
     .acc-person__id { flex: none; }
-    .acc-person__name { font-size: 15px; }
+    .acc-person__name { font-size: 16px; }
     .acc-person__role { order: 0; flex: none; padding: 0; margin: 0; }
     .acc-person__where { font-size: var(--t-xs); color: var(--texto-2); overflow-wrap: anywhere; }
     .acc-person__last { font-size: var(--t-xs); color: var(--texto-4); text-align: right; }
@@ -338,7 +338,8 @@ html.acc-lock, html.acc-lock body { overflow: hidden; }
         max-height: calc(100vh - var(--topbar-h) - 32px);
         border-radius: 20px; overflow: hidden;
         background: var(--superficie); animation: none;
-        box-shadow: 0 16px 48px rgb(16 16 24 / .08), 0 0 0 1px rgb(16 16 24 / .04);
+        border: 1px solid var(--linha-forte);
+        box-shadow: 0 16px 48px rgb(16 16 24 / .08);
     }
     .acc-editor__top { flex-direction: row-reverse; justify-content: space-between; align-items: flex-start; padding: 16px; }
     .acc-back { margin: 0; padding: 0; width: var(--h-md); justify-content: center; color: var(--texto-2); }
