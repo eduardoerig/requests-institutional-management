@@ -99,7 +99,10 @@ body.peek-open { overflow: hidden; }
 }
 .peek__m { display: inline-flex; align-items: center; gap: 6px; }
 .peek__m i { font-size: 12px; color: var(--texto-4); }
-.peek__sep { color: var(--linha-forte); }
+/* ponto entre os itens visíveis (itens sem dado ficam [hidden]) */
+.peek__m[hidden] { display: none; }
+.peek__m:not([hidden]) ~ .peek__m:not([hidden])::before { content: "·"; margin-right: 2px; color: var(--linha-forte); }
+.peek__meta .status-pill { margin-right: 4px; }
 .peek__meta .is-bad { color: var(--perigo); }
 .peek__meta .is-bad i { color: var(--perigo); }
 .peek__meta .is-warn { color: var(--aviso); }
@@ -152,7 +155,14 @@ body.peek-open { overflow: hidden; }
 .peek__who-text { display: flex; flex-direction: column; gap: 1px; min-width: 0; }
 .peek__who-text strong { font-size: 13.5px; font-weight: 600; color: var(--texto); }
 .peek__who-text small { font-size: 11.5px; color: var(--texto-4); }
-.peek__who .status-pill { margin-left: auto; }
+.peek__sec[hidden] { display: none; }
+
+/* Onde está: as 4 etapas e a frase de quem é a vez */
+.peek__sec .steps4 { margin-bottom: 10px; }
+.peek__sec p.peek__where { font-size: 13.5px; color: var(--texto-2); }
+.peek__sec p.peek__where--in { color: var(--laranja-escuro); font-weight: 600; }
+.peek__sec p.peek__where--ok { color: var(--ok); }
+.peek__sec p.peek__where--bad { color: var(--perigo); }
 
 /* ---------- conversa na gaveta ---------- */
 /* Ocupa a sobra da gaveta e rola por dentro: a conversa fica sempre ao lado do campo de mensagem. */

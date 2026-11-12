@@ -8,7 +8,12 @@
 //   data-href                    link da tela completa do pedido
 //   data-title, data-sector, data-who, data-desc
 //   data-status, data-status-code (P/Y/W/F/C/N → .status-pill--X)
-//   data-prazo, data-prazo-kind (bad/warn/…), data-prio, data-urgent (1/0), data-parado
+//   data-prazo, data-prazo-kind (bad/warn/…), data-prio, data-urgent (1/0), data-parado, data-parado-late
+// Opcionais: sem o atributo, o item some da gaveta.
+//   data-prazo, data-prio, data-parado   somem da linha de meta
+//   data-who                     some a seção "Quem pediu"
+//   data-step (0..3, -1 recusado), data-where, data-where-kind (in/ok/bad)  mostram "Onde está"
+// Outro link pode abrir a gaveta de uma linha: data-peek-from="<id da linha>".
 // Ctrl/Cmd/Shift/botão do meio seguem o link normal (outra aba).
 // Não usar a classe .request-view aqui: o polling de 15s do script.js substitui esse bloco.
 ?>
@@ -33,21 +38,28 @@
 
         <h2 class="peek__title" id="peek-title">—</h2>
 
+        <!-- Itens sem o data-* correspondente na linha ficam escondidos; os pontos entre eles vêm do CSS -->
         <p class="peek__meta">
+            <span class="status-pill" id="peek-status">—</span>
             <span class="peek__m" id="peek-prazo"><i class="fa-regular fa-clock" aria-hidden="true"></i><span>—</span></span>
-            <span class="peek__sep" aria-hidden="true">·</span>
             <span class="peek__m" id="peek-prio">—</span>
-            <span class="peek__sep" aria-hidden="true">·</span>
             <span class="peek__m" id="peek-parado">—</span>
         </p>
 
         <div class="peek__body">
+            <!-- Etapas (data-step): para quem pediu acompanhar onde o pedido está -->
+            <section class="peek__sec" id="peek-step-sec" hidden>
+                <h3>Onde está</h3>
+                <ol class="steps4" id="peek-steps"></ol>
+                <p class="peek__where" id="peek-where"></p>
+            </section>
+
             <section class="peek__sec" id="peek-desc-sec">
                 <h3>O que precisa</h3>
                 <p id="peek-desc"></p>
             </section>
 
-            <section class="peek__sec">
+            <section class="peek__sec" id="peek-who-sec">
                 <h3>Quem pediu</h3>
                 <div class="peek__who">
                     <span class="peek__av" id="peek-av" aria-hidden="true">·</span>
@@ -55,7 +67,6 @@
                         <strong id="peek-who">—</strong>
                         <small id="peek-sector">—</small>
                     </span>
-                    <span class="status-pill" id="peek-status">—</span>
                 </div>
             </section>
 

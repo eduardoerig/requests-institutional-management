@@ -34,6 +34,36 @@
         return (first + last).toUpperCase();
     }
 
+    // Etapas do pedido (mesma régua de Minhas requisições): 0 Enviado, 1 Aprovado, 2 No setor, 3 Concluído; -1 recusado
+    const STEPS = ['Enviado', 'Aprovado', 'No setor', 'Concluído'];
+    function fillSteps(d) {
+        const sec = el('peek-step-sec');
+        const list = el('peek-steps');
+        if (!sec || !list) return;
+        sec.hidden = d.step === undefined;
+        if (sec.hidden) return;
+        const now = parseInt(d.step, 10);
+        list.innerHTML = '';
+        STEPS.forEach((name, i) => {
+            const li = document.createElement('li');
+            const done = now === -1 ? i === 0 : (now === 3 || i < now);
+            if (done) li.className = 'is-done';
+            else if (i === now) li.className = 'is-now';
+            if (i === now) li.setAttribute('aria-current', 'step');
+            const span = document.createElement('span');
+            span.textContent = name;
+            li.appendChild(span);
+            list.appendChild(li);
+        });
+        list.setAttribute('aria-label', now === -1 ? 'Recusado' : 'Etapa ' + (now + 1) + ' de 4');
+        const where = el('peek-where');
+        if (where) {
+            where.textContent = d.where || '';
+            where.hidden = !d.where;
+            where.className = 'peek__where' + (d.whereKind ? ' peek__where--' + d.whereKind : '');
+        }
+    }
+
     function fill(row) {
         const d = row.dataset;
 
@@ -46,23 +76,32 @@
         // Prazo: o texto já vem pronto; a cor segue o mesmo critério da lista
         const prazo = el('peek-prazo');
         if (prazo) {
+            prazo.hidden = d.prazo === undefined;
             const txt = prazo.querySelector('span');
             if (txt) txt.textContent = d.prazo || 'Sem prazo';
             prazo.classList.toggle('is-bad', d.prazoKind === 'bad');
             prazo.classList.toggle('is-warn', d.prazoKind === 'warn');
         }
 
+        // Itens opcionais: sem o data-* na linha, somem
         const prio = el('peek-prio');
         if (prio) {
+            prio.hidden = d.prio === undefined;
             prio.textContent = d.prio || 'Normal';
             prio.classList.toggle('is-bad', d.urgent === '1');
         }
 
         const parado = el('peek-parado');
         if (parado) {
+            parado.hidden = d.parado === undefined;
             parado.textContent = d.parado || 'Sem encaminhamento';
             parado.classList.toggle('is-bad', d.paradoLate === '1');
         }
+
+        fillSteps(d);
+
+        const whoSec = el('peek-who-sec');
+        if (whoSec) whoSec.hidden = d.who === undefined;
 
         const desc = el('peek-desc');
         if (desc) {
@@ -195,11 +234,15 @@
     }
 
     document.addEventListener('click', (e) => {
-        const row = e.target.closest('a[data-peek]');
-        if (row) {
+        const link = e.target.closest('a[data-peek], a[data-peek-from]');
+        if (link) {
             if (e.ctrlKey || e.metaKey || e.shiftKey || e.altKey || e.button !== 0) return;
+            // data-peek-from: outro link (ex.: aviso de resposta) abre a gaveta de uma linha da lista
+            const row = link.hasAttribute('data-peek') ? link : document.getElementById(link.dataset.peekFrom);
+            if (!row) return; // linha fora da tela: segue o link normal
             e.preventDefault();
             open(row);
+            trigger = link; // o foco volta para o que foi clicado
             return;
         }
         if (e.target.closest('[data-peek-close]')) {

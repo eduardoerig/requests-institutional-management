@@ -89,7 +89,7 @@ $assetPage = $logged ? $pageClass : 'login';
 $comboPages = ['accounts']; // <select data-combo>: Tom Select + assets/js/combo.js
 $useCombo = in_array($assetPage, $comboPages, true);
 // Gaveta do pedido (components/request_peek.php): CSS e JS comuns só nas telas que a usam
-$peekPages = ['home'];
+$peekPages = ['home', 'myRequests'];
 $usePeek = in_array($assetPage, $peekPages, true);
 ?>
 <!DOCTYPE html>
