@@ -11,6 +11,7 @@
  * - form_file: arquivo em components/forms/
  * - card_label e examples: cartão do passo "Para qual setor?" da Nova requisição
  * - aliases: títulos de ctd_area que valem por este setor (minúsculas, sem e com acento)
+ * - purchase_weekdays (opcional): dias de compra; a Nova requisição avisa quem pede (purchaseNotice())
  *
  * A ordem aqui é a ordem em que os setores aparecem nas telas (Painel, Usuários e setores).
  * Setor novo precisa também de tabela, formulário e perfil: não basta acrescentar aqui.
@@ -45,6 +46,8 @@ return [
         'card_label' => 'Compras',
         'examples' => 'Materiais e orçamentos',
         'aliases' => ['shop', 'compras'],
+        // Dias em que o setor faz as compras (1 = segunda ... 7 = domingo). Sem a chave, não há aviso.
+        'purchase_weekdays' => [2, 4],
     ],
     'xerox' => [
         'label' => 'Reprografia',

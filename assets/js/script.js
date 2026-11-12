@@ -963,7 +963,24 @@ function bindFormRequests() {
 
         const data = await fetchAjax("api/add_request.php", formData);
         if (data && data.success) {
-            flashToast(`Pedido nº ${parseInt(data.id, 10)} enviado. Você recebe um aviso quando a coordenação aprovar.`);
+            const number = parseInt(data.id, 10);
+            // Setor que só compra em certos dias (Compras): confirmação e, ao fechar, o alerta dos dias
+            if (data.purchase_notice && typeof window.showAlert === 'function') {
+                await window.showAlert({
+                    title: `Pedido nº ${number} enviado`,
+                    message: 'Agora ele aguarda a aprovação da coordenação. Você recebe um aviso quando ela aprovar.',
+                    type: 'success',
+                    confirmLabel: 'Entendi'
+                });
+                await window.showAlert({
+                    title: data.purchase_notice.title,
+                    message: data.purchase_notice.message,
+                    type: 'warning',
+                    confirmLabel: 'Entendi'
+                });
+            } else {
+                flashToast(`Pedido nº ${number} enviado. Você recebe um aviso quando a coordenação aprovar.`);
+            }
             window.location.href = safeInternalLink(data.link);
             return;
         }

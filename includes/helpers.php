@@ -375,3 +375,47 @@ function iniBytes(string $value): int
         default: return $n;
     }
 }
+
+/**
+ * Aviso dos dias de compra (setor com purchase_weekdays em config/sectors.php), mostrado
+ * depois de enviar o pedido. O próximo dia de compra é sempre depois de hoje (o pedido
+ * ainda passa pela aprovação). $weekdays: 1 = segunda ... 7 = domingo.
+ * @return array{days: string, next: string, deadline_before: bool, title: string, message: string}|null
+ */
+function purchaseNotice(array $weekdays, string $deadlineIso, string $sectorLabel = 'Compras', ?DateTimeImmutable $today = null): ?array
+{
+    $weekdays = array_values(array_unique(array_filter(array_map('intval', $weekdays), fn($d) => $d >= 1 && $d <= 7)));
+    sort($weekdays);
+    if (!$weekdays) {
+        return null;
+    }
+    $plural = [1 => 'segundas', 2 => 'terças', 3 => 'quartas', 4 => 'quintas', 5 => 'sextas', 6 => 'sábados', 7 => 'domingos'];
+    $long = [1 => 'segunda-feira', 2 => 'terça-feira', 3 => 'quarta-feira', 4 => 'quinta-feira', 5 => 'sexta-feira', 6 => 'sábado', 7 => 'domingo'];
+    $names = array_map(fn($d) => $plural[$d], $weekdays);
+    $days = count($names) > 1 ? implode(', ', array_slice($names, 0, -1)) . ' e ' . end($names) : $names[0];
+
+    $today = ($today ?? new DateTimeImmutable('today'))->setTime(0, 0);
+    $next = $today;
+    for ($i = 1; $i <= 7; $i++) {
+        $next = $today->modify("+$i day");
+        if (in_array((int)$next->format('N'), $weekdays, true)) {
+            break;
+        }
+    }
+    $nextLabel = $long[(int)$next->format('N')] . ', ' . $next->format('d/m');
+    $deadline = DateTimeImmutable::createFromFormat('!Y-m-d', $deadlineIso) ?: null;
+    $before = $deadline !== null && $deadline < $next;
+
+    $message = "Depois de aprovado, seu pedido entra no próximo dia de compra: $nextLabel.";
+    if ($before) {
+        $message .= ' O prazo que você escolheu (' . $long[(int)$deadline->format('N')] . ', ' . $deadline->format('d/m')
+            . ") é antes disso. Se não puder esperar, fale com $sectorLabel pela conversa do pedido.";
+    }
+    return [
+        'days' => $days,
+        'next' => $nextLabel,
+        'deadline_before' => $before,
+        'title' => "$sectorLabel só compra às $days",
+        'message' => $message,
+    ];
+}

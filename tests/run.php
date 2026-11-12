@@ -289,6 +289,25 @@ if ($attRow) {
 array_map('unlink', glob("$tmpDir/*"));
 rmdir($tmpDir);
 
+// Dias de compra (Compras só compra às terças e quintas)
+$friday = new DateTimeImmutable('2026-11-13'); // sexta
+$pn = purchaseNotice([4, 2], '2026-11-16', 'Compras', $friday);
+check('dias de compra: de sexta, o próximo é terça; prazo na segunda fica antes', $pn !== null && $pn['days'] === 'terças e quintas'
+    && $pn['next'] === 'terça-feira, 17/11' && $pn['deadline_before'] === true && str_contains($pn['message'], 'segunda-feira, 16/11'), json_encode($pn, JSON_UNESCAPED_UNICODE));
+$pn = purchaseNotice([2, 4], '2026-11-30', 'Compras', new DateTimeImmutable('2026-11-17')); // terça
+check('dias de compra: na terça, o próximo é quinta (hoje não conta)', $pn['next'] === 'quinta-feira, 19/11' && $pn['deadline_before'] === false, json_encode($pn, JSON_UNESCAPED_UNICODE));
+check('setor sem dias de compra não tem aviso', purchaseNotice([], '2026-11-30') === null);
+$res = $sol->post('api/add_request.php', ['type' => 'shopping', 'title' => 'Teste dias de compra', 'end' => $future, 'details' => 'Canetas']);
+$pnId = (int)($res['json']['id'] ?? 0);
+if ($pnId) { $createdIds[] = ['shop', $pnId]; }
+check('pedido de Compras volta com o aviso dos dias de compra', str_contains($res['json']['purchase_notice']['title'] ?? '', 'terças e quintas'), snippet($res));
+$res = $sol->post('api/add_request.php', $base + ['title' => 'Teste sem aviso de compra']);
+$noPnId = (int)($res['json']['id'] ?? 0);
+if ($noPnId) { $createdIds[] = ['ti', $noPnId]; }
+check('pedido de outro setor não traz aviso de compra', $noPnId > 0 && !isset($res['json']['purchase_notice']), snippet($res));
+$res = $sol->post('api/get_form.php', ['action' => 'get', 'id' => (int)$pdo->query("SELECT id FROM ctd_requests_models WHERE form_name = 'form_compra.php'")->fetchColumn()]);
+check('formulário de Compras diz os dias de compra', str_contains($res['json']['form'] ?? '', 'Compras faz compras às terças e quintas') && !str_contains($res['json']['form'] ?? '', '<!--DIAS_COMPRA-->'), snippet($res));
+
 // Itens com link (Compras) e links de referência (Marketing)
 $shopBase = ['type' => 'shopping', 'title' => 'Teste itens', 'end' => $future];
 $res = $sol->post('api/add_request.php', $shopBase + ['details' => '']);

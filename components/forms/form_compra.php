@@ -35,6 +35,7 @@
                 <input type="date" name="end" id="end" required>
             </div>
             <p class="date-chosen" data-date-chosen aria-live="polite"></p>
+<!--DIAS_COMPRA-->
         </div>
     </div>
 

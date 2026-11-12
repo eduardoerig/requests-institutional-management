@@ -267,10 +267,14 @@ try {
     error_log("add_request.php: avisos do pedido $sector/$newId: " . $e->getMessage());
 }
 
+// Setor que só compra em certos dias (Compras: terças e quintas): a tela avisa depois do envio
+$purchaseDays = sectorRegistry()[$sector]['purchase_weekdays'] ?? [];
+$purchaseNotice = $purchaseDays ? purchaseNotice($purchaseDays, $end, $sectorLabel) : null;
+
 jsonResponse([
     'success' => true,
     'message' => "Pedido nº $newId enviado! Agora ele aguarda aprovação.",
     'id' => $newId,
     'table' => $sector,
     'link' => $link,
-]);
+] + ($purchaseNotice ? ['purchase_notice' => ['title' => $purchaseNotice['title'], 'message' => $purchaseNotice['message']]] : []));

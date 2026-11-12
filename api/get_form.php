@@ -127,6 +127,13 @@ $formHtml = preg_replace_callback('/<!--ANEXOS(?::(pdf))?-->/', function (array 
 ';
 }, $formHtml);
 
+// Dias de compra do setor (config/sectors.php, purchase_weekdays), embaixo do prazo
+$purchaseNotice = purchaseNotice(sectorRegistry()[$formSector]['purchase_weekdays'] ?? [], '');
+$formHtml = str_replace('<!--DIAS_COMPRA-->', $purchaseNotice
+    ? '<p class="form-hint purchase-days"><i class="fa-solid fa-calendar-day" aria-hidden="true"></i> '
+        . e(sectorLabel($formSector) . ' faz compras às ' . $purchaseNotice['days'] . '.') . '</p>'
+    : '', $formHtml);
+
 // "Mais alguma observação?" com Sim/Não (o mesmo em todos os formulários)
 $formHtml = str_replace('<!--OBS-->', yesNoField('obs_choice', 'Mais alguma observação?', 'Sem observações.', '
             <div class="form-group">
