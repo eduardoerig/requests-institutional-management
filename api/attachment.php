@@ -8,6 +8,11 @@ require_once __DIR__ . '/../config/session.php';
 require_once __DIR__ . '/../config/conn.php';
 require_once __DIR__ . '/../config/security.php';
 require_once __DIR__ . '/../classes/RequestAttachments.php';
+// Aberto por link numa aba nova: sem sessão, vai para o login em vez de mostrar JSON cru
+if (empty($_SESSION['id']) || !refreshSessionUser($pdo)) {
+    header('Location: ../login');
+    exit;
+}
 requireLoginJson($pdo);
 
 if ($_SERVER['REQUEST_METHOD'] !== 'GET') {

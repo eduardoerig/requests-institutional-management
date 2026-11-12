@@ -158,6 +158,8 @@ $dotColor = ['P' => '#B45309', 'W' => '#2563EB', 'C' => '#15803D', 'N' => '#B91C
         .history { width: 100%; border-collapse: collapse; font-size: 9.5pt; }
         .history td { padding: 5px 8px 5px 0; border-bottom: 1px solid var(--linha); vertical-align: top; }
         .history tr { break-inside: avoid; }
+        .history td.wrap { overflow-wrap: anywhere; }
+        .history.items td:first-child { width: auto; white-space: normal; color: inherit; }
         .history td:first-child { width: 30mm; color: var(--tinta-2); white-space: nowrap; font-variant-numeric: tabular-nums; }
         .history td:nth-child(2) { width: 42mm; font-weight: 600; }
 
@@ -217,13 +219,13 @@ $dotColor = ['P' => '#B45309', 'W' => '#2563EB', 'C' => '#15803D', 'N' => '#B91C
     <?php $items = RequestItems::forRequest($pdo, $req_table, $req_id); ?>
     <?php if ($items): // no papel o link vai inteiro (não dá para clicar) ?>
         <h2><?= e(RequestItems::heading($req_table)) ?></h2>
-        <table class="history">
+        <table class="history items">
             <tbody>
                 <?php foreach ($items as $it): ?>
                     <tr>
                         <td><?= e((string)($it['name'] ?? '')) ?></td>
                         <td><?= e((string)($it['qty'] ?? '')) ?></td>
-                        <td style="overflow-wrap:anywhere"><?= e((string)($it['url'] ?? '')) ?></td>
+                        <td class="wrap"><?= e((string)($it['url'] ?? '')) ?></td>
                     </tr>
                 <?php endforeach; ?>
             </tbody>

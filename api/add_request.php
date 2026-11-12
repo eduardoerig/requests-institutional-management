@@ -9,9 +9,9 @@ require_once __DIR__ . '/../classes/RequestAttachments.php';
 requireLoginJson($pdo);
 // Envio maior que o post_max_size chega sem nenhum campo (nem o token): sem isto a pessoa
 // veria "página aberta há muito tempo" em vez do motivo real
-if (RequestAttachments::postTooLarge()) {
+if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST' && RequestAttachments::postTooLarge()) {
     jsonResponse(['success' => false, 'message' => 'Os arquivos passam do limite de '
-        . RequestAttachments::sizeLabel(RequestAttachments::maxTotalBytes()) . ' por pedido. Anexe menos ou arquivos menores.']);
+        . RequestAttachments::sizeLabel(RequestAttachments::maxTotalBytes()) . ' por pedido. Anexe menos ou arquivos menores.'], 413);
 }
 requirePostJson();
 
