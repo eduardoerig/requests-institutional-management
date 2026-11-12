@@ -22,6 +22,29 @@ if ($formName === '' || !preg_match('/^form_[a-z_]+\.php$/', $formName) || !is_f
 
 $formHtml = file_get_contents($formFile);
 
+/**
+ * Pergunta Sim/Não sem resposta marcada (a pessoa precisa responder). Sim abre $panelHtml;
+ * Não fecha e mostra $noText em vermelho. Os campos do painel ficam desligados enquanto
+ * não for Sim (não vão no envio); data-yesno-required vira obrigatório com Sim.
+ * O comportamento é o bindYesNo() de assets/js/script.js.
+ */
+function yesNoField(string $name, string $question, string $noText, string $panelHtml): string
+{
+    $panelHtml = preg_replace('/<(input|select|textarea)\b/', '<$1 disabled', $panelHtml);
+    return '
+        <fieldset class="form-group yesno" data-yesno>
+            <legend>' . e($question) . ' <span class="req">*</span></legend>
+            <div class="aplication_select yesno__options">
+                <label><input type="radio" name="' . e($name) . '" value="sim" required data-yesno-yes> Sim</label>
+                <label><input type="radio" name="' . e($name) . '" value="nao" data-yesno-no> Não</label>
+            </div>
+            <p class="yesno__no" data-yesno-note hidden>' . e($noText) . '</p>
+            <div class="yesno__panel" data-yesno-panel hidden>' . $panelHtml . '
+            </div>
+        </fieldset>
+';
+}
+
 // Quem responde por mais de uma área escolhe a área no passo 1 (pages/new_request.php);
 // o valor chega ao formulário por este campo escondido (assets/js/pages/new_request.js)
 $areaHtml = count($_SESSION['subdivision_ids'] ?? []) > 1
@@ -58,20 +81,17 @@ foreach (RequestForwardService::availableAreas($pdo, getAreaIdBySector($pdo, $fo
     $partnerOptions .= '<option value="' . (int)$area['id'] . '">' . e($area['label']) . '</option>';
 }
 if ($partnerOptions !== '') {
-    $priorityHtml .= '
-    <details class="form-more">
-        <summary>Outro setor também precisa participar? <small>(opcional)</small></summary>
-        <div class="form-group">
-            <label for="partner_area_id">Qual setor?</label>
-            <select name="partner_area_id" id="partner_area_id"><option value="">Não, só este setor</option>' . $partnerOptions . '</select>
-            <small>A coordenação confirma ou muda quando aprovar o pedido.</small>
-        </div>
-        <div class="form-group" data-partner2-field hidden>
-            <label for="partner2_area_id">Mais um setor? <small>(opcional)</small></label>
-            <select name="partner2_area_id" id="partner2_area_id"><option value="">Não, só esse</option>' . $partnerOptions . '</select>
-        </div>
-    </details>
-';
+    $sectorTo = (string)(sectorRegistry()[$formSector]['label_to'] ?? 'este setor');
+    $priorityHtml .= yesNoField('partner_choice', 'Outro setor também participa?', 'Só ' . $sectorTo . ' vai atender.', '
+            <div class="form-group">
+                <label for="partner_area_id">Qual setor?</label>
+                <select name="partner_area_id" id="partner_area_id" data-yesno-required><option value="">Escolha o setor</option>' . $partnerOptions . '</select>
+                <small>A coordenação confirma ou muda quando aprovar o pedido.</small>
+            </div>
+            <div class="form-group" data-partner2-field hidden>
+                <label for="partner2_area_id">Mais um setor? <small>(opcional)</small></label>
+                <select name="partner2_area_id" id="partner2_area_id"><option value="">Não, só esse</option>' . $partnerOptions . '</select>
+            </div>');
 }
 
 if (strpos($formHtml, '<!--PRIORIDADE-->') !== false) {
@@ -79,5 +99,12 @@ if (strpos($formHtml, '<!--PRIORIDADE-->') !== false) {
 } else {
     $formHtml = str_replace('<button', $priorityHtml . '<button', $formHtml);
 }
+
+// "Mais alguma observação?" com Sim/Não (o mesmo em todos os formulários)
+$formHtml = str_replace('<!--OBS-->', yesNoField('obs_choice', 'Mais alguma observação?', 'Sem observações.', '
+            <div class="form-group">
+                <label for="obs" class="visually-hidden">Observações</label>
+                <textarea name="obs" id="obs" rows="2" maxlength="2000" data-yesno-required placeholder="Sala, horário, contato ou algo que ajude quem vai aprovar ou atender"></textarea>
+            </div>'), $formHtml);
 
 jsonResponse(['success' => true, 'form' => $formHtml]);

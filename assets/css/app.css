@@ -929,6 +929,12 @@ details.panel[open] > summary::after { transform: rotate(180deg); }
 .form-more summary small { font-weight: 400; }
 .form-more[open] summary { margin-bottom: 8px; }
 .form-more textarea { min-height: 72px; }
+/* Pergunta Sim/Não (api/get_form.php, yesNoField): sem resposta marcada; Não mostra a frase em vermelho */
+.yesno { margin: 4px 0 12px; }
+.yesno__options label { min-width: 104px; justify-content: center; }
+.yesno__no { margin: 8px 0 0; font-size: var(--t-sm); font-weight: 600; color: var(--perigo); }
+.yesno__panel { margin-top: 12px; }
+.yesno__panel textarea { min-height: 72px; }
 .form_request button[type="submit"] {
     width: 100%;
     min-height: 52px;

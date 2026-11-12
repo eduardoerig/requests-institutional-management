@@ -29,6 +29,7 @@
 
     const titles = [areaBox ? 'Área e setor' : 'Para qual setor?', 'O que você precisa?', 'Urgência e revisão'];
     const kept = ['title', 'details', 'end', 'obs', 'file', 'qtd', 'urgent_reason'];
+    const keptRadios = ['obs_choice']; // respostas que valem para qualquer setor
     const cache = {};
     let step = 1;
     let chosen = null;
@@ -188,7 +189,7 @@
         const areaName = (areaRadio()?.parentElement?.textContent || '').trim();
         const partnerName = ['partner_area_id', 'partner2_area_id']
             .map(name => form.querySelector(`[name="${name}"]`))
-            .filter(select => select?.value)
+            .filter(select => select?.value && !select.disabled)
             .map(select => select.selectedOptions[0]?.textContent || '')
             .join(' e ');
         box.innerHTML =
@@ -273,6 +274,11 @@
             const field = holder.querySelector(`[name="${name}"]`);
             if (field && field.value.trim() !== '') typed[name] = field.value;
         });
+        const keptChoices = {};
+        keptRadios.forEach(name => {
+            const radio = holder.querySelector(`[name="${name}"]:checked`);
+            if (radio) keptChoices[name] = radio.value;
+        });
         const wasUrgent = !!holder.querySelector('[name="urgent"]')?.checked;
 
         chosen = card;
@@ -301,8 +307,11 @@
             const field = holder.querySelector(`[name="${name}"]`);
             if (field) field.value = value;
         });
+        Object.entries(keptChoices).forEach(([name, value]) => {
+            const radio = holder.querySelector(`[name="${name}"][value="${CSS.escape(value)}"]`);
+            if (radio) radio.checked = true;
+        });
         syncArea();
-        if (typed.obs) holder.querySelector('.form-more')?.setAttribute('open', '');
 
         bindFormRequests(); // script.js: data mínima, atalhos de data, urgência, "Outro", validação e envio
 

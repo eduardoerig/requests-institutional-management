@@ -674,12 +674,17 @@ function validateRequestForm(form) {
         qtd: 'Informe quantas cópias (número maior que zero).',
         model: 'Escolha uma opção.',
         outros_texto: 'Descreva qual é a outra opção.',
-        urgent_reason: 'Conte por que é urgente.'
+        urgent_reason: 'Conte por que é urgente.',
+        obs_choice: 'Responda sim ou não.',
+        partner_choice: 'Responda sim ou não.',
+        obs: 'Escreva a observação ou marque Não.',
+        partner_area_id: 'Escolha o setor ou marque Não.'
     };
     let firstInvalid = null;
     const checkedGroups = new Set();
 
     form.querySelectorAll('[required]').forEach(field => {
+        if (field.disabled) return; // parte fechada do formulário (Não, outro tipo): não vai no envio
         if (field.type === 'radio') {
             if (checkedGroups.has(field.name)) return;
             checkedGroups.add(field.name);
@@ -723,6 +728,34 @@ function validateRequestForm(form) {
     return true;
 }
 
+// Mostra (e liga) ou esconde (e desliga) uma parte do formulário. Campo desligado não vai no envio
+// nem é conferido; data-yesno-required vira obrigatório só enquanto a parte está aberta.
+function setFormPartOpen(part, open) {
+    part.hidden = !open;
+    part.querySelectorAll('input, select, textarea').forEach(field => {
+        field.disabled = !open;
+        if (field.hasAttribute('data-yesno-required')) field.required = open;
+    });
+}
+
+// Perguntas Sim/Não (api/get_form.php, yesNoField): Sim abre o painel; Não fecha e mostra a frase em vermelho
+function bindYesNo(form) {
+    form.querySelectorAll('[data-yesno]').forEach(box => {
+        const yes = box.querySelector('[data-yesno-yes]');
+        const no = box.querySelector('[data-yesno-no]');
+        const panel = box.querySelector('[data-yesno-panel]');
+        const note = box.querySelector('[data-yesno-note]');
+        const apply = (focus) => {
+            setFormPartOpen(panel, yes.checked);
+            note.hidden = !no.checked;
+            if (focus && yes.checked) panel.querySelector('input:not([type="hidden"]), select, textarea')?.focus();
+        };
+        yes.addEventListener('change', () => apply(true));
+        no.addEventListener('change', () => apply(false));
+        apply(false); // resposta que voltou ao trocar de setor
+    });
+}
+
 // Data de hoje + n dias, no formato do campo de data
 function isoInDays(n) {
     const d = new Date();
@@ -736,6 +769,8 @@ function bindFormRequests() {
 
     // Prazo só pelo calendário, a partir de amanhã (hoje não dá: feedback da CTAP)
     form_requests.querySelectorAll('input[type="date"]').forEach(input => { input.min = isoInDays(1); });
+
+    bindYesNo(form_requests);
 
     // "É urgente" pede o motivo
     const urgent = form_requests.querySelector('[data-urgent]');

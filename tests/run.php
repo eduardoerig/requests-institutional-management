@@ -756,6 +756,10 @@ $res = $sol->post('api/get_form.php', ['action' => 'get', 'id' => $tiModel]);
 $formHtml = (string)($res['json']['form'] ?? '');
 check('formulário traz o campo de parceiro, sem o próprio setor', str_contains($formHtml, 'name="partner_area_id"')
     && str_contains($formHtml, 'value="' . $shopAreaId . '"') && !str_contains($formHtml, 'value="' . $tiAreaId . '"'), snippet($res));
+check('parceiro e observação são perguntas Sim/Não sem resposta marcada',
+    str_contains($formHtml, 'name="partner_choice"') && str_contains($formHtml, 'name="obs_choice"')
+    && str_contains($formHtml, 'Mais alguma observação?') && !str_contains($formHtml, 'checked')
+    && str_contains($formHtml, '<textarea disabled name="obs"') && !str_contains($formHtml, '<!--OBS-->'), snippet($res));
 
 [, $res] = $newPartnerReq(['partner_area_id' => $tiAreaId]);
 check('quem pede não sugere o próprio setor do pedido', ($res['json']['success'] ?? true) === false, snippet($res));

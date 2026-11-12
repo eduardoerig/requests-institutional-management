@@ -24,13 +24,7 @@
     <div class="form-step" data-form-step="3">
         <h2 class="form-step__title">3. É urgente?</h2>
 <!--PRIORIDADE-->
-        <details class="form-more">
-            <summary>Mais alguma coisa? <small>(opcional)</small></summary>
-            <div class="form-group">
-                <label for="obs" class="visually-hidden">Observações</label>
-                <textarea name="obs" id="obs" rows="2" maxlength="2000" placeholder="Sala, horário, contato ou algo que ajude quem vai aprovar ou atender"></textarea>
-            </div>
-        </details>
+<!--OBS-->
         <div class="nr-review" data-review></div>
     </div>
 
