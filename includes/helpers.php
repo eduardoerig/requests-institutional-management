@@ -297,3 +297,53 @@ function deadlineProblem(string $iso): ?string
     }
     return null;
 }
+
+/**
+ * Tipos de pedido da Reprografia (ctd_xerox_frm.kind). NULL nos pedidos antigos = cópia colorida.
+ */
+function xeroxKinds(): array
+{
+    return ['copia_colorida' => 'Cópia colorida', 'plastificacao' => 'Plastificação'];
+}
+
+/**
+ * Campos próprios do tipo de pedido, na ordem em que aparecem (página do pedido e impressão).
+ * @return array<string, string> rótulo => valor (vazio = não mostrar)
+ */
+function requestTypeFields(string $sector, array $req): array
+{
+    if ($sector === 'xerox') {
+        $kind = (string)($req['kind'] ?? '') ?: 'copia_colorida';
+        if ($kind === 'plastificacao') {
+            return [
+                'Tipo' => 'Plastificação',
+                'Folhas' => (string)($req['qtd'] ?? ''),
+                'Tamanho' => (string)($req['type'] ?? ''),
+            ];
+        }
+        return [
+            'Tipo' => 'Cópia colorida',
+            'Arquivo' => (string)($req['arquive'] ?? ''),
+            'Cópias' => (string)($req['qtd'] ?? ''),
+            'Tamanho do papel' => (string)($req['type'] ?? ''),
+        ];
+    }
+    if ($sector === 'mkt') {
+        return ['Onde será usada' => (string)($req['type'] ?? '')];
+    }
+    return [];
+}
+
+/**
+ * Resumo do pedido da Reprografia, que não tem descrição: "30 cópias · papel A4" ou
+ * "10 folhas para plastificar · A4".
+ */
+function xeroxSummary(array $req): string
+{
+    $qtd = trim((string)($req['qtd'] ?? '')) !== '' ? (int)$req['qtd'] : 0;
+    $size = trim((string)($req['type'] ?? ''));
+    if (((string)($req['kind'] ?? '')) === 'plastificacao') {
+        return implode(' · ', array_filter([$qtd ? "$qtd folhas para plastificar" : 'Plastificação', $size]));
+    }
+    return implode(' · ', array_filter([$qtd ? "$qtd cópias" : '', $size !== '' ? "papel $size" : '']));
+}

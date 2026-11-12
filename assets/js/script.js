@@ -679,7 +679,9 @@ function validateRequestForm(form) {
         partner_choice: 'Responda sim ou não.',
         obs: 'Escreva a observação ou marque Não.',
         partner_area_id: 'Escolha o setor ou marque Não.',
-        'model[]': 'Escolha pelo menos um lugar.'
+        'model[]': 'Escolha pelo menos um lugar.',
+        kind: 'Escolha o que você precisa.',
+        size: 'Escolha o tamanho.'
     };
     let firstInvalid = null;
     const checkedGroups = new Set();
@@ -758,6 +760,23 @@ function bindYesNo(form) {
     });
 }
 
+// Tipo do pedido escolhido no topo do formulário (Reprografia: cópia colorida | plastificação):
+// só a parte do tipo escolhido fica aberta; data-kind-part="*" abre com qualquer tipo
+function bindKindChoice(form) {
+    const box = form.querySelector('[data-kind-choice]');
+    if (!box) return;
+    const apply = (focus) => {
+        const kind = box.querySelector('input:checked')?.value || '';
+        form.querySelectorAll('[data-kind-part]').forEach(part => {
+            const want = part.dataset.kindPart;
+            setFormPartOpen(part, kind !== '' && (want === '*' || want === kind));
+        });
+        if (focus) form.querySelector(`[data-kind-part="${CSS.escape(kind)}"] input:not([type="hidden"])`)?.focus();
+    };
+    box.addEventListener('change', () => apply(true));
+    apply(false);
+}
+
 // Data de hoje + n dias, no formato do campo de data
 function isoInDays(n) {
     const d = new Date();
@@ -773,6 +792,7 @@ function bindFormRequests() {
     form_requests.querySelectorAll('input[type="date"]').forEach(input => { input.min = isoInDays(1); });
 
     bindYesNo(form_requests);
+    bindKindChoice(form_requests);
 
     // "É urgente" pede o motivo
     const urgent = form_requests.querySelector('[data-urgent]');

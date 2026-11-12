@@ -182,7 +182,7 @@
         const form = currentForm();
         const box = form?.querySelector('[data-review]');
         if (!box || !chosen) return;
-        const title = (form.querySelector('[name="title"]')?.value || '').trim();
+        const title = (form.querySelector('[name="title"]:not(:disabled)')?.value || '').trim();
         const due = formatDate(form.querySelector('[name="end"]')?.value);
         const urgent = !!form.querySelector('[name="urgent"]')?.checked;
         const sectorName = chosen.dataset.sectorName || chosen.dataset.label || '';

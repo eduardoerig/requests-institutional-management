@@ -101,7 +101,7 @@ if (!function_exists('renderApproveRow')) {
     {
         $text = trim(str_replace("\r\n", "\n", (string)($row['descp'] ?? '')));
         if ($text === '' && !empty($row['qtd'])) {
-            $text = (int)$row['qtd'] . ' cópias' . (trim((string)($row['type'] ?? '')) !== '' ? ' · ' . trim((string)$row['type']) : '');
+            $text = xeroxSummary($row);
         }
         if (mb_strlen($text) > $max) {
             return [rtrim(mb_substr($text, 0, $max - 1)) . '…', true];

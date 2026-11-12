@@ -52,8 +52,8 @@ return [
         'icon' => 'fa-print',
         'form_type' => 'colorPrint',
         'form_file' => 'form_color_print.php',
-        'card_label' => 'Impressão colorida',
-        'examples' => 'Certificados, cartazes coloridos',
+        'card_label' => 'Reprografia',
+        'examples' => 'Cópia colorida e plastificação',
         'aliases' => ['xerox', 'reprografia'],
     ],
     'mkt' => [

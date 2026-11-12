@@ -179,14 +179,7 @@ function renderRequestView(PDO $pdo, array $req, string $sector, string $context
     }
 
     // Campos do tipo de pedido
-    $extra = [];
-    if ($sector === 'xerox') {
-        $extra['Arquivo'] = $req['arquive'] ?? '';
-        $extra['Cópias'] = $req['qtd'] ?? '';
-        $extra['Tamanho do papel'] = $req['type'] ?? '';
-    } elseif ($sector === 'mkt') {
-        $extra['Onde será usada'] = $req['type'] ?? '';
-    }
+    $extra = requestTypeFields($sector, $req);
 
     $subdivision = (string)($req['subdivision_name'] ?? '');
     if ($subdivision === '' && !array_key_exists('subdivision_name', $req) && !empty($req['subdivision_id'])) {
@@ -320,10 +313,7 @@ function renderRequestView(PDO $pdo, array $req, string $sector, string $context
     // O que foi pedido, no topo: a descrição; sem ela (reprografia), o essencial dos campos do tipo
     $ask = $desc;
     if ($ask === '' && $sector === 'xerox') {
-        $ask = implode(' · ', array_filter([
-            trim((string)($req['qtd'] ?? '')) !== '' ? (int)$req['qtd'] . ' cópias' : '',
-            trim((string)($req['type'] ?? '')) !== '' ? 'papel ' . trim((string)$req['type']) : '',
-        ]));
+        $ask = xeroxSummary($req);
     }
     // Motivo da urgência: primeira linha das observações ("Urgente: ...", gravada por api/add_request.php)
     $obs = trim((string)($req['obs'] ?? ''));

@@ -144,6 +144,7 @@ CREATE TABLE `ctd_xerox_frm` (
   `arquive` varchar(255) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci DEFAULT NULL,
   `qtd` int DEFAULT NULL,
   `type` varchar(50) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci DEFAULT NULL,
+  `kind` varchar(20) COLLATE utf8mb4_unicode_ci DEFAULT NULL COMMENT 'copia_colorida ou plastificacao; NULL = copia_colorida',
   `obs` varchar(2000) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci DEFAULT NULL,
   `status` enum('Y','N','P','W','C','F') CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci NOT NULL DEFAULT 'P',
   `table` varchar(50) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci NOT NULL DEFAULT 'xerox',

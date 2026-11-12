@@ -51,14 +51,7 @@ $created  = !empty($req['created_at']) ? date('d/m/Y \à\s H:i', strtotime((stri
 $number   = str_pad((string)$req_id, 4, '0', STR_PAD_LEFT);
 
 // Campos do tipo de pedido (os mesmos da tela do pedido)
-$extra = [];
-if ($req_table === 'xerox') {
-    $extra['Arquivo'] = $req['arquive'] ?? '';
-    $extra['Cópias'] = $req['qtd'] ?? '';
-    $extra['Tamanho do papel'] = $req['type'] ?? '';
-} elseif ($req_table === 'mkt') {
-    $extra['Onde será usada'] = $req['type'] ?? '';
-}
+$extra = requestTypeFields($req_table, $req);
 
 $facts = [
     'Setor' => sectorLabel($req_table),

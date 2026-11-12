@@ -124,29 +124,40 @@ switch ($sector) {
         break;
 
     case 'xerox':
-        $file = postText('file', 255);
+        // Dois tipos: cópia colorida (arquivo, cópias, papel) e plastificação (folhas e tamanho, sem arquivo).
+        // Sem kind (cliente antigo) = cópia colorida.
+        $kind = postText('kind', 20) ?: 'copia_colorida';
+        if (!array_key_exists($kind, xeroxKinds())) {
+            fail('Escolha se é cópia colorida ou plastificação.');
+        }
+        $isCopy = $kind === 'copia_colorida';
+        $unit = $isCopy ? 'cópias' : 'folhas';
+        $file = $isCopy ? postText('file', 255) : '';
         $qtdRaw = trim((string)($_POST['qtd'] ?? ''));
-        $model = postText('model', 50);
-        if ($file === '') {
+        $model = $isCopy ? postText('model', 50) : postText('size', 50);
+        if ($isCopy && $file === '') {
             fail('Informe onde está o arquivo para imprimir.');
         }
         if ($qtdRaw === '') {
-            fail('Informe quantas cópias você precisa.');
+            fail("Informe quantas $unit você precisa.");
         }
         if (!ctype_digit($qtdRaw)) {
-            fail('Use um número inteiro de cópias, sem vírgula nem ponto (ex.: 30).');
+            fail("Use um número inteiro de $unit, sem vírgula nem ponto (ex.: 30).");
         }
         if ((int)$qtdRaw < 1) {
-            fail('O número de cópias precisa ser maior que zero.');
+            fail("O número de $unit precisa ser maior que zero.");
         }
         if ((int)$qtdRaw > 100000) {
-            fail('O máximo é 100.000 cópias por pedido.');
+            fail("O máximo é 100.000 $unit por pedido.");
         }
-        if ($model === '') {
+        if ($isCopy && $model === '') {
             fail('Escolha o formato da impressão.');
         }
-        $sql = 'INSERT INTO ctd_xerox_frm (created_by, created_at, title, `date`, arquive, qtd, `type`, obs, priority, urgent, subdivision_id) VALUES (?, NOW(), ?, ?, ?, ?, ?, ?, ?, ?, ?)';
-        $params = [$_SESSION['id'], $title, $end, $file, (int)$qtdRaw, $model, $obs, $priority, $urgent, $subdivision_id];
+        if (!$isCopy && !in_array($model, ['A4', 'A3', 'Pequeno'], true)) {
+            fail('Escolha o tamanho da plastificação.');
+        }
+        $sql = 'INSERT INTO ctd_xerox_frm (created_by, created_at, title, `date`, arquive, qtd, `type`, kind, obs, priority, urgent, subdivision_id) VALUES (?, NOW(), ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)';
+        $params = [$_SESSION['id'], $title, $end, $file, (int)$qtdRaw, $model, $kind, $obs, $priority, $urgent, $subdivision_id];
         break;
 
     case 'mkt':
