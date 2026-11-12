@@ -71,7 +71,7 @@ if (!function_exists('renderInboxRow')) {
         $html .= '<a class="inbox-row__link" href="' . e($item['href']) . '" data-select="' . e($item['key']) . '">'
             . '<span class="inbox-row__top">'
             .   '<span class="inbox-row__title">' . e($row['title'] ?? 'Sem título') . '</span>'
-            .   ((int)($row['priority'] ?? 2) === 4 ? '<span class="prio-tag prio-tag--4">Crítica</span>' : '')
+            .   ((int)($row['priority'] ?? 2) === 4 ? '<span class="prio-tag prio-tag--4">Crítica</span>' : ($urgent ? '<span class="inbox-row__urgent">Urgente</span>' : ''))
             .   ($due !== '' ? '<span class="inbox-row__due' . ($dueKind !== '' ? ' inbox-row__due--' . e($dueKind) : '') . '">' . e($due) . '</span>' : '')
             . '</span>'
             . '<span class="inbox-row__sub">' . e(implode(' · ', $sub)) . '</span>'
