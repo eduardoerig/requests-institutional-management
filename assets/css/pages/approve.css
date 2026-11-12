@@ -10,12 +10,12 @@
 
 /* ---------- Topo ---------- */
 .page-approve .page-head h1 { font-size: 30px; font-weight: 600; letter-spacing: -0.03em; line-height: 1.15; }
-.ap-summary { margin: 0; font-size: 13.5px; color: var(--texto-2); }
+.ap-summary { margin: 0; font-size: 14px; color: var(--texto-2); }
 .ap-summary strong { color: var(--texto); font-weight: 600; }
 .ap-summary__urgent { color: var(--perigo); font-weight: 600; }
 .ap-summary [hidden] { display: none; }
 
-.ap-note { margin: 0 0 12px; font-size: 13.5px; color: var(--texto-2); }
+.ap-note { margin: 0 0 12px; font-size: 14px; color: var(--texto-2); }
 .ap-note a { margin-left: 4px; font-weight: 600; color: var(--laranja-escuro); }
 
 .ap-body > .ap-empty { padding: 48px 20px; color: var(--texto-2); }
@@ -36,11 +36,11 @@
     margin: 0;
     padding: 0 4px 8px;
     border-bottom: 1px solid var(--linha-suave);
-    font-size: 13px;
+    font-size: 14px;
     font-weight: 600;
     color: var(--texto-2);
 }
-.ap-group__title span { font-size: 13px; font-weight: 500; color: var(--texto-4); font-variant-numeric: tabular-nums; }
+.ap-group__title span { font-size: 14px; font-weight: 500; color: var(--texto-4); font-variant-numeric: tabular-nums; }
 .ap-group--urgentes .ap-group__title { color: var(--perigo); }
 
 .ap-rows { list-style: none; margin: 0; padding: 0; }
@@ -73,17 +73,17 @@
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
-    font-size: 15px;
+    font-size: 16px;
     font-weight: 600;
 }
 .ap-row__sub {
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
-    font-size: 13px;
+    font-size: 14px;
     color: var(--texto-4);
 }
-.ap-row__due { font-size: 13px; font-weight: 500; color: var(--texto-2); font-variant-numeric: tabular-nums; }
+.ap-row__due { font-size: 14px; font-weight: 500; color: var(--texto-2); font-variant-numeric: tabular-nums; }
 .ap-row__due--bad { color: var(--perigo); font-weight: 600; }
 .ap-row__due--warn { color: var(--aviso); font-weight: 600; }
 .ap-row__due--muted { font-weight: 400; color: var(--texto-4); }
@@ -130,7 +130,7 @@
     border-radius: var(--r-pill);
     background: var(--perigo-claro);
     color: var(--perigo);
-    font-size: 13px;
+    font-size: 14px;
     font-weight: 600;
 }
 
@@ -141,14 +141,14 @@
     padding: 18px 18px 20px;
     border-radius: 20px;
     background: var(--superficie);
-    box-shadow: 0 0 0 1px rgb(16 16 24 / .05);
+    border: 1px solid var(--linha-forte);
     scroll-margin-top: calc(var(--topbar-h) + 12px);
 }
 .ap-detail[hidden] { display: none; }
 
 .ap-detail__bar { display: flex; align-items: center; gap: 8px; min-height: var(--h-sm); }
 .ap-detail__list { margin-left: -8px; }
-.ap-detail__pos { font-size: 13px; font-weight: 500; color: var(--texto-2); font-variant-numeric: tabular-nums; }
+.ap-detail__pos { font-size: 14px; font-weight: 500; color: var(--texto-2); font-variant-numeric: tabular-nums; }
 .ap-detail__pager { display: flex; gap: 2px; margin-left: auto; }
 .ap-detail__pager .btn { min-width: var(--h-md); padding: 0 10px; }
 .ap-detail__pager .btn:disabled { opacity: .35; cursor: default; }
@@ -159,7 +159,7 @@
     border-radius: var(--r-2);
     background: var(--perigo-claro);
     color: var(--perigo);
-    font-size: 13.5px;
+    font-size: 14px;
     line-height: 1.45;
     overflow-wrap: anywhere;
 }
@@ -174,7 +174,7 @@
 /* O que é, quem faz, para quando */
 .ap-facts { display: grid; gap: 14px; margin: 0; padding: 0; }
 .ap-facts > div { display: grid; gap: 3px; min-width: 0; }
-.ap-facts dt { font-size: 13px; font-weight: 500; color: var(--texto-4); }
+.ap-facts dt { font-size: 14px; font-weight: 500; color: var(--texto-4); }
 .ap-facts dd { margin: 0; font-size: var(--t-md); line-height: 1.5; overflow-wrap: anywhere; }
 .ap-text { margin: 0; white-space: pre-line; }
 .ap-more { display: inline-block; margin-top: 4px; font-size: var(--t-sm); font-weight: 600; color: var(--laranja-escuro); }
@@ -184,7 +184,7 @@
 
 .ap-partners dd { display: flex; flex-wrap: wrap; align-items: center; gap: 2px 10px; }
 .ap-partners__names { font-weight: 600; }
-.ap-partners__origin { font-size: 13px; color: var(--texto-4); }
+.ap-partners__origin { font-size: 14px; color: var(--texto-4); }
 .ap-partners [hidden] { display: none; }
 .ap-link {
     display: inline-flex;
@@ -206,7 +206,7 @@
 .ap-link:focus-visible { outline: none; box-shadow: var(--anel); border-radius: 4px; }
 
 /* O que acontece ao aprovar */
-.ap-detail__hint { margin: 0; font-size: 13.5px; color: var(--texto-2); line-height: 1.45; }
+.ap-detail__hint { margin: 0; font-size: 14px; color: var(--texto-2); line-height: 1.45; }
 
 /* Perguntar | Recusar | Aprovar: só Aprovar tem a cor cheia */
 .ap-actions {
@@ -370,8 +370,8 @@
     .ap-list__back, .ap-detail__list { display: none; }
 
     .ap-row__link { padding: 12px; }
-    .ap-row__title { font-size: 14.5px; }
-    .ap-row__sub { font-size: 13px; }
+    .ap-row__title { font-size: 16px; }
+    .ap-row__sub { font-size: 14px; }
     /* Selecionado só no PC, onde o painel mostra o pedido ao lado */
     .ap-row.is-selected { background: var(--laranja-claro); }
 
@@ -382,12 +382,13 @@
         overflow: auto;
         border-radius: 20px;
         background: var(--superficie);
-        box-shadow: 0 16px 48px rgb(16 16 24 / .08), 0 0 0 1px rgb(16 16 24 / .04);
+        border: 1px solid var(--linha-forte);
+        box-shadow: 0 16px 48px rgb(16 16 24 / .08);
     }
-    .ap-detail { padding: 20px 24px 0; border-radius: 0; background: transparent; box-shadow: none; }
+    .ap-detail { padding: 20px 24px 0; border: 0; border-radius: 0; background: transparent; box-shadow: none; }
     .ap-detail__title { font-size: 24px; }
     .ap-facts > div { grid-template-columns: 150px minmax(0, 1fr); gap: 16px; align-items: baseline; }
-    .ap-facts dt { font-size: 13px; }
+    .ap-facts dt { font-size: 14px; }
     .ap-state { border: 0; border-radius: 0; padding: 64px 24px; }
 
     /* Botões no pé do painel, sempre à vista mesmo com descrição longa */
