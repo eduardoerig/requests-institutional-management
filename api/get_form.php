@@ -59,7 +59,7 @@ $priorityHtml = '
         <label class="check-line urgent-switch" for="urgent">
             <span class="urgent-switch__text">
                 <span class="urgent-switch__title">É urgente</span>
-                <span class="urgent-switch__hint">Está parando uma aula ou o trabalho. Quem aprova e quem atende veem o pedido em destaque.</span>
+                <span class="urgent-switch__hint">Só se algo está parado agora, como uma aula.</span>
             </span>
             <input type="checkbox" role="switch" name="urgent" value="1" id="urgent" data-urgent>
         </label>

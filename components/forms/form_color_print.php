@@ -27,7 +27,7 @@
             </div>
             <div class="form-group">
                 <label for="file">Onde está o arquivo? <span class="req">*</span></label>
-                <input type="text" name="file" id="file" required maxlength="255" placeholder="Nome do arquivo, e-mail em que foi enviado ou link">
+                <input type="text" name="file" id="file" required maxlength="255" placeholder="Ex.: e-mail de hoje, pasta ou link">
             </div>
 <!--ANEXOS:pdf-->
             <div class="form-row">

@@ -51,6 +51,8 @@
 .form-step__title { display: none; }
 .nr-form .form-group > label,
 .nr-form .form-group > legend { font-size: 15px; }
+.nr-form .form-group { margin-bottom: 20px; } /* mesmo espaço entre campos em todos os formulários */
+.nr-form .form-extras > .form-group, .nr-form .yesno__panel .form-group:last-child { margin-bottom: 0; }
 .nr-form input[type="text"],
 .nr-form input[type="url"],
 .nr-form input[type="number"],
