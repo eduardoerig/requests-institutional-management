@@ -118,11 +118,11 @@ $formHtml = preg_replace_callback('/<!--ANEXOS(?::(pdf))?-->/', function (array 
             <div class="form-group attach" data-attach data-ext="' . e(implode(',', $exts)) . '" data-max-file="' . $maxFile . '"'
         . ' data-max-total="' . RequestAttachments::maxTotalBytes() . '" data-max-files="' . RequestAttachments::MAX_FILES . '"'
         . ' data-size-label="' . e(RequestAttachments::sizeLabel($maxFile)) . '"' . ($profile === 'pdf' ? ' data-attach-relaxes="file"' : '') . '>
-                <span class="attach__label">' . ($profile === 'pdf' ? 'Anexar o PDF' : 'Anexar arquivo') . ' <small>(opcional)</small></span>
-                <small class="form-hint">' . e($hint) . '</small>
-                <label class="btn btn--sm attach__pick" for="attachments_' . $n . '"><i class="fa-solid fa-paperclip" aria-hidden="true"></i> Escolher arquivo</label>
+                <label class="link-add attach__pick" for="attachments_' . $n . '"><i class="fa-solid fa-plus" aria-hidden="true"></i> '
+        . ($profile === 'pdf' ? 'Anexar o PDF' : 'Anexar arquivo') . '</label>
                 <input type="file" class="visually-hidden" name="attachments[]" id="attachments_' . $n . '" multiple accept="' . e($accept) . '" data-attach-input>
                 <ul class="attach__list" data-attach-list></ul>
+                <small class="form-hint" data-attach-hint hidden>' . e($hint) . '</small>
             </div>
 ';
 }, $formHtml);

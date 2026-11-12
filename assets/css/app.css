@@ -936,24 +936,50 @@ details.panel[open] > summary::after { transform: rotate(180deg); }
 .form-more summary small { font-weight: 400; }
 .form-more[open] summary { margin-bottom: 8px; }
 .form-more textarea { min-height: 72px; }
-/* Lista de linhas no formulário (itens de Compras, links do Marketing): bindRepeater() */
+/* Extra opcional como link de texto ("+ Anexar arquivo", "+ Adicionar item"): sem borda nem fundo */
+.link-add {
+    display: inline-flex; align-items: center; gap: 8px;
+    align-self: flex-start;
+    min-height: 40px; padding: 0 2px;
+    border: 0; background: none;
+    color: var(--laranja-escuro); font: inherit; font-size: var(--t-sm); font-weight: 600;
+    cursor: pointer;
+}
+.link-add:hover { text-decoration: underline; }
+.link-add:focus-visible { outline: none; box-shadow: var(--anel); border-radius: var(--r-1); }
+.link-add i { font-size: 12px; }
+.form-group > label.link-add { font-size: var(--t-sm); font-weight: 600; } /* o rótulo comum do grupo é maior */
+/* "×" de tirar linha ou arquivo: só o ícone, cinza */
+.icon-x {
+    flex: none; display: inline-grid; place-items: center;
+    width: 36px; height: 36px; padding: 0;
+    border: 0; border-radius: 50%; background: none;
+    color: var(--texto-3); cursor: pointer;
+}
+.icon-x:hover { background: var(--fundo-2); color: var(--texto); }
+.icon-x:focus-visible { outline: none; box-shadow: var(--anel); }
+/* Extras juntos, numa linha de links; o que já tem conteúdo ocupa a largura toda */
+.form-extras { display: flex; flex-wrap: wrap; align-items: flex-start; gap: 0 24px; margin: 0 0 16px; }
+.form-extras > .form-group { margin: 0; flex: 0 1 auto; }
+.form-extras > .has-rows, .form-extras > .has-files { flex-basis: 100%; }
+/* Lista de linhas no formulário (itens de Compras, links do Marketing): bindRepeater().
+   Sem linhas, só o link aparece; título e ajuda vêm com a primeira linha */
+.repeater:not(.has-rows) > legend, .repeater:not(.has-rows) > .form-hint { display: none; }
 .repeater__rows { display: flex; flex-direction: column; gap: 10px; }
 .repeater__rows:empty { display: none; }
 /* Anexos no formulário (bindAttachments) e na tela do pedido (RequestAttachments::html) */
-.attach__label { font-weight: 600; font-size: var(--t-md); }
-.attach__label small { font-weight: 400; color: var(--texto-2); }
-.attach__pick { align-self: flex-start; cursor: pointer; }
-.attach:has(input:focus-visible) .attach__pick { box-shadow: var(--anel); }
+.attach { gap: 6px; }
+.attach:has(input:focus-visible) .attach__pick { box-shadow: var(--anel); border-radius: var(--r-1); }
 .attach__list { margin: 0; padding: 0; list-style: none; display: flex; flex-direction: column; gap: 6px; }
 .attach__list:empty { display: none; }
-.attach__item { display: flex; align-items: center; gap: 8px; padding: 6px 6px 6px 12px; border: 1px solid var(--linha); border-radius: var(--r-2); background: var(--superficie); }
+.attach__item { display: flex; align-items: center; gap: 8px; padding: 2px 2px 2px 12px; border-radius: var(--r-2); background: var(--fundo-2); }
 .attach__name { flex: 1; min-width: 0; overflow-wrap: anywhere; font-weight: 600; }
 .attach__item small { color: var(--texto-2); white-space: nowrap; }
-.attach__remove { flex: none; min-width: 36px; }
+
 .req-files { margin: 0; padding: 0; list-style: none; display: flex; flex-direction: column; gap: 4px; }
 .req-files a { font-weight: 600; overflow-wrap: anywhere; }
 .req-files small { color: var(--texto-2); }
-.repeater__row { display: flex; align-items: flex-start; gap: 8px; padding: 10px; border: 1px solid var(--linha); border-radius: var(--r-2); background: var(--superficie); }
+.repeater__row { display: flex; align-items: flex-start; gap: 6px; padding: 10px 4px 10px 10px; border-radius: var(--r-2); background: var(--fundo-2); }
 .repeater__fields { flex: 1; display: grid; gap: 8px; min-width: 0; }
 .repeater__fields input { width: 100%; min-width: 0; }
 @media (min-width: 600px) {
@@ -961,7 +987,7 @@ details.panel[open] > summary::after { transform: rotate(180deg); }
     .repeater__fields--item [data-field="url"] { grid-column: 1 / -1; }
     .repeater__fields--link { grid-template-columns: minmax(0, 3fr) minmax(0, 2fr); }
 }
-.repeater__remove { flex: none; min-width: 40px; }
+
 .repeater__add { align-self: flex-start; }
 /* Itens e links já gravados (página do pedido, Aprovar) */
 .req-items { margin: 0; padding-left: 18px; display: flex; flex-direction: column; gap: 4px; }

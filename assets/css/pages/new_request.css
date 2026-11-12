@@ -57,6 +57,7 @@
 .nr-form input[type="date"] { min-height: var(--h-lg); padding: 0 16px; font-size: 17px; }
 .nr-form textarea { padding: 14px 16px; font-size: 17px; }
 .nr-form .aplication_select label { font-size: var(--t-md); }
+.nr-form .form-group > label.link-add { font-size: var(--t-sm); }
 
 /* Tipo do pedido (Reprografia: cópia colorida | plastificação): dois cartões grandes */
 .kind-choice__options { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
