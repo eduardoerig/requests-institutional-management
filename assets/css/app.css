@@ -13,11 +13,11 @@
     --superficie: #FFFFFF;
     --linha: #E4E4E7;
     --linha-forte: #D4D4D8;
-    --linha-suave: #EFEFF3; /* divisória de lista no padrão clean */
+    --linha-suave: #E4E4E7; /* divisória de lista no padrão clean (= --linha: a mais clara sumia na tela) */
     --texto: #18181B;
     --texto-2: #52525B;
     --texto-3: #52525B;
-    --texto-4: #6B6B76; /* cinza de apoio (padrão clean): o mais claro permitido para texto, 4,6:1+ em --fundo e --fundo-2 */
+    --texto-4: #52525B; /* cinza de apoio (padrão clean): igual ao --texto-2 (7:1). O #6B6B76 passava no mínimo, mas em 12px ficava difícil de ler */
     --texto-inv: #FFFFFF;
     --texto-inv-2: #D6D6DC;
     --linha-inv: rgb(255 255 255 / .35);

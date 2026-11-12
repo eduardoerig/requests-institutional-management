@@ -35,7 +35,7 @@
 }
 .mr-tab:hover { background: var(--fundo-2); color: var(--texto); }
 .mr-tab:focus-visible { outline: none; box-shadow: var(--anel); }
-.mr-tab span { font-size: 12.5px; color: var(--texto-4); font-variant-numeric: tabular-nums; }
+.mr-tab span { font-size: 13px; color: var(--texto-4); font-variant-numeric: tabular-nums; }
 .mr-tab.is-active { background: var(--laranja-claro); color: var(--laranja-escuro); font-weight: 600; }
 .mr-tab.is-active span { color: var(--laranja-escuro); }
 
@@ -129,7 +129,7 @@
 .mr-due i { font-size: 12px; color: var(--linha-forte); }
 .mr-due--warn, .mr-due--warn i { color: var(--aviso); font-weight: 600; }
 .mr-due--bad, .mr-due--bad i { color: var(--perigo); font-weight: 600; }
-.mr-urgent { font-size: 12.5px; font-weight: 600; color: var(--perigo); }
+.mr-urgent { font-size: 13px; font-weight: 600; color: var(--perigo); }
 .mr-open { display: none; }
 .mr-row.is-done .mr-ttl { font-weight: 500; color: var(--texto-2); }
 
