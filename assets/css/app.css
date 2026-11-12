@@ -13,9 +13,11 @@
     --superficie: #FFFFFF;
     --linha: #E4E4E7;
     --linha-forte: #D4D4D8;
+    --linha-suave: #EFEFF3; /* divisória de lista no padrão clean */
     --texto: #18181B;
     --texto-2: #52525B;
     --texto-3: #52525B;
+    --texto-4: #6B6B76; /* cinza de apoio (padrão clean): o mais claro permitido para texto, 4,6:1+ em --fundo e --fundo-2 */
     --texto-inv: #FFFFFF;
     --texto-inv-2: #D6D6DC;
     --linha-inv: rgb(255 255 255 / .35);

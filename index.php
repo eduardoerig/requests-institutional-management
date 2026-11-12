@@ -88,6 +88,9 @@ $assetPage = $logged ? $pageClass : 'login';
 // Bibliotecas de terceiros (assets/vendor/<lib>-<versão>/) só nas telas que usam
 $comboPages = ['accounts']; // <select data-combo>: Tom Select + assets/js/combo.js
 $useCombo = in_array($assetPage, $comboPages, true);
+// Gaveta do pedido (components/request_peek.php): CSS e JS comuns só nas telas que a usam
+$peekPages = ['home', 'myRequests'];
+$usePeek = in_array($assetPage, $peekPages, true);
 ?>
 <!DOCTYPE html>
 <html lang="pt-br">
@@ -106,6 +109,9 @@ $useCombo = in_array($assetPage, $comboPages, true);
     <?php if ($useCombo): ?>
     <link rel="stylesheet" href="assets/vendor/tom-select-2.6.2/tom-select.min.css">
     <link rel="stylesheet" href="assets/css/combo.css?v=<?php echo $assetVersion; ?>">
+    <?php endif; ?>
+    <?php if ($usePeek): ?>
+    <link rel="stylesheet" href="assets/css/peek.css?v=<?php echo $assetVersion; ?>">
     <?php endif; ?>
     <?php if (is_file(__DIR__ . '/assets/css/pages/' . $assetPage . '.css')): ?>
     <link rel="stylesheet" href="assets/css/pages/<?= e($assetPage) ?>.css?v=<?php echo $assetVersion; ?>">
@@ -369,6 +375,9 @@ $useCombo = in_array($assetPage, $comboPages, true);
     <?php if ($useCombo): ?>
     <script src="assets/vendor/tom-select-2.6.2/tom-select.complete.min.js"></script>
     <script src="assets/js/combo.js?v=<?php echo $assetVersion; ?>"></script>
+    <?php endif; ?>
+    <?php if ($usePeek): ?>
+    <script src="assets/js/peek.js?v=<?php echo $assetVersion; ?>"></script>
     <?php endif; ?>
     <?php if (is_file(__DIR__ . '/assets/js/pages/' . $assetPage . '.js')): ?>
     <script src="assets/js/pages/<?= e($assetPage) ?>.js?v=<?php echo $assetVersion; ?>"></script>

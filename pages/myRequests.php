@@ -1,11 +1,12 @@
 <?php
 /**
- * Minhas requisições (UI 2.0): o que a pessoa pediu, em cartões.
- * Abas Em andamento / Concluídos; cada cartão diz em que etapa o pedido está e com quem.
- * No topo, a resposta mais recente de outra pessoa num pedido aberto (se houver).
+ * Minhas requisições (padrão clean): o que a pessoa pediu, em linhas.
+ * Abas Em andamento / Concluídos; cada linha diz com quem o pedido está e o prazo.
+ * Clicar abre a gaveta (components/request_peek.php) com as etapas e a conversa.
+ * No topo, uma linha com a resposta mais recente de outra pessoa num pedido aberto (se houver).
  */
 require_once __DIR__ . '/../classes/RequestInbox.php';
-require_once __DIR__ . '/../components/my_request_card.php';
+require_once __DIR__ . '/../components/my_request_row.php';
 require_once __DIR__ . '/../components/welcome_card.php';
 
 $userId = (int)$_SESSION['id'];
@@ -52,6 +53,7 @@ if (!$searching && $tab === 'andamento') {
                 'href' => 'request_detail?id=' . (int)$row['id'] . '&table=' . urlencode((string)$row['table']),
                 'who' => explode(' ', trim((string)$c['user_name']))[0] ?: 'O setor',
                 'id' => (int)$row['id'],
+                'row' => 'mr-' . requestSlug((string)$row['table']) . '-' . (int)$row['id'],
                 'text' => mb_strimwidth(preg_replace('/\s+/', ' ', trim((string)$c['comment'])), 0, 160, '…'),
             ];
         }
@@ -64,19 +66,23 @@ $emptyText = $tab === 'andamento'
     ? 'Nenhum pedido em andamento. Precisa de algo? Toque em Novo pedido.'
     : 'Nenhum pedido concluído ainda. Quando o setor terminar um pedido seu, ele vem para cá.';
 $firstName = explode(' ', trim((string)($_SESSION['name'] ?? '')))[0];
+$openCount = (int)$mine['counts']['andamento'];
 ?>
 <div class="mr">
     <header class="mr-head">
         <div class="mr-head__text">
             <?php if ($firstName !== ''): ?><span class="mr-head__hello">Olá, <?= e($firstName) ?></span><?php endif; ?>
             <h1>Meus pedidos</h1>
+            <?php if ($total > 0): ?>
+                <p class="mr-sub"><?= $openCount === 0 ? 'Nenhum pedido em andamento' : ($openCount === 1 ? '1 pedido em andamento' : $openCount . ' pedidos em andamento') ?></p>
+            <?php endif; ?>
         </div>
         <a href="new_request" class="btn btn--primary mr-head__new"><i class="fa-solid fa-plus" aria-hidden="true"></i> Novo pedido</a>
     </header>
     <?= renderWelcomeCard((string)($_SESSION['role'] ?? ''), $userId) ?>
 
 <?php if ($total === 0 && !$searching): ?>
-    <div class="empty-big card">
+    <div class="mr-empty mr-empty--big">
         <i class="fa-regular fa-folder-open" aria-hidden="true"></i>
         <h2>Você ainda não fez nenhum pedido</h2>
         <p>Precisa de algo da TI, da manutenção, de compras, da reprografia ou do marketing? Comece por aqui.</p>
@@ -84,46 +90,45 @@ $firstName = explode(' ', trim((string)($_SESSION['name'] ?? '')))[0];
     </div>
 <?php else: ?>
     <div class="mr-bar">
-        <nav class="tabs mr-tabs" aria-label="Meus pedidos">
+        <nav class="mr-tabs" aria-label="Meus pedidos">
             <?php foreach ($tabs as $key => $label):
                 $on = $tab === $key && !$searching;
             ?>
-                <a class="tab<?= $on ? ' is-active' : '' ?>" href="<?= e($tabLink($key)) ?>"<?= $on ? ' aria-current="page"' : '' ?>>
-                    <?= e($label) ?> <span>· <?= (int)$mine['counts'][$key] ?></span>
-                </a>
+                <a class="mr-tab<?= $on ? ' is-active' : '' ?>" href="<?= e($tabLink($key)) ?>"<?= $on ? ' aria-current="page"' : '' ?>><?= e($label) ?> <span><?= (int)$mine['counts'][$key] ?></span></a>
             <?php endforeach; ?>
         </nav>
         <form method="get" action="myRequests" class="mr-search" role="search">
             <input type="hidden" name="tab" value="<?= e($tab) ?>">
-            <div class="search-box">
-                <i class="fas fa-search" aria-hidden="true"></i>
-                <input type="search" name="q" value="<?= e($q) ?>" placeholder="Buscar pelo título ou número" aria-label="Buscar pelo título ou número">
-            </div>
+            <label class="mr-search__box">
+                <i class="fa-solid fa-magnifying-glass" aria-hidden="true"></i>
+                <span class="visually-hidden">Buscar pelo título ou número</span>
+                <input type="search" name="q" value="<?= e($q) ?>" placeholder="Buscar pelo título ou número">
+            </label>
         </form>
     </div>
 
     <?php if ($reply): ?>
-        <a class="mr-reply" href="<?= e($reply['href']) ?>">
-            <span class="mr-reply__who"><?= e($reply['who']) ?> respondeu no pedido nº <?= (int)$reply['id'] ?></span>
-            <span class="mr-reply__text">“<?= e($reply['text']) ?>”</span>
-            <span class="mr-reply__go">Ver conversa <i class="fa-solid fa-arrow-right" aria-hidden="true"></i></span>
-        </a>
+        <p class="mr-notice">
+            <i class="fa-regular fa-comment" aria-hidden="true"></i>
+            <span class="mr-notice__text"><strong><?= e($reply['who']) ?></strong> respondeu no pedido nº <?= (int)$reply['id'] ?>: “<?= e($reply['text']) ?>”</span>
+            <a href="<?= e($reply['href']) ?>" data-peek-from="<?= e($reply['row']) ?>">Ver conversa</a>
+        </p>
     <?php endif; ?>
 
-    <section class="mr-list-wrap" aria-label="Pedidos">
+    <section class="mr-list" aria-label="Pedidos">
         <?php if ($searching): ?>
             <p class="mr-note"><?= count($rows) === 1 ? '1 pedido encontrado' : count($rows) . ' pedidos encontrados' ?> para "<?= e($q) ?>". <a href="<?= e($tabLink($tab)) ?>">Limpar busca</a></p>
         <?php endif; ?>
 
         <?php if ($rows): ?>
-            <ul class="mr-list">
-                <?php foreach ($rows as $row): ?>
-                    <?= renderMyRequestCard($row, ['tab' => $row['tab_label'] ?? '']) ?>
-                <?php endforeach; ?>
-            </ul>
+            <?php foreach ($rows as $row): ?>
+                <?= renderMyRequestRow($row, ['tab' => $row['tab_label'] ?? '']) ?>
+            <?php endforeach; ?>
         <?php else: ?>
-            <div class="empty-state card"><i class="fa-regular fa-circle-check" aria-hidden="true"></i><p><?= e($searching ? 'Nenhum pedido com "' . $q . '" no título ou no número.' : $emptyText) ?></p></div>
+            <div class="mr-empty"><i class="fa-regular fa-circle-check" aria-hidden="true"></i><p><?= e($searching ? 'Nenhum pedido com "' . $q . '" no título ou no número.' : $emptyText) ?></p></div>
         <?php endif; ?>
     </section>
 <?php endif; ?>
 </div>
+
+<?php include __DIR__ . '/../components/request_peek.php'; ?>
