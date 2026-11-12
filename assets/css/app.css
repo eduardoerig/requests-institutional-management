@@ -934,6 +934,20 @@ details.panel[open] > summary::after { transform: rotate(180deg); }
 /* Lista de linhas no formulário (itens de Compras, links do Marketing): bindRepeater() */
 .repeater__rows { display: flex; flex-direction: column; gap: 10px; }
 .repeater__rows:empty { display: none; }
+/* Anexos no formulário (bindAttachments) e na tela do pedido (RequestAttachments::html) */
+.attach__label { font-weight: 600; font-size: var(--t-md); }
+.attach__label small { font-weight: 400; color: var(--texto-2); }
+.attach__pick { align-self: flex-start; cursor: pointer; }
+.attach:has(input:focus-visible) .attach__pick { box-shadow: var(--anel); }
+.attach__list { margin: 0; padding: 0; list-style: none; display: flex; flex-direction: column; gap: 6px; }
+.attach__list:empty { display: none; }
+.attach__item { display: flex; align-items: center; gap: 8px; padding: 6px 6px 6px 12px; border: 1px solid var(--linha); border-radius: var(--r-2); background: var(--superficie); }
+.attach__name { flex: 1; min-width: 0; overflow-wrap: anywhere; font-weight: 600; }
+.attach__item small { color: var(--texto-2); white-space: nowrap; }
+.attach__remove { flex: none; min-width: 36px; }
+.req-files { margin: 0; padding: 0; list-style: none; display: flex; flex-direction: column; gap: 4px; }
+.req-files a { font-weight: 600; overflow-wrap: anywhere; }
+.req-files small { color: var(--texto-2); }
 .repeater__row { display: flex; align-items: flex-start; gap: 8px; padding: 10px; border: 1px solid var(--linha); border-radius: var(--r-2); background: var(--superficie); }
 .repeater__fields { flex: 1; display: grid; gap: 8px; min-width: 0; }
 .repeater__fields input { width: 100%; min-width: 0; }

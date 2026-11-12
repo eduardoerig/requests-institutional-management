@@ -171,6 +171,7 @@ Cada pedido tem conversa com quem pediu e uma conversa só entre setores, histó
 6. **PHP em produção**: `display_errors=Off`, `log_errors=On`, sem Xdebug, OPcache ligado.
 7. **HTTPS**: o `.htaccess` redireciona para HTTPS fora de `localhost`; instale o certificado (ex.: AutoSSL no cPanel).
 8. **Backup diário** do MySQL (cron com `mysqldump --single-transaction ... | gzip`). Teste a restauração ao menos uma vez.
+9. **Anexos dos pedidos**: ficam em `uploads/` (ou em `UPLOAD_DIR`), fora do git e bloqueados pelo `.htaccess`; entram no backup junto com o banco. O sistema aceita até 5 arquivos de 20 MB (50 MB por pedido), mas o PHP corta antes se `upload_max_filesize` e `post_max_size` forem menores: use `upload_max_filesize=20M` e `post_max_size=55M`. A tela mostra sempre o limite que vale no servidor.
 
 ### Configuração opcional
 
@@ -180,3 +181,4 @@ Cada pedido tem conversa com quem pediu e uma conversa só entre setores, histó
 | `ORG_LOGO` / `org_logo` | Logo (caminho dentro de `assets/`) |
 | `BOT_ENABLED=1` / `bot_enabled` | Liga a integração com WhatsApp (desligada por padrão) |
 | `BOT_KEY` / `bot_key` | Chave longa exigida pelo bot no cabeçalho `X-Bot-Key` |
+| `UPLOAD_DIR` / `upload_dir` | Pasta dos anexos (padrão `uploads/` na raiz; de preferência fora da pasta pública) |

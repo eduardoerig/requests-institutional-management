@@ -28,6 +28,7 @@
             <label for="details">Detalhes <span class="req" data-details-req>*</span></label>
             <textarea name="details" id="details" required rows="4" maxlength="5000" data-message="Explique o que você precisa ou liste os itens acima." placeholder="Modelo, marca de preferência ou qualquer explicação que ajude Compras."></textarea>
         </div>
+<!--ANEXOS-->
         <div class="form-group date-group">
             <label for="end">Para quando? <span class="req">*</span></label>
             <div class="date-field">

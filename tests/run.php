@@ -15,6 +15,7 @@ if (PHP_SAPI !== 'cli') {
 }
 
 require dirname(__DIR__) . '/config/conn.php';
+require_once dirname(__DIR__) . '/includes/helpers.php'; // uploadDir()
 
 $baseUrl = rtrim(getenv('TEST_BASE_URL') ?: 'http://localhost/requests2.0/', '/') . '/';
 $password = getenv('TEST_PASSWORD') ?: '';
@@ -42,7 +43,7 @@ final class Client
         $this->jar = tempnam(sys_get_temp_dir(), 'sisreq');
     }
 
-    public function request(string $method, string $path, array $data = [], array $headers = []): array
+    public function request(string $method, string $path, array $data = [], array $headers = [], bool $multipart = false): array
     {
         $ch = curl_init($this->base . ltrim($path, '/'));
         curl_setopt_array($ch, [
@@ -55,7 +56,7 @@ final class Client
             CURLOPT_CUSTOMREQUEST => $method,
         ]);
         if ($method === 'POST') {
-            curl_setopt($ch, CURLOPT_POSTFIELDS, http_build_query($data));
+            curl_setopt($ch, CURLOPT_POSTFIELDS, $multipart ? $data : http_build_query($data));
         }
         $body = (string)curl_exec($ch);
         $status = (int)curl_getinfo($ch, CURLINFO_HTTP_CODE);
@@ -76,6 +77,19 @@ final class Client
             $this->refreshCsrf();
         }
         return $this->request('POST', $path, $data + ['csrf_token' => $this->csrf]);
+    }
+
+    /** POST multipart com arquivos em attachments[] (campos simples; listas em "nome[0]") */
+    public function postFiles(string $path, array $data, array $files): array
+    {
+        if ($this->csrf === '') {
+            $this->refreshCsrf();
+        }
+        $fields = $data + ['csrf_token' => $this->csrf];
+        foreach (array_values($files) as $i => $file) {
+            $fields["attachments[$i]"] = $file;
+        }
+        return $this->request('POST', $path, $fields, [], true);
     }
 
     public function refreshCsrf(): void
@@ -236,6 +250,45 @@ $res = $sol->post('api/add_request.php', ['size' => 'A0'] + $plast);
 check('plastificação com tamanho fora da lista é recusada', ($res['json']['success'] ?? true) === false, snippet($res));
 $res = $sol->post('api/add_request.php', ['kind' => 'copia_colorida', 'file' => ''] + $plast);
 check('cópia colorida sem arquivo continua recusada', ($res['json']['success'] ?? true) === false && str_contains($res['json']['message'] ?? '', 'arquivo'), snippet($res));
+// Anexos (sempre opcionais; cópia colorida só PDF)
+$tmpDir = sys_get_temp_dir() . '/sisreq_anexos_' . bin2hex(random_bytes(4));
+mkdir($tmpDir);
+$mkFile = function (string $name, string $bytes, string $mime) use ($tmpDir): CURLFile {
+    file_put_contents("$tmpDir/$name", $bytes);
+    return new CURLFile("$tmpDir/$name", $mime, $name);
+};
+$pdfBytes = "%PDF-1.4\n1 0 obj<</Type/Catalog/Pages 2 0 R>>endobj\n2 0 obj<</Type/Pages/Kids[]/Count 0>>endobj\ntrailer<</Root 1 0 R>>\n%%EOF\n";
+$pngBytes = base64_decode('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==');
+$copyBase = ['type' => 'colorPrint', 'kind' => 'copia_colorida', 'title' => 'Teste anexo PDF', 'end' => $future, 'file' => '', 'qtd' => '5', 'model' => 'A4'];
+$res = $sol->postFiles('api/add_request.php', $copyBase, [$mkFile('certificados.pdf', $pdfBytes, 'application/pdf')]);
+$attReqId = (int)($res['json']['id'] ?? 0);
+if ($attReqId) { $createdIds[] = ['xerox', $attReqId]; }
+$attRow = $attReqId ? $pdo->query("SELECT id, original_name, stored_name, mime FROM request_attachments WHERE request_table = 'xerox' AND request_id = $attReqId")->fetch(PDO::FETCH_ASSOC) : false;
+check('cópia colorida com PDF anexado dispensa "onde está o arquivo"', $attReqId > 0 && $attRow && $attRow['original_name'] === 'certificados.pdf'
+    && is_file(uploadDir() . '/' . $attRow['stored_name']), snippet($res));
+$res = $sol->postFiles('api/add_request.php', $copyBase, [$mkFile('foto.png', $pngBytes, 'image/png')]);
+check('cópia colorida recusa anexo que não é PDF', ($res['json']['success'] ?? true) === false && str_contains($res['json']['message'] ?? '', 'PDF'), snippet($res));
+$res = $sol->postFiles('api/add_request.php', $copyBase, [$mkFile('falso.pdf', 'isto não é um pdf', 'application/pdf')]);
+check('PDF falso (só a extensão) é recusado', ($res['json']['success'] ?? true) === false, snippet($res));
+$res = $sol->postFiles('api/add_request.php', ['type' => 'shopping', 'title' => 'Teste anexo foto', 'end' => $future, 'details' => 'ver foto'], [$mkFile('modelo.png', $pngBytes, 'image/png')]);
+$pngReqId = (int)($res['json']['id'] ?? 0);
+if ($pngReqId) { $createdIds[] = ['shop', $pngReqId]; }
+check('Compras aceita foto anexada', $pngReqId > 0 && (int)$pdo->query("SELECT COUNT(*) FROM request_attachments WHERE request_table = 'shop' AND request_id = $pngReqId")->fetchColumn() === 1, snippet($res));
+foreach (['programa.exe' => "MZ\x90\x00", 'pagina.html' => '<html><script>alert(1)</script></html>'] as $badName => $badBytes) {
+    $res = $sol->postFiles('api/add_request.php', ['type' => 'ti', 'title' => 'Teste anexo proibido', 'end' => $future, 'details' => 'x'], [$mkFile($badName, $badBytes, 'application/octet-stream')]);
+    check("anexo $badName é recusado", ($res['json']['success'] ?? true) === false, snippet($res));
+}
+if ($attRow) {
+    $res = $sol->get('api/attachment.php?id=' . (int)$attRow['id']);
+    check('quem pediu abre o próprio anexo', $res['status'] === 200 && str_starts_with($res['body'], '%PDF-'), 'HTTP ' . $res['status']);
+    $res = $sol->get("request_detail?id=$attReqId&table=xerox");
+    check('página do pedido lista o anexo', str_contains($res['body'], 'api/attachment.php?id=' . (int)$attRow['id']) && str_contains($res['body'], 'certificados.pdf'));
+    $res = $ti->get('api/attachment.php?id=' . (int)$attRow['id']);
+    check('quem não vê o pedido não abre o anexo', $res['status'] === 403 && !str_contains($res['body'], '%PDF-'), 'HTTP ' . $res['status']);
+}
+array_map('unlink', glob("$tmpDir/*"));
+rmdir($tmpDir);
+
 // Itens com link (Compras) e links de referência (Marketing)
 $shopBase = ['type' => 'shopping', 'title' => 'Teste itens', 'end' => $future];
 $res = $sol->post('api/add_request.php', $shopBase + ['details' => '']);
@@ -1178,6 +1231,11 @@ foreach ($leftovers as $row) {
     $createdIds[] = [$row[0], (int)$row[1]];
 }
 foreach ($createdIds as [$t, $id]) {
+    // Anexos: arquivo em disco e linha (RequestAttachments)
+    foreach ($pdo->query("SELECT stored_name FROM request_attachments WHERE request_table = " . $pdo->quote($t) . " AND request_id = " . (int)$id)->fetchAll(PDO::FETCH_COLUMN) as $stored) {
+        @unlink(uploadDir() . "/" . $stored);
+    }
+    $pdo->prepare("DELETE FROM request_attachments WHERE request_table = ? AND request_id = ?")->execute([$t, $id]);
     if ($id <= 0) {
         continue;
     }

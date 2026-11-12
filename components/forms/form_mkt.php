@@ -42,6 +42,7 @@
                 <input type="text" id="input_outros" name="outros_texto" maxlength="255" placeholder="Qual?" aria-label="Qual outro lugar?" hidden>
             </div>
         </fieldset>
+<!--ANEXOS-->
         <div class="form-group date-group">
             <label for="end">Para quando? <span class="req">*</span></label>
             <div class="date-field">

@@ -15,6 +15,7 @@
 require_once __DIR__ . '/request_card.php';
 require_once __DIR__ . '/partner_picker.php';
 require_once __DIR__ . '/../classes/RequestItems.php';
+require_once __DIR__ . '/../classes/RequestAttachments.php';
 
 if (!function_exists('renderApproveRow')) {
     /**
@@ -191,6 +192,9 @@ if (!function_exists('renderApproveRow')) {
         if (!empty($row['items'])) { // itens de Compras, links do Marketing (RequestInbox::approvals)
             $html .= '<div class="ap-facts__what"><dt>' . e(RequestItems::heading($sector)) . '</dt><dd>'
                 . RequestItems::html($row['items'], $sector) . '</dd></div>';
+        }
+        if (!empty($row['attachments'])) { // a coordenação vê o arquivo antes de liberar (ex.: PDF da cópia colorida)
+            $html .= '<div class="ap-facts__what"><dt>Anexos</dt><dd>' . RequestAttachments::html($row['attachments']) . '</dd></div>';
         }
         if ($obs !== '') {
             $html .= '<div class="ap-facts__what"><dt>Observações</dt><dd><p class="ap-text">' . e($obs) . '</p></dd></div>';

@@ -5,7 +5,14 @@ require_once __DIR__ . '/../config/security.php';
 require_once __DIR__ . '/../classes/RequestManager.php';
 require_once __DIR__ . '/../classes/RequestForwardService.php';
 require_once __DIR__ . '/../classes/RequestItems.php';
+require_once __DIR__ . '/../classes/RequestAttachments.php';
 requireLoginJson($pdo);
+// Envio maior que o post_max_size chega sem nenhum campo (nem o token): sem isto a pessoa
+// veria "página aberta há muito tempo" em vez do motivo real
+if (RequestAttachments::postTooLarge()) {
+    jsonResponse(['success' => false, 'message' => 'Os arquivos passam do limite de '
+        . RequestAttachments::sizeLabel(RequestAttachments::maxTotalBytes()) . ' por pedido. Anexe menos ou arquivos menores.']);
+}
 requirePostJson();
 
 // A área do pedido define quem aprova. Quem responde por mais de uma escolhe no formulário.
@@ -108,8 +115,11 @@ if (count($partnerAreaIds) !== count(array_unique($partnerAreaIds))) {
 }
 
 // Itens com link (Compras) e links de referência (Marketing)
+// Anexos (sempre opcionais): na cópia colorida só PDF; nos outros pedidos, PDF, fotos e Office
+$isColorCopy = $sector === 'xerox' && (postText('kind', 20) ?: 'copia_colorida') === 'copia_colorida';
 try {
     $items = RequestItems::parse($sector, $_POST['items'] ?? []);
+    $attachments = RequestAttachments::fromUpload($_FILES['attachments'] ?? null, $isColorCopy ? 'pdf' : 'geral');
 } catch (UserMessage $e) {
     fail($e->getMessage());
 }
@@ -144,8 +154,9 @@ switch ($sector) {
         $file = $isCopy ? postText('file', 255) : '';
         $qtdRaw = trim((string)($_POST['qtd'] ?? ''));
         $model = $isCopy ? postText('model', 50) : postText('size', 50);
-        if ($isCopy && $file === '') {
-            fail('Informe onde está o arquivo para imprimir.');
+        // Com o PDF anexado, "Onde está o arquivo?" pode ficar em branco
+        if ($isCopy && $file === '' && !$attachments) {
+            fail('Informe onde está o arquivo para imprimir (ou anexe o PDF).');
         }
         if ($qtdRaw === '') {
             fail("Informe quantas $unit você precisa.");
@@ -224,11 +235,14 @@ try {
         RequestForwardService::saveSuggestion($pdo, $sector, $newId, $partnerAreaId, $userId, $userName);
     }
     RequestItems::save($pdo, $sector, $newId, $items);
+    $movedFiles = [];
+    RequestAttachments::store($pdo, $sector, $newId, $attachments, $userId, $movedFiles);
     $pdo->commit();
 } catch (Throwable $e) {
     if ($pdo->inTransaction()) {
         $pdo->rollBack();
     }
+    RequestAttachments::unlinkAll($movedFiles ?? []); // pedido desfeito: os arquivos já gravados saem também
     error_log('add_request.php: ' . $e->getMessage());
     jsonResponse(['success' => false, 'message' => 'Não foi possível enviar agora. Tente de novo em instantes.'], 500);
 }

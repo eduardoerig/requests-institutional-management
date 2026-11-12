@@ -9,6 +9,7 @@ require_once __DIR__ . '/config/conn.php';
 require_once __DIR__ . '/config/security.php';
 require_once __DIR__ . '/classes/RequestForwardService.php';
 require_once __DIR__ . '/classes/RequestItems.php';
+require_once __DIR__ . '/classes/RequestAttachments.php';
 requireLoginJson($pdo);
 
 $role = $_SESSION['role'] ?? 'solicitante';
@@ -227,6 +228,12 @@ $dotColor = ['P' => '#B45309', 'W' => '#2563EB', 'C' => '#15803D', 'N' => '#B91C
                 <?php endforeach; ?>
             </tbody>
         </table>
+    <?php endif; ?>
+
+    <?php $files = RequestAttachments::forRequest($pdo, $req_table, $req_id); ?>
+    <?php if ($files): ?>
+        <h2>Anexos</h2>
+        <div class="desc"><?= e(implode(' · ', array_map(fn($f) => $f['original_name'] . ' (' . RequestAttachments::sizeLabel((int)$f['size_bytes']) . ')', $files))) ?></div>
     <?php endif; ?>
 
     <?php if (!empty($req['obs'])): ?>

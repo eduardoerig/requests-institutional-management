@@ -347,3 +347,31 @@ function xeroxSummary(array $req): string
     }
     return implode(' · ', array_filter([$qtd ? "$qtd cópias" : '', $size !== '' ? "papel $size" : '']));
 }
+
+/**
+ * Pasta dos anexos (fora do que a web serve): UPLOAD_DIR no ambiente ou upload_dir em
+ * config/conn.local.php. Padrão: <raiz>/uploads (está no .gitignore e bloqueada no .htaccess).
+ */
+function uploadDir(): string
+{
+    $dir = getenv('UPLOAD_DIR');
+    if ($dir === false || $dir === '') {
+        $file = __DIR__ . '/../config/conn.local.php';
+        $local = is_file($file) ? (require $file) : [];
+        $dir = is_array($local) ? (string)($local['upload_dir'] ?? '') : '';
+    }
+    return rtrim($dir !== '' ? $dir : dirname(__DIR__) . '/uploads', '/' . DIRECTORY_SEPARATOR);
+}
+
+/** "20M" / "512K" / "1G" do php.ini em bytes */
+function iniBytes(string $value): int
+{
+    $value = trim($value);
+    $n = (int)$value;
+    switch (strtolower(substr($value, -1))) {
+        case 'g': return $n * 1024 ** 3;
+        case 'm': return $n * 1024 ** 2;
+        case 'k': return $n * 1024;
+        default: return $n;
+    }
+}

@@ -3,6 +3,7 @@ require_once __DIR__ . '/../config/session.php';
 require_once __DIR__ . '/../config/conn.php';
 require_once __DIR__ . '/../config/security.php';
 require_once __DIR__ . '/../classes/RequestForwardService.php';
+require_once __DIR__ . '/../classes/RequestAttachments.php';
 requireLoginJson($pdo);
 requirePostJson();
 
@@ -99,6 +100,32 @@ if (strpos($formHtml, '<!--PRIORIDADE-->') !== false) {
 } else {
     $formHtml = str_replace('<button', $priorityHtml . '<button', $formHtml);
 }
+
+// Anexos (sempre opcionais): <!--ANEXOS:pdf--> na cópia colorida (só PDF), <!--ANEXOS--> nos outros
+$formHtml = preg_replace_callback('/<!--ANEXOS(?::(pdf))?-->/', function (array $m): string {
+    static $n = 0;
+    $n++;
+    $profile = ($m[1] ?? '') === 'pdf' ? 'pdf' : 'geral';
+    $exts = RequestAttachments::profiles()[$profile]['ext'];
+    $maxFile = RequestAttachments::maxFileBytes();
+    $hint = ($profile === 'pdf' ? 'Só PDF' : 'PDF, foto, Word, Excel ou PowerPoint')
+        . ', até ' . RequestAttachments::sizeLabel($maxFile) . ' cada (no máximo ' . RequestAttachments::MAX_FILES . ').';
+    if ($profile === 'pdf') {
+        $hint .= ' Com o PDF anexado, não precisa dizer onde está o arquivo.';
+    }
+    $accept = implode(',', array_map(fn($x) => '.' . $x, $exts));
+    return '
+            <div class="form-group attach" data-attach data-ext="' . e(implode(',', $exts)) . '" data-max-file="' . $maxFile . '"'
+        . ' data-max-total="' . RequestAttachments::maxTotalBytes() . '" data-max-files="' . RequestAttachments::MAX_FILES . '"'
+        . ' data-size-label="' . e(RequestAttachments::sizeLabel($maxFile)) . '"' . ($profile === 'pdf' ? ' data-attach-relaxes="file"' : '') . '>
+                <span class="attach__label">' . ($profile === 'pdf' ? 'Anexar o PDF' : 'Anexar arquivo') . ' <small>(opcional)</small></span>
+                <small class="form-hint">' . e($hint) . '</small>
+                <label class="btn btn--sm attach__pick" for="attachments_' . $n . '"><i class="fa-solid fa-paperclip" aria-hidden="true"></i> Escolher arquivo</label>
+                <input type="file" class="visually-hidden" name="attachments[]" id="attachments_' . $n . '" multiple accept="' . e($accept) . '" data-attach-input>
+                <ul class="attach__list" data-attach-list></ul>
+            </div>
+';
+}, $formHtml);
 
 // "Mais alguma observação?" com Sim/Não (o mesmo em todos os formulários)
 $formHtml = str_replace('<!--OBS-->', yesNoField('obs_choice', 'Mais alguma observação?', 'Sem observações.', '

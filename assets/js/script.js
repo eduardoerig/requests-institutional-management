@@ -826,6 +826,70 @@ function bindRepeater(form) {
     });
 }
 
+// Anexos (api/get_form.php): cada escolha soma à lista (não substitui); o navegador já recusa tipo
+// e tamanho fora do permitido, com a mesma regra do servidor (RequestAttachments). Na cópia colorida,
+// com PDF anexado, "Onde está o arquivo?" deixa de ser obrigatório (data-attach-relaxes).
+function bindAttachments(form) {
+    const sizeLabel = (b) => b >= 1048576 ? `${(b / 1048576).toFixed(b >= 10485760 ? 0 : 1).replace('.', ',')} MB` : `${Math.max(1, Math.round(b / 1024))} KB`;
+    form.querySelectorAll('[data-attach]').forEach(box => {
+        const input = box.querySelector('[data-attach-input]');
+        const list = box.querySelector('[data-attach-list]');
+        if (!input || !list || typeof DataTransfer === 'undefined') return;
+        const exts = (box.dataset.ext || '').split(',');
+        const maxFile = parseInt(box.dataset.maxFile, 10) || Infinity;
+        const maxTotal = parseInt(box.dataset.maxTotal, 10) || Infinity;
+        const maxFiles = parseInt(box.dataset.maxFiles, 10) || 5;
+        const relaxes = box.dataset.attachRelaxes ? form.querySelector(`[name="${box.dataset.attachRelaxes}"]`) : null;
+        const relaxesStar = relaxes ? form.querySelector(`label[for="${relaxes.id}"] .req`) : null;
+        let chosen = [];
+
+        const render = () => {
+            const dt = new DataTransfer();
+            chosen.forEach(f => dt.items.add(f));
+            input.files = dt.files;
+            list.innerHTML = '';
+            chosen.forEach((f, i) => {
+                const li = document.createElement('li');
+                li.className = 'attach__item';
+                li.innerHTML = '<i class="fa-solid fa-file" aria-hidden="true"></i> <span class="attach__name"></span> <small></small>'
+                    + '<button type="button" class="btn btn--sm btn--ghost attach__remove" aria-label="Tirar este arquivo"><i class="fa-solid fa-xmark" aria-hidden="true"></i></button>';
+                li.querySelector('.attach__name').textContent = f.name;
+                li.querySelector('small').textContent = sizeLabel(f.size);
+                li.querySelector('button').addEventListener('click', () => { chosen.splice(i, 1); render(); input.focus(); });
+                list.appendChild(li);
+            });
+            if (relaxes) {
+                relaxes.required = chosen.length === 0;
+                if (relaxesStar) relaxesStar.hidden = chosen.length > 0;
+                if (chosen.length) {
+                    const group = relaxes.closest('.form-group');
+                    group?.classList.remove('has-error');
+                    group?.querySelector('.field-error')?.remove();
+                }
+            }
+        };
+
+        input.addEventListener('change', () => {
+            const picked = Array.from(input.files || []);
+            const problems = [];
+            picked.forEach(f => {
+                const ext = (f.name.split('.').pop() || '').toLowerCase();
+                const total = chosen.reduce((s, x) => s + x.size, 0) + f.size;
+                if (!exts.includes(ext)) problems.push(exts.length === 1 && exts[0] === 'pdf' ? `"${f.name}" não é PDF. Aqui só vale PDF.` : `O tipo de "${f.name}" não é aceito.`);
+                else if (f.size === 0) problems.push(`"${f.name}" está vazio.`);
+                else if (f.size > maxFile) problems.push(`"${f.name}" passa de ${box.dataset.sizeLabel || sizeLabel(maxFile)}.`);
+                else if (chosen.length >= maxFiles) problems.push(`Cabem até ${maxFiles} arquivos.`);
+                else if (total > maxTotal) problems.push(`Os arquivos juntos passam de ${sizeLabel(maxTotal)}.`);
+                else if (!chosen.some(x => x.name === f.name && x.size === f.size)) chosen.push(f);
+            });
+            render();
+            box.classList.remove('has-error');
+            box.querySelector('.field-error')?.remove();
+            if (problems.length) showFieldError(input, [...new Set(problems)].join(' '));
+        });
+    });
+}
+
 // Data de hoje + n dias, no formato do campo de data
 function isoInDays(n) {
     const d = new Date();
@@ -843,6 +907,7 @@ function bindFormRequests() {
     bindYesNo(form_requests);
     bindKindChoice(form_requests);
     bindRepeater(form_requests);
+    bindAttachments(form_requests);
 
     // "É urgente" pede o motivo
     const urgent = form_requests.querySelector('[data-urgent]');

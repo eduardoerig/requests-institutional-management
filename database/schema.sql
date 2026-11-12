@@ -178,6 +178,19 @@ CREATE TABLE `notifications` (
   KEY `idx_read` (`is_read`),
   KEY `idx_user_read_created` (`user_id`,`is_read`,`created_at`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+CREATE TABLE `request_attachments` (
+  `id` int unsigned NOT NULL AUTO_INCREMENT,
+  `request_id` int unsigned NOT NULL COMMENT 'ID do pedido na tabela _frm',
+  `request_table` varchar(20) COLLATE utf8mb4_unicode_ci NOT NULL COMMENT 'mkt, shop, xerox, service, ti',
+  `original_name` varchar(255) COLLATE utf8mb4_unicode_ci NOT NULL COMMENT 'Nome que a pessoa enviou (só para mostrar)',
+  `stored_name` varchar(100) COLLATE utf8mb4_unicode_ci NOT NULL COMMENT 'AAAA/MM/<aleatório>.<ext> dentro de uploadDir()',
+  `mime` varchar(100) COLLATE utf8mb4_unicode_ci NOT NULL,
+  `size_bytes` int unsigned NOT NULL,
+  `uploaded_by` int unsigned NOT NULL,
+  `created_at` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (`id`),
+  KEY `idx_request` (`request_table`,`request_id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 CREATE TABLE `request_comments` (
   `id` int unsigned NOT NULL AUTO_INCREMENT,
   `request_id` int unsigned NOT NULL,

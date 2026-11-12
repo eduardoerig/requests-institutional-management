@@ -21,6 +21,7 @@
 require_once __DIR__ . '/../classes/RequestForwardService.php';
 require_once __DIR__ . '/../classes/RequestChat.php';
 require_once __DIR__ . '/../classes/RequestItems.php';
+require_once __DIR__ . '/../classes/RequestAttachments.php';
 require_once __DIR__ . '/request_card.php';
 require_once __DIR__ . '/partner_picker.php';
 require_once __DIR__ . '/request_view/timeline.php';
@@ -318,6 +319,7 @@ function renderRequestView(PDO $pdo, array $req, string $sector, string $context
     }
     // Itens de Compras e links de referência do Marketing
     $itemsHtml = RequestItems::html(RequestItems::forRequest($pdo, $sector, $reqId), $sector);
+    $filesHtml = RequestAttachments::html(RequestAttachments::forRequest($pdo, $sector, $reqId));
     // Motivo da urgência: primeira linha das observações ("Urgente: ...", gravada por api/add_request.php)
     $obs = trim((string)($req['obs'] ?? ''));
     $urgentReason = '';
@@ -406,6 +408,12 @@ function renderRequestView(PDO $pdo, array $req, string $sector, string $context
             <div class="rv-items">
                 <p class="rv-items__title"><?= e(RequestItems::heading($sector)) ?></p>
                 <?= $itemsHtml ?>
+            </div>
+        <?php endif; ?>
+        <?php if ($filesHtml !== ''): ?>
+            <div class="rv-items">
+                <p class="rv-items__title">Anexos</p>
+                <?= $filesHtml ?>
             </div>
         <?php endif; ?>
         <?php if ($isUrgent): ?>
