@@ -678,17 +678,19 @@ function validateRequestForm(form) {
         obs_choice: 'Responda sim ou não.',
         partner_choice: 'Responda sim ou não.',
         obs: 'Escreva a observação ou marque Não.',
-        partner_area_id: 'Escolha o setor ou marque Não.'
+        partner_area_id: 'Escolha o setor ou marque Não.',
+        'model[]': 'Escolha pelo menos um lugar.'
     };
     let firstInvalid = null;
     const checkedGroups = new Set();
 
-    form.querySelectorAll('[required]').forEach(field => {
+    // data-required-group: grupo de caixas de marcar em que pelo menos uma precisa estar marcada
+    form.querySelectorAll('[required], [data-required-group]').forEach(field => {
         if (field.disabled) return; // parte fechada do formulário (Não, outro tipo): não vai no envio
-        if (field.type === 'radio') {
+        if (field.type === 'radio' || field.hasAttribute('data-required-group')) {
             if (checkedGroups.has(field.name)) return;
             checkedGroups.add(field.name);
-            if (!form.querySelector(`input[name="${field.name}"]:checked`)) {
+            if (!form.querySelector(`input[name="${CSS.escape(field.name)}"]:checked`)) {
                 showFieldError(field, messages[field.name] || 'Escolha uma opção.');
                 firstInvalid = firstInvalid || field;
             }

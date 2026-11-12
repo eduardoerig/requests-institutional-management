@@ -14,15 +14,16 @@
         </div>
         <fieldset class="form-group">
             <legend>Onde vai ser usado? <span class="req">*</span></legend>
+            <small class="form-hint">Pode marcar mais de um.</small>
             <div class="aplication_select">
-                <label><input type="radio" class="model_radius" name="model" value="Whatsapp" required> WhatsApp</label>
-                <label><input type="radio" class="model_radius" name="model" value="Instagram"> Instagram</label>
-                <label><input type="radio" class="model_radius" name="model" value="Posts"> Posts (outras redes)</label>
-                <label><input type="radio" class="model_radius" name="model" value="Panfleto"> Panfleto</label>
-                <label><input type="radio" class="model_radius" name="model" value="Banner"> Banner</label>
-                <label><input type="radio" class="model_radius" name="model" value="Ingressos"> Ingressos</label>
-                <label><input type="radio" class="model_radius" name="model" value="ClipEscola"> ClipEscola</label>
-                <label><input type="radio" class="model_radius" name="model" value="outros" id="radio_outros"> Outro</label>
+                <label><input type="checkbox" class="model_radius" name="model[]" value="Whatsapp" data-required-group> WhatsApp</label>
+                <label><input type="checkbox" class="model_radius" name="model[]" value="Instagram"> Instagram</label>
+                <label><input type="checkbox" class="model_radius" name="model[]" value="Posts"> Posts (outras redes)</label>
+                <label><input type="checkbox" class="model_radius" name="model[]" value="Panfleto"> Panfleto</label>
+                <label><input type="checkbox" class="model_radius" name="model[]" value="Banner"> Banner</label>
+                <label><input type="checkbox" class="model_radius" name="model[]" value="Ingressos"> Ingressos</label>
+                <label><input type="checkbox" class="model_radius" name="model[]" value="ClipEscola"> ClipEscola</label>
+                <label><input type="checkbox" class="model_radius" name="model[]" value="outros" id="radio_outros"> Outro</label>
                 <input type="text" id="input_outros" name="outros_texto" maxlength="255" placeholder="Qual?" aria-label="Qual outro lugar?" hidden>
             </div>
         </fieldset>

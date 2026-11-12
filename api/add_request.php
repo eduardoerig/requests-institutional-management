@@ -155,12 +155,33 @@ switch ($sector) {
         if ($details === '') {
             fail('Explique o que você precisa.');
         }
-        $model = postText('model', 255);
-        if ($model === '' || $model === 'outros') {
-            $model = postText('outros_texto', 255);
+        // "Onde vai ser usado?" aceita mais de um lugar (model[]); um texto só (cliente antigo) também vale
+        $rawPlaces = $_POST['model'] ?? [];
+        $rawPlaces = is_array($rawPlaces) ? $rawPlaces : [$rawPlaces];
+        $allowedPlaces = ['Whatsapp', 'Instagram', 'Posts', 'Panfleto', 'Banner', 'Ingressos', 'ClipEscola'];
+        $places = [];
+        $wantsOther = false;
+        foreach ($rawPlaces as $place) {
+            $place = is_string($place) ? trim($place) : '';
+            if ($place === 'outros') {
+                $wantsOther = true;
+            } elseif (in_array($place, $allowedPlaces, true) && !in_array($place, $places, true)) {
+                $places[] = $place;
+            }
         }
-        if ($model === '') {
-            fail('Escolha onde a peça será usada (ou descreva em "Outros").');
+        $otherText = postText('outros_texto', 255);
+        if ($wantsOther && $otherText === '') {
+            fail('Descreva qual é o outro lugar em "Outro".');
+        }
+        if ($wantsOther) {
+            $places[] = 'Outro: ' . $otherText;
+        }
+        if (!$places) {
+            fail('Escolha onde a peça será usada (pode marcar mais de um).');
+        }
+        $model = implode(', ', $places);
+        if (mb_strlen($model) > 255) {
+            fail('A lista de lugares ficou longa demais. Encurte o texto de "Outro".');
         }
         $sql = 'INSERT INTO ctd_mkt_frm (created_by, created_at, title, `date`, descp, `type`, obs, priority, urgent, subdivision_id) VALUES (?, NOW(), ?, ?, ?, ?, ?, ?, ?, ?)';
         $params = [$_SESSION['id'], $title, $end, $details, $model, $obs, $priority, $urgent, $subdivision_id];

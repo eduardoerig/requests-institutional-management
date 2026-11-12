@@ -224,6 +224,18 @@ $res = $sol->post('api/add_request.php', ['type' => 'colorPrint', 'qtd' => '0', 
 check('impressão com 0 cópias é recusada', ($res['json']['success'] ?? true) === false);
 $res = $sol->post('api/add_request.php', ['type' => 'mkt', 'model' => ''] + $base);
 check('marketing sem aplicação é recusado', ($res['json']['success'] ?? true) === false);
+$res = $sol->post('api/add_request.php', ['type' => 'mkt', 'model' => ['Instagram', 'Banner', 'Inventado']] + $base);
+$mktId = (int)($res['json']['id'] ?? 0);
+if ($mktId) { $createdIds[] = ['mkt', $mktId]; }
+$mktType = $mktId ? (string)$pdo->query("SELECT `type` FROM ctd_mkt_frm WHERE id = $mktId")->fetchColumn() : '';
+check('marketing grava vários lugares (e ignora o que não está na lista)', $mktType === 'Instagram, Banner', snippet($res) . " type=$mktType");
+$res = $sol->post('api/add_request.php', ['type' => 'mkt', 'model' => ['outros'], 'outros_texto' => ''] + $base);
+check('marketing com "Outro" sem texto é recusado', ($res['json']['success'] ?? true) === false && str_contains($res['json']['message'] ?? '', 'Outro'), snippet($res));
+$res = $sol->post('api/add_request.php', ['type' => 'mkt', 'model' => ['Whatsapp', 'outros'], 'outros_texto' => 'Mural'] + $base);
+$mktId = (int)($res['json']['id'] ?? 0);
+if ($mktId) { $createdIds[] = ['mkt', $mktId]; }
+$mktType = $mktId ? (string)$pdo->query("SELECT `type` FROM ctd_mkt_frm WHERE id = $mktId")->fetchColumn() : '';
+check('marketing grava "Outro" com o texto', $mktType === 'Whatsapp, Outro: Mural', snippet($res) . " type=$mktType");
 $res = $sol->post('api/add_request.php', ['urgent' => '1', 'urgent_reason' => ''] + $base);
 check('urgente sem motivo é recusado', ($res['json']['success'] ?? true) === false && str_contains($res['json']['message'] ?? '', 'urgente'));
 

@@ -674,6 +674,7 @@ select option { color: var(--texto); }
 .field > label, .form-group > label, .form-group > legend, .field > legend { font-weight: 600; font-size: var(--t-md); padding: 0; }
 .field > span, .form-group > span { font-size: var(--t-sm); color: var(--texto-2); }
 .form-group label small, .form-group legend small { font-weight: 400; color: var(--texto-2); }
+.form-hint { margin-top: -4px; font-size: var(--t-sm); color: var(--texto-2); }
 .req { color: var(--perigo); font-weight: 700; }
 .form-group.has-error input, .form-group.has-error textarea, .form-group.has-error .aplication_select { border-color: var(--perigo); }
 .field-error { color: var(--perigo); font-weight: 600; font-size: var(--t-sm); margin: 0; }
@@ -698,7 +699,8 @@ select option { color: var(--texto); }
     cursor: pointer;
 }
 .aplication_select label:has(input:checked) { border-color: var(--laranja); background: var(--laranja-claro); }
-.aplication_select input[type="radio"] { width: 18px; height: 18px; margin: 0; accent-color: var(--laranja); }
+.aplication_select input[type="radio"],
+.aplication_select input[type="checkbox"] { width: 18px; height: 18px; margin: 0; accent-color: var(--laranja); }
 .aplication_select #input_outros { flex-basis: 100%; }
 
 /* Abas e filtros em pílula */
