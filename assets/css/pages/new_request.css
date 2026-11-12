@@ -54,7 +54,7 @@
 .nr-form .form-step { display: flex; flex-direction: column; gap: 0; }
 .form-step__title { display: none; }
 .nr-form .form-group > label,
-.nr-form .form-group > legend { font-size: 15px; }
+.nr-form .form-group > legend { font-size: 16px; }
 .nr-form .form-group { margin-bottom: 20px; } /* mesmo espaço entre campos em todos os formulários */
 .nr-form .form-extras > .form-group, .nr-form .yesno__panel .form-group:last-child { margin-bottom: 0; }
 .nr-form input[type="text"],
@@ -136,7 +136,7 @@
 .urgent-switch input[type="checkbox"]:checked::before { transform: translateX(22px); }
 .urgent-switch input[type="checkbox"]:focus-visible { outline: none; box-shadow: var(--anel); }
 .nr-form .urgent-field__reason { margin-top: 14px; }
-.nr-form .urgent-field__reason label { font-size: 15px; font-weight: 600; }
+.nr-form .urgent-field__reason label { font-size: 16px; font-weight: 600; }
 .nr-form .urgent-field__reason input { border-color: var(--laranja-borda); }
 
 /* Revisão (só no celular) */
@@ -211,8 +211,8 @@
         border-left: 1px solid var(--linha-suave);
     }
     /* Sem quadro: uma coluna de texto ao lado, mais baixa que o formulário */
-    .nr-after h2 { margin: 0; font-size: 13.5px; font-weight: 600; color: var(--texto-2); }
-    .nr-after ol { margin: 0; padding-left: 18px; display: flex; flex-direction: column; gap: 10px; font-size: 13.5px; line-height: 1.5; color: var(--texto-2); }
+    .nr-after h2 { margin: 0; font-size: 14px; font-weight: 600; color: var(--texto-2); }
+    .nr-after ol { margin: 0; padding-left: 18px; display: flex; flex-direction: column; gap: 10px; font-size: 14px; line-height: 1.5; color: var(--texto-2); }
     .nr-after ol strong { color: var(--texto); }
 
     .nr-main { max-width: 720px; }
@@ -228,8 +228,8 @@
 
     .urgent-switch.check-line { justify-content: flex-start; }
     .urgent-switch input[type="checkbox"] { order: -1; }
-    .urgent-switch__title { font-size: 15px; }
-    .urgent-switch__hint { font-size: 13px; }
+    .urgent-switch__title { font-size: 16px; }
+    .urgent-switch__hint { font-size: 14px; }
 
 }
 
