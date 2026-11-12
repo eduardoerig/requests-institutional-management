@@ -4,32 +4,21 @@
    Perguntar | Recusar | Aprovar ficam presos acima da barra de baixo; "Ver lista" mostra todos.
    ≥900px: lista à esquerda e o pedido escolhido aberto à direita (como a Caixa do setor).
    A janela "Alterar" (setores que também participam) é um <dialog>: bottom sheet abaixo de 600px.
+   Padrão clean (referência: Painel): linhas sem cartão, painel com o desenho da gaveta, só tokens.
    Marcação: components/approve_item.php · comportamento: assets/js/pages/approve.js
    ===================================================================== */
 
 /* ---------- Topo ---------- */
-.ap-summary { margin: 0; font-size: var(--t-sm); color: var(--texto-2); }
-.ap-summary strong { color: var(--texto); font-weight: 700; }
+.page-approve .page-head h1 { font-size: 30px; font-weight: 600; letter-spacing: -0.03em; line-height: 1.15; }
+.ap-summary { margin: 0; font-size: 13.5px; color: var(--texto-2); }
+.ap-summary strong { color: var(--texto); font-weight: 600; }
 .ap-summary__urgent { color: var(--perigo); font-weight: 600; }
 .ap-summary [hidden] { display: none; }
 
-.ap-note {
-    margin: 0 0 12px;
-    padding: 10px 14px;
-    border: 1px solid var(--linha);
-    border-radius: var(--r-2);
-    background: var(--superficie);
-    font-size: var(--t-sm);
-    color: var(--texto-2);
-}
-.ap-note a { margin-left: 4px; font-weight: 600; color: var(--laranja); }
+.ap-note { margin: 0 0 12px; font-size: 13.5px; color: var(--texto-2); }
+.ap-note a { margin-left: 4px; font-weight: 600; color: var(--laranja-escuro); }
 
-.ap-body > .ap-empty {
-    padding: 48px 20px;
-    border: 1px solid var(--linha);
-    border-radius: var(--r-3);
-    background: var(--superficie);
-}
+.ap-body > .ap-empty { padding: 48px 20px; color: var(--texto-2); }
 
 /* ---------- Colunas ---------- */
 .ap-body { scroll-margin-top: calc(var(--topbar-h) + 8px); }
@@ -39,74 +28,65 @@
 
 /* ---------- Lista ---------- */
 .ap-group[hidden] { display: none; }
-.ap-group + .ap-group { margin-top: 18px; }
+.ap-group + .ap-group { margin-top: 22px; }
 .ap-group__title {
     display: flex;
     align-items: baseline;
-    gap: 6px;
-    margin: 0 0 8px;
-    padding: 0 4px;
-    font-size: var(--t-xs);
-    font-weight: 700;
-    letter-spacing: .04em;
-    text-transform: uppercase;
+    gap: 8px;
+    margin: 0;
+    padding: 0 4px 8px;
+    border-bottom: 1px solid var(--linha-suave);
+    font-size: 13px;
+    font-weight: 600;
     color: var(--texto-2);
 }
-.ap-group__title span { font-weight: 600; color: var(--texto-3); font-variant-numeric: tabular-nums; }
+.ap-group__title span { font-size: 12px; font-weight: 500; color: var(--texto-4); font-variant-numeric: tabular-nums; }
 .ap-group--urgentes .ap-group__title { color: var(--perigo); }
 
-.ap-rows { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; }
+.ap-rows { list-style: none; margin: 0; padding: 0; }
 
+/* Linhas, sem cartão: a urgência vem escrita na etiqueta, não numa barra */
 .ap-row {
     position: relative;
     display: flex;
     align-items: stretch;
-    border: 1px solid var(--linha);
-    border-radius: var(--r-2);
-    background: var(--superficie);
+    border-bottom: 1px solid var(--linha-suave);
     transition: background-color var(--dur-1);
 }
+.ap-row:last-child { border-bottom: 0; }
+.ap-row:hover { background: var(--fundo-2); }
 .ap-row[hidden] { display: none; }
-/* Marca lateral de urgente */
-.ap-row.is-urgent::before {
-    content: "";
-    position: absolute;
-    inset: 8px auto 8px 0;
-    width: 4px;
-    border-radius: 0 4px 4px 0;
-    background: var(--perigo);
-}
 
 .ap-row__link {
     flex: 1;
     min-width: 0;
     display: grid;
     gap: 3px;
-    padding: 12px 14px 12px 16px;
+    padding: 14px 4px;
     color: var(--texto);
     text-decoration: none;
-    border-radius: inherit;
 }
-.ap-row__link:focus-visible { outline: none; box-shadow: var(--anel-dentro); }
+.ap-row__link:focus-visible { outline: none; box-shadow: var(--anel-dentro); border-radius: var(--r-2); }
 .ap-row__top { display: flex; align-items: center; gap: 8px; min-width: 0; }
 .ap-row__title {
     min-width: 0;
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
+    font-size: 15px;
     font-weight: 600;
 }
 .ap-row__sub {
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
-    font-size: var(--t-xs);
-    color: var(--texto-2);
+    font-size: 13px;
+    color: var(--texto-4);
 }
-.ap-row__due { font-size: var(--t-xs); font-weight: 600; color: var(--texto-2); font-variant-numeric: tabular-nums; }
-.ap-row__due--bad { color: var(--perigo); }
-.ap-row__due--warn { color: var(--aviso); }
-.ap-row__due--muted { font-weight: 400; color: var(--texto-3); }
+.ap-row__due { font-size: 12.5px; font-weight: 500; color: var(--texto-2); font-variant-numeric: tabular-nums; }
+.ap-row__due--bad { color: var(--perigo); font-weight: 600; }
+.ap-row__due--warn { color: var(--aviso); font-weight: 600; }
+.ap-row__due--muted { font-weight: 400; color: var(--texto-4); }
 
 /* Decidido, esperando o Desfazer: apagado, com selo e o próprio Desfazer */
 .ap-row.is-decided .ap-row__link { opacity: .4; }
@@ -151,61 +131,60 @@
     background: var(--perigo-claro);
     color: var(--perigo);
     font-size: 12px;
-    font-weight: 700;
+    font-weight: 600;
 }
 
-/* ---------- Painel do pedido ---------- */
+/* ---------- Painel do pedido (o desenho da gaveta) ---------- */
 .ap-detail {
     display: grid;
-    gap: 14px;
-    padding: 16px 18px 20px;
-    border: 1px solid var(--linha);
-    border-radius: 18px;
+    gap: 16px;
+    padding: 18px 18px 20px;
+    border-radius: 20px;
     background: var(--superficie);
+    box-shadow: 0 0 0 1px rgb(16 16 24 / .05);
     scroll-margin-top: calc(var(--topbar-h) + 12px);
 }
 .ap-detail[hidden] { display: none; }
 
 .ap-detail__bar { display: flex; align-items: center; gap: 8px; min-height: var(--h-sm); }
 .ap-detail__list { margin-left: -8px; }
-.ap-detail__pos { font-size: var(--t-sm); font-weight: 600; color: var(--texto-2); font-variant-numeric: tabular-nums; }
+.ap-detail__pos { font-size: 12.5px; font-weight: 500; color: var(--texto-2); font-variant-numeric: tabular-nums; }
 .ap-detail__pager { display: flex; gap: 2px; margin-left: auto; }
 .ap-detail__pager .btn { min-width: var(--h-md); padding: 0 10px; }
 .ap-detail__pager .btn:disabled { opacity: .35; cursor: default; }
 
 .ap-urgent {
     margin: 0;
-    padding: 10px 12px;
-    border-left: 4px solid var(--perigo);
-    border-radius: 0 var(--r-1) var(--r-1) 0;
-    background: #FEF2F2;
-    color: #991B1B;
-    font-size: var(--t-sm);
+    padding: 10px 14px;
+    border-radius: var(--r-2);
+    background: var(--perigo-claro);
+    color: var(--perigo);
+    font-size: 13.5px;
     line-height: 1.45;
     overflow-wrap: anywhere;
 }
-.ap-urgent strong { font-weight: 700; }
+.ap-urgent strong { font-weight: 600; }
 
-.ap-detail__title { margin: 0; font-size: var(--t-xl); line-height: 1.25; font-weight: 700; overflow-wrap: anywhere; }
+.ap-detail__title { margin: 0; font-size: 22px; line-height: 1.2; font-weight: 600; letter-spacing: -0.03em; overflow-wrap: anywhere; }
 .ap-detail__title:focus { outline: none; }
 .ap-detail__title:focus-visible { box-shadow: var(--anel); border-radius: 4px; }
 .ap-detail__who { margin: -6px 0 0; font-size: var(--t-sm); color: var(--texto-2); overflow-wrap: anywhere; }
 .ap-detail__who strong { color: var(--texto); font-weight: 600; }
 
 /* O que é, quem faz, para quando */
-.ap-facts { display: grid; gap: 14px; margin: 0; padding: 14px 0 0; border-top: 1px solid var(--linha); }
+.ap-facts { display: grid; gap: 14px; margin: 0; padding: 0; }
 .ap-facts > div { display: grid; gap: 3px; min-width: 0; }
-.ap-facts dt { font-size: var(--t-xs); font-weight: 600; color: var(--texto-2); }
+.ap-facts dt { font-size: 12.5px; font-weight: 500; color: var(--texto-4); }
 .ap-facts dd { margin: 0; font-size: var(--t-md); line-height: 1.5; overflow-wrap: anywhere; }
 .ap-text { margin: 0; white-space: pre-line; }
 .ap-more { display: inline-block; margin-top: 4px; font-size: var(--t-sm); font-weight: 600; color: var(--laranja-escuro); }
-.ap-due--bad { color: var(--perigo); font-weight: 700; }
-.ap-due--warn { color: var(--aviso); font-weight: 700; }
-.ap-due--muted { color: var(--texto-3); }
+.ap-due--bad { color: var(--perigo); font-weight: 600; }
+.ap-due--warn { color: var(--aviso); font-weight: 600; }
+.ap-due--muted { color: var(--texto-4); }
 
 .ap-partners dd { display: flex; flex-wrap: wrap; align-items: center; gap: 2px 10px; }
-.ap-partners__names { font-weight: 700; }
-.ap-partners__origin { font-size: var(--t-xs); color: var(--texto-2); }
+.ap-partners__names { font-weight: 600; }
+.ap-partners__origin { font-size: 12.5px; color: var(--texto-4); }
 .ap-partners [hidden] { display: none; }
 .ap-link {
     display: inline-flex;
@@ -227,7 +206,7 @@
 .ap-link:focus-visible { outline: none; box-shadow: var(--anel); border-radius: 4px; }
 
 /* O que acontece ao aprovar */
-.ap-detail__hint { margin: 0; font-size: var(--t-sm); color: var(--texto-2); line-height: 1.45; }
+.ap-detail__hint { margin: 0; font-size: 13.5px; color: var(--texto-2); line-height: 1.45; }
 
 /* Perguntar | Recusar | Aprovar: só Aprovar tem a cor cheia */
 .ap-actions {
@@ -247,8 +226,7 @@
     justify-items: center;
     gap: 10px;
     padding: 44px 20px;
-    border: 1px solid var(--linha);
-    border-radius: 18px;
+    border-radius: 20px;
     background: var(--superficie);
     color: var(--texto-2);
     text-align: center;
@@ -371,7 +349,7 @@
         z-index: 44;
         padding: 10px 16px;
         background: var(--superficie);
-        border-top: 1px solid var(--linha);
+        border-top: 1px solid var(--linha-suave);
     }
     .ap-actions .btn { border-radius: 14px; }
 }
@@ -391,39 +369,25 @@
     }
     .ap-list__back, .ap-detail__list { display: none; }
 
-    .ap-rows {
-        gap: 0;
-        border: 1px solid var(--linha);
-        border-radius: var(--r-2);
-        background: var(--superficie);
-        overflow: hidden;
-    }
-    .ap-row { border: 0; border-radius: 0; }
-    .ap-row + .ap-row { border-top: 1px solid var(--linha); }
-    .ap-row:hover { background: var(--fundo); }
+    .ap-row__link { padding: 12px; }
+    .ap-row__title { font-size: 14.5px; }
+    .ap-row__sub { font-size: 12.5px; }
+    /* Selecionado só no PC, onde o painel mostra o pedido ao lado */
     .ap-row.is-selected { background: var(--laranja-claro); }
-    .ap-row.is-selected::after {
-        content: "";
-        position: absolute;
-        inset: 0 0 0 auto;
-        width: 3px;
-        background: var(--laranja);
-    }
 
     .ap-panel {
         position: sticky;
         top: calc(var(--topbar-h) + 16px);
         max-height: calc(100vh - var(--topbar-h) - 32px);
         overflow: auto;
-        border: 1px solid var(--linha);
-        border-radius: var(--r-3);
+        border-radius: 20px;
         background: var(--superficie);
-        box-shadow: var(--sombra-1);
+        box-shadow: 0 16px 48px rgb(16 16 24 / .08), 0 0 0 1px rgb(16 16 24 / .04);
     }
-    .ap-detail { padding: 18px 24px 0; border: 0; border-radius: 0; background: transparent; }
-    .ap-detail__title { font-size: 1.5rem; }
+    .ap-detail { padding: 20px 24px 0; border-radius: 0; background: transparent; box-shadow: none; }
+    .ap-detail__title { font-size: 24px; }
     .ap-facts > div { grid-template-columns: 150px minmax(0, 1fr); gap: 16px; align-items: baseline; }
-    .ap-facts dt { font-size: var(--t-sm); }
+    .ap-facts dt { font-size: 13px; }
     .ap-state { border: 0; border-radius: 0; padding: 64px 24px; }
 
     /* Botões no pé do painel, sempre à vista mesmo com descrição longa */
@@ -434,7 +398,7 @@
         gap: 10px;
         margin: 0 -24px;
         padding: 14px 24px 18px;
-        border-top: 1px solid var(--linha);
+        border-top: 1px solid var(--linha-suave);
         background: var(--superficie);
     }
     .ap-actions .btn { min-height: var(--h-md); padding: 0 18px; }
