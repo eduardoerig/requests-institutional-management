@@ -23,9 +23,12 @@
     const btnSend = root.querySelector('[data-step-send]');
     const sectorOut = root.querySelector('[data-sector-name-out]');
     const desk = window.matchMedia('(min-width: 900px)');
+    // Quem tem mais de uma área escolhe a área antes do setor (o campo fica fora do <form> do setor)
+    const areaBox = root.querySelector('[data-area-choice]');
+    const areaError = root.querySelector('[data-area-error]');
 
-    const titles = ['Para qual setor?', 'O que você precisa?', 'Urgência e revisão'];
-    const kept = ['subdivision_id', 'title', 'details', 'end', 'obs', 'file', 'qtd', 'urgent_reason'];
+    const titles = [areaBox ? 'Área e setor' : 'Para qual setor?', 'O que você precisa?', 'Urgência e revisão'];
+    const kept = ['title', 'details', 'end', 'obs', 'file', 'qtd', 'urgent_reason'];
     const cache = {};
     let step = 1;
     let chosen = null;
@@ -76,8 +79,45 @@
         return part ? validateRequestForm(part) : true;
     }
 
+    // ---------------------------------------------------------------
+    // Área do pedido (só para quem tem mais de uma)
+    // ---------------------------------------------------------------
+    const areaRadio = () => areaBox?.querySelector('input[name="nr_area"]:checked') || null;
+
+    // Leva a área escolhida para o campo escondido do formulário do setor
+    function syncArea() {
+        const hidden = holder.querySelector('[data-area-hidden]');
+        if (hidden) hidden.value = areaRadio()?.value || '';
+    }
+
+    // Sem área escolhida: mostra o aviso no passo 1 e não deixa seguir
+    function areaOk() {
+        if (!areaBox || areaRadio()) return true;
+        if (step !== 1) setStep(1, { focus: false });
+        areaError.hidden = false;
+        areaBox.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        areaBox.querySelector('input[name="nr_area"]')?.focus({ preventScroll: true });
+        return false;
+    }
+
+    if (areaBox) {
+        areaBox.addEventListener('change', () => {
+            areaError.hidden = true;
+            dirty = true;
+            syncArea();
+            if (step === 3) renderReview();
+        });
+        // Computador: o botão Enviar do formulário não passa pelo passo 1; confere a área antes do envio do script.js
+        holder.addEventListener('submit', (e) => {
+            if (areaOk()) return;
+            e.preventDefault();
+            e.stopPropagation();
+        }, true);
+    }
+
     async function goNext() {
         if (step === 1) {
+            if (!areaOk()) return;
             if (!chosen) {
                 sectorError.hidden = false;
                 cards[0]?.focus();
@@ -145,8 +185,7 @@
         const due = formatDate(form.querySelector('[name="end"]')?.value);
         const urgent = !!form.querySelector('[name="urgent"]')?.checked;
         const sectorName = chosen.dataset.sectorName || chosen.dataset.label || '';
-        const areaSelect = form.querySelector('[name="subdivision_id"]');
-        const areaName = areaSelect?.value ? areaSelect.selectedOptions[0]?.textContent || '' : '';
+        const areaName = (areaRadio()?.parentElement?.textContent || '').trim();
         const partnerName = ['partner_area_id', 'partner2_area_id']
             .map(name => form.querySelector(`[name="${name}"]`))
             .filter(select => select?.value)
@@ -262,6 +301,7 @@
             const field = holder.querySelector(`[name="${name}"]`);
             if (field) field.value = value;
         });
+        syncArea();
         if (typed.obs) holder.querySelector('.form-more')?.setAttribute('open', '');
 
         bindFormRequests(); // script.js: data mínima, atalhos de data, urgência, "Outro", validação e envio

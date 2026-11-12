@@ -13,6 +13,14 @@ foreach (sectorRegistry() as $slug => $s) {
     $modelInfo[$s['form_file']] = ['icon' => $s['icon'], 'sector' => $slug, 'label' => $s['card_label'], 'box' => $s['label'], 'examples' => $s['examples']];
 }
 $backHref = 'myRequests';
+// Quem responde por mais de uma área escolhe primeiro para qual área é o pedido (é a coordenação dela que aprova)
+$areaChoices = [];
+$sessionAreaIds = $_SESSION['subdivision_ids'] ?? [];
+if (count($sessionAreaIds) > 1) {
+    foreach ($sessionAreaIds as $i => $areaId) {
+        $areaChoices[(int)$areaId] = (string)($_SESSION['subdivision_names'][$i] ?? '');
+    }
+}
 ?>
 <div class="nr" data-new-request data-step="1">
     <header class="nr-head">
@@ -27,8 +35,20 @@ $backHref = 'myRequests';
 
     <div class="nr-layout">
         <div class="nr-main">
-            <section class="nr-sectors type-picker" aria-labelledby="tipo-titulo">
-                <h2 id="tipo-titulo" class="nr-sectors__title">1. Para qual setor?</h2>
+            <section class="nr-sectors type-picker<?= $areaChoices ? ' has-area' : '' ?>" aria-labelledby="tipo-titulo">
+                <?php if ($areaChoices): ?>
+                    <fieldset class="nr-area" data-area-choice>
+                        <legend class="nr-area__title">Para qual área é este pedido?</legend>
+                        <p class="nr-area__hint">Ex.: Ensino Médio ou Fundamental II. A coordenação dessa área é quem aprova.</p>
+                        <div class="aplication_select nr-area__options">
+                            <?php foreach ($areaChoices as $areaId => $areaName): ?>
+                                <label><input type="radio" name="nr_area" value="<?= $areaId ?>"> <?= e($areaName) ?></label>
+                            <?php endforeach; ?>
+                        </div>
+                        <p class="field-error" data-area-error role="alert" hidden>Escolha a área do pedido para continuar.</p>
+                    </fieldset>
+                <?php endif; ?>
+                <h2 id="tipo-titulo" class="nr-sectors__title"><span class="nr-sectors__num">1. </span>Para qual setor?</h2>
                 <div class="nr-sector-grid">
                     <?php foreach ($qr->fetchAll(PDO::FETCH_ASSOC) as $row):
                         $info = $modelInfo[$row['form_name']] ?? ['icon' => 'fa-file-lines', 'sector' => 'mkt', 'label' => $row['name'], 'box' => $row['name'], 'examples' => $row['descp']];

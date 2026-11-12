@@ -974,7 +974,11 @@ check('administrador liga a coordenação a duas áreas', ($res['json']['success
 
 $res = $apr->post('api/get_form.php', ['action' => 'get', 'id' => $tiModel]);
 $form = (string)($res['json']['form'] ?? '');
-check('quem tem duas áreas escolhe a área no formulário', str_contains($form, 'name="subdivision_id"') && str_contains($form, 'value="' . $medioId . '"') && !str_contains($form, '<!--AREA-->'), snippet($res));
+check('formulário de quem tem duas áreas leva a área num campo escondido', str_contains($form, 'name="subdivision_id"') && str_contains($form, 'data-area-hidden') && !str_contains($form, '<!--AREA-->'), snippet($res));
+$res = $apr->get('new_request');
+check('quem tem duas áreas escolhe a área antes do setor', str_contains($res['body'], 'data-area-choice') && str_contains($res['body'], 'name="nr_area" value="' . $medioId . '"'), 'HTTP ' . $res['status']);
+$res = $sol->get('new_request');
+check('quem tem uma área não vê a escolha da área', $res['status'] === 200 && !str_contains($res['body'], 'data-area-choice'));
 $res = $sol->post('api/get_form.php', ['action' => 'get', 'id' => $tiModel]);
 $form = (string)($res['json']['form'] ?? '');
 check('quem tem uma área não vê a escolha', $form !== '' && !str_contains($form, 'name="subdivision_id"') && !str_contains($form, '<!--AREA-->'));

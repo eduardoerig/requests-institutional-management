@@ -38,6 +38,14 @@
 .nr-sector__hint { font-size: var(--t-xs); color: var(--texto-2); line-height: 1.35; }
 .nr-sectors__error { margin-top: 10px; }
 
+/* Área do pedido (quem tem mais de uma): vem antes dos setores */
+.nr-area { margin: 0 0 20px; padding: 0; border: 0; min-width: 0; }
+.nr-area__title { padding: 0; margin: 0 0 4px; font-size: var(--t-md); font-weight: 600; }
+.nr-area__hint { margin: 0 0 10px; font-size: var(--t-xs); color: var(--texto-2); }
+.nr-area .field-error { margin-top: 10px; }
+.nr-sectors.has-area .nr-sectors__title { display: block; margin: 0 0 10px; font-size: var(--t-md); font-weight: 600; }
+@media (max-width: 899px) { .nr-sectors__num { display: none; } }
+
 /* ---------- Formulário ---------- */
 .nr-form .form_request { display: flex; flex-direction: column; gap: 0; }
 .nr-form .form-step { display: flex; flex-direction: column; gap: 0; }
