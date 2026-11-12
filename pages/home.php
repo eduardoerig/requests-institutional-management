@@ -1,5 +1,7 @@
 <?php
-// pages/home.php - PAINEL DA COORDENAÇÃO / ADMINISTRAÇÃO (UI 2.0)
+// pages/home.php - PAINEL DA COORDENAÇÃO / ADMINISTRAÇÃO
+// Triagem: uma faixa de estado, uma lista e uma gaveta. Os números que não são de triagem
+// ficam recolhidos em "Números da operação".
 
 // Setores do Painel (config/sectors.php)
 $map = array_map(fn($s) => $s['label'], sectorRegistry());
@@ -21,7 +23,6 @@ if (!$canManage) {
 require_once __DIR__ . '/../classes/RequestManager.php';
 require_once __DIR__ . '/../classes/RequestForwardService.php';
 require_once __DIR__ . '/../components/request_card.php';
-require_once __DIR__ . '/../components/welcome_card.php';
 
 // Pegar setores permitidos para este usuário
 $allowedSectors = [];
@@ -81,16 +82,6 @@ if ($searchTerm !== '' || $searchDate !== '') {
     }));
 }
 
-// Paginação: 50 por página
-$perPage = 50;
-$totalRows = count($tableRequests);
-$totalPages = max(1, (int)ceil($totalRows / $perPage));
-$currentPageNum = min($totalPages, max(1, (int)($_GET['p'] ?? 1)));
-$recent_requests = array_slice($tableRequests, ($currentPageNum - 1) * $perPage, $perPage);
-$pageLink = function (int $n) use ($activeFilterStatus, $searchTerm, $searchDate) {
-    return 'home?' . http_build_query(array_filter(['status' => $activeFilterStatus, 'q' => $searchTerm, 'data' => $searchDate, 'p' => $n > 1 ? $n : null]));
-};
-
 // ---------------------------------------------------------------------
 // Leitura do painel (tudo a partir dos pedidos já carregados acima)
 // ---------------------------------------------------------------------
@@ -106,39 +97,38 @@ $fmtDays = static function (float $d): string {
 };
 $isOpen = static fn(string $st): bool => !in_array($st, ['C', 'N'], true);
 $isUrgent = static fn(array $r): bool => !empty($r['urgent']) || (int)($r['priority'] ?? 2) >= 3;
-$reqLink = static fn(array $r): string => 'request_detail?id=' . (int)$r['id'] . '&table=' . urlencode((string)$r['sector']);
+$reqLink = static fn(array $r): string => 'request_detail?id=' . (int)$r['id'] . '&table=' . urlencode((string)($r['table'] ?? $r['sector'] ?? ''));
 
 $pendingOld = 0;       // esperando aprovação há mais de 2 dias
-$inSectorsUrgent = 0;  // urgentes entre aprovados/em atendimento
 $sectorLoad = [];      // setor => [abertos, atrasados]
 foreach (array_keys($map) as $s) {
     $sectorLoad[$s] = ['open' => 0, 'late' => 0];
 }
 $visibleKeys = [];
-$lateList = [];
-$urgentList = [];
-$urgentPending = [];  // urgentes esperando aprovação (só para quem aprova)
+$todayCount = 0;      // vencem hoje
+$inTimeCount = 0;     // abertos e dentro do prazo
+$openAges = [];       // dias em aberto, para a média do rodapé
 foreach ($everything as $r) {
     $st = $normStatus($r);
     $sector = (string)($r['sector'] ?? '');
     $visibleKeys[$sector . ':' . (int)$r['id']] = $r;
     if ($st === 'P' && $daysSince($r['created_at'] ?? null) > 2) $pendingOld++;
-    if (in_array($st, ['Y', 'A', 'W'], true) && $isUrgent($r)) $inSectorsUrgent++;
     if ($isOpen($st)) {
         $sectorLoad[$sector] = $sectorLoad[$sector] ?? ['open' => 0, 'late' => 0];
         $sectorLoad[$sector]['open']++;
+        $openAges[] = $daysSince($r['created_at'] ?? null);
+        $deadline = substr((string)($r['date'] ?? ''), 0, 10);
         if (!empty($r['is_atrasada'])) {
             $sectorLoad[$sector]['late']++;
-            $lateList[] = $r;
-        } elseif ($isUrgent($r) && $st !== 'P') {
-            $urgentList[] = $r;
-        } elseif ($isUrgent($r) && !$isGestor) {
-            $urgentPending[] = $r;
+        } else {
+            if ($deadline === $today) $todayCount++;
+            if ($deadline === '' || $deadline >= $today) $inTimeCount++;
         }
     }
 }
 uasort($sectorLoad, fn($a, $b) => $b['open'] <=> $a['open']);
 $loadMax = max(1, max(array_column($sectorLoad, 'open') ?: [0]));
+$openAvg = $openAges ? array_sum($openAges) / count($openAges) : null;
 
 // Encaminhamentos entre setores (últimos 30 dias + os que ainda estão em aberto)
 $pairs = [];
@@ -174,80 +164,28 @@ try {
 }
 uasort($pairs, fn($a, $b) => $b['count'] <=> $a['count']);
 $pairs = array_slice($pairs, 0, 5, true);
-$forwardAges = array_map(fn($f) => $daysSince($f['created_at']), $openForwards);
-$forwardAvg = $forwardAges ? array_sum($forwardAges) / count($forwardAges) : null;
 
-// "Precisa de atenção": urgentes esperando aprovação, atrasados (mais atrasado primeiro), urgentes, parados com outro setor
-usort($lateList, fn($a, $b) => strcmp((string)$a['date'], (string)$b['date']));
-$attention = [];
-foreach ($urgentPending as $r) {
-    $attention[] = [
-        'href' => $reqLink($r) . '&from=approve', 'title' => 'Nº ' . (int)$r['id'] . ' · ' . ($r['title'] ?? 'Sem título'),
-        'meta' => requestSectorName((string)$r['sector']) . ' · urgente · esperando sua aprovação',
-        'kind' => 'warn',
-    ];
-}
-// Parte do setor parceiro fora do prazo: o atraso aparece no nome de quem está com ela. Vem antes dos
-// pedidos atrasados porque a lista é curta e o pedido em si pode nem estar atrasado.
+// "Parado com": a parte que mais pede atenção (atrasada primeiro, depois a mais antiga).
+// Alimenta a linha de baixo da lista e a gaveta.
+$paradoCom = [];
 foreach ($openForwards as $f) {
-    if (!RequestForwardService::partnerIsLate($f)) continue;
-    $d = $daysSince($f['due_date']);
-    $attention[] = [
-        'href' => $reqLink($f['req']), 'title' => 'Nº ' . (int)$f['request_id'] . ' · ' . ($f['req']['title'] ?? 'Sem título'),
-        'meta' => 'Parte de ' . RequestForwardService::areaLabel($pdo, (int)$f['to_area_id']) . ' atrasada há ' . $d . ($d === 1 ? ' dia' : ' dias'),
-        'kind' => 'bad',
+    $k = $f['request_table'] . ':' . (int)$f['request_id'];
+    $late = RequestForwardService::partnerIsLate($f);
+    $age = $daysSince($late ? $f['due_date'] : $f['created_at']);
+    if (isset($paradoCom[$k]) && [$paradoCom[$k]['late'], $paradoCom[$k]['days']] >= [$late, $age]) continue;
+    $paradoCom[$k] = [
+        'area' => RequestForwardService::areaLabel($pdo, (int)$f['to_area_id']),
+        'days' => $age,
+        'late' => $late,
     ];
 }
-foreach ($lateList as $r) {
-    $d = $daysSince($r['date']);
-    $attention[] = [
-        'href' => $reqLink($r), 'title' => 'Nº ' . (int)$r['id'] . ' · ' . ($r['title'] ?? 'Sem título'),
-        'meta' => requestSectorName((string)$r['sector']) . ' · atrasado ' . $d . ($d === 1 ? ' dia' : ' dias') . ($isUrgent($r) ? ' · urgente' : ''),
-        'kind' => 'bad',
-    ];
-}
-foreach ($urgentList as $r) {
-    $attention[] = [
-        'href' => $reqLink($r), 'title' => 'Nº ' . (int)$r['id'] . ' · ' . ($r['title'] ?? 'Sem título'),
-        'meta' => requestSectorName((string)$r['sector']) . ' · urgente · ' . statusLabel($normStatus($r)),
-        'kind' => 'warn',
-    ];
-}
-foreach ($openForwards as $f) {
-    if (RequestForwardService::partnerIsLate($f)) continue; // já está acima, como atraso
-    $d = $daysSince($f['created_at']);
-    if ($d < 2) continue;
-    $attention[] = [
-        'href' => $reqLink($f['req']), 'title' => 'Nº ' . (int)$f['request_id'] . ' · ' . ($f['req']['title'] ?? 'Sem título'),
-        'meta' => 'Parado com ' . RequestForwardService::areaLabel($pdo, (int)$f['to_area_id']) . ' há ' . $d . ' dias',
-        'kind' => '',
-    ];
-}
-$attentionMore = max(0, count($attention) - 6);
-$attention = array_slice($attention, 0, 6);
-if (!$isGestor && $pendingOld > 0) {
-    $attention[] = [
-        'href' => 'approve', 'title' => $pendingOld . ($pendingOld === 1 ? ' pedido esperando' : ' pedidos esperando') . ' aprovação há mais de 2 dias',
-        'meta' => 'Abrir Aprovar', 'kind' => '',
-    ];
-}
+// Texto da parte: "Parte de Compras atrasada há 2 dias" ou "com Compras há 3 dias"
+$paradoText = static function (array $p): string {
+    $d = $p['days'] . ($p['days'] === 1 ? ' dia' : ' dias');
+    return $p['late'] ? 'Parte de ' . $p['area'] . ' atrasada há ' . $d : 'com ' . $p['area'] . ' há ' . $d;
+};
 
-// Números por etapa
-$stages = [];
-if (!$isGestor) {
-    $stages[] = ['P', 'Esperando aprovação', (int)($pendentes ?? 0), $pendingOld > 0 ? $pendingOld . ' há +2 dias' : 'nenhum parado', $pendingOld > 0 ? 'warn' : ''];
-}
-$stages[] = [null, $isGestor ? 'Para atender' : 'Nos setores', (int)($aprovadas ?? 0) + (int)($emAndamento ?? 0),
-    $inSectorsUrgent > 0 ? $inSectorsUrgent . ($inSectorsUrgent === 1 ? ' urgente' : ' urgentes') : 'nenhum urgente', $inSectorsUrgent > 0 ? 'bad' : ''];
-$stages[] = ['F', 'Esperando outro setor', (int)($repassadas ?? 0), $forwardAvg !== null ? 'média: ' . $fmtDays($forwardAvg) : '', ''];
-$stages[] = ['C', 'Concluídos', (int)($concluidas ?? 0), 'desde o início', 'ok'];
-
-$tableTitle = [
-    'P' => 'Aguardando aprovação', 'Y' => 'Aprovadas', 'W' => 'Em atendimento',
-    'C' => 'Concluídas', 'N' => 'Recusadas', 'F' => 'Encaminhadas',
-][$activeFilterStatus] ?? 'Pedidos';
-
-// Filtros por situação (os mesmos de antes, agora em abas)
+// Filtros por situação (abas)
 $pipeline = [
     'P' => ['Aguardando aprovação', $pendentes ?? 0],
     'Y' => [$isGestor ? 'Para atender' : 'Aprovadas', $aprovadas ?? 0],
@@ -259,155 +197,236 @@ $pipeline = [
 if ($isGestor) {
     unset($pipeline['P'], $pipeline['N']);
 }
-$hasFilter = $activeFilterStatus || $searchTerm !== '' || $searchDate !== '';
+
+// Lente de prazo: os três chips da faixa de estado recortam a lista
+$view = in_array($_GET['v'] ?? '', ['atrasados', 'hoje', 'emdia'], true) ? $_GET['v'] : null;
+if ($view === 'atrasados') {
+    $tableRequests = array_values(array_filter($tableRequests, fn($r) => !empty($r['is_atrasada'])));
+} elseif ($view === 'hoje') {
+    $tableRequests = array_values(array_filter($tableRequests, fn($r) => substr((string)($r['date'] ?? ''), 0, 10) === $today && $isOpen($normStatus($r))));
+} elseif ($view === 'emdia') {
+    $tableRequests = array_values(array_filter($tableRequests, function ($r) use ($isOpen, $normStatus, $today) {
+        $deadline = substr((string)($r['date'] ?? ''), 0, 10);
+        return $isOpen($normStatus($r)) && empty($r['is_atrasada']) && ($deadline === '' || $deadline >= $today);
+    }));
+}
+
+// Paginação: 50 por página
+$perPage = 50;
+$totalRows = count($tableRequests);
+$totalPages = max(1, (int)ceil($totalRows / $perPage));
+$currentPageNum = min($totalPages, max(1, (int)($_GET['p'] ?? 1)));
+$recent_requests = array_slice($tableRequests, ($currentPageNum - 1) * $perPage, $perPage);
+
+$homeLink = static function (array $override = []) use ($activeFilterStatus, $searchTerm, $searchDate, $view) {
+    $params = array_filter(array_merge([
+        'status' => $activeFilterStatus,
+        'v' => $view,
+        'q' => $searchTerm,
+        'data' => $searchDate,
+    ], $override), fn($v) => $v !== null && $v !== '');
+    return 'home' . ($params ? '?' . http_build_query($params) : '');
+};
+$pageLink = fn(int $n) => $homeLink(['p' => $n > 1 ? $n : null]);
+
+$hasFilter = $activeFilterStatus || $searchTerm !== '' || $searchDate !== '' || $view;
 $scopeText = $isAdmSub ? 'Pedidos da sua subdivisão' : ($isGestor ? 'Pedidos do seu setor' : 'Todos os setores');
+
+// Rótulos curtos para a coluna Situação (as pílulas não cabem com o texto inteiro)
+$shortStatus = ['P' => 'Ag. aprovação', 'Y' => 'Aprovada', 'W' => 'Em atendimento', 'C' => 'Concluída', 'N' => 'Recusada', 'F' => 'Encaminhada'];
+$prioLabel = priorityLabels();
 ?>
-<div class="dash">
-    <header class="dash-head">
-        <div>
-            <p class="dash-head__scope"><?= e($scopeText) ?></p>
-            <h1 class="dash-head__title">Painel</h1>
+
+<div class="pn">
+    <header class="pn-head">
+        <div class="pn-head__main">
+            <h1 class="pn-title">Painel</h1>
+            <p class="pn-sub">
+                <strong><?= (int)$total ?></strong> <?= (int)$total === 1 ? 'pedido' : 'pedidos' ?><?php if ($openAvg !== null): ?> · abertos há <?= e($fmtDays($openAvg)) ?> em média<?php endif; ?>
+            </p>
         </div>
-        <button type="button" onclick="exportToExcel()" class="btn"><i class="fa-solid fa-download" aria-hidden="true"></i> Exportar planilha</button>
+        <div class="pn-head__acts">
+            <button type="button" onclick="exportToExcel()" class="btn pn-btn">
+                <i class="fa-solid fa-download" aria-hidden="true"></i> Exportar
+            </button>
+        </div>
     </header>
 
-    <?= renderWelcomeCard($role, (int)$_SESSION['id']) ?>
-
-    <section class="dash-card dash-attention<?= $attention ? '' : ' is-calm' ?>" aria-labelledby="atencaoTitulo">
-        <div class="dash-card__head"><h2 id="atencaoTitulo"><?= $attention ? 'Comece por aqui' : 'Tudo em dia' ?></h2></div>
-        <?php if ($attention): ?>
-            <ul class="attn-list">
-                <?php foreach ($attention as $item): ?>
-                    <li><a class="attn-item" href="<?= e($item['href']) ?>">
-                        <span class="attn-item__title"><?= e($item['title']) ?></span>
-                        <span class="attn-item__meta<?= $item['kind'] ? ' attn-item__meta--' . e($item['kind']) : '' ?>"><?= e($item['meta']) ?></span>
-                    </a></li>
-                <?php endforeach; ?>
-            </ul>
-            <?php if ($attentionMore > 0): ?><p class="dash-card__foot">E mais <?= (int)$attentionMore ?>. Veja a lista abaixo.</p><?php endif; ?>
-        <?php else: ?>
-            <p class="dash-card__empty"><i class="fa-solid fa-circle-check" aria-hidden="true"></i> Nada atrasado, urgente ou parado. Quando algo precisar de você, aparece aqui.</p>
-        <?php endif; ?>
-    </section>
-
-    <section class="dash-stages" aria-label="Pedidos por etapa">
-        <?php foreach ($stages as [$code, $label, $value, $note, $kind]):
-            $tag = $code ? 'a' : 'div';
-            $isOn = $code && $activeFilterStatus === $code;
-        ?>
-            <<?= $tag ?> class="dash-stage<?= $isOn ? ' is-active' : '' ?>"<?php if ($code): ?> href="<?= e($isOn ? 'home' : 'home?status=' . $code) ?>"<?= $isOn ? ' aria-current="true"' : '' ?><?php endif; ?>>
-                <span class="dash-stage__label"><?= e($label) ?></span>
-                <strong class="dash-stage__value"><?= (int)$value ?></strong>
-                <?php if ($note !== ''): ?><span class="dash-stage__note<?= $kind ? ' dash-stage__note--' . e($kind) : '' ?>"><?= e($note) ?></span><?php endif; ?>
-            </<?= $tag ?>>
+    <!-- Abas por situação -->
+    <nav class="pn-tabs" aria-label="Filtrar por situação">
+        <a class="pn-tab<?= !$activeFilterStatus ? ' is-active' : '' ?>" href="<?= e($homeLink(['status' => null, 'p' => null])) ?>"<?= !$activeFilterStatus ? ' aria-current="true"' : '' ?>>Todos <span><?= (int)($total ?? 0) ?></span></a>
+        <?php foreach ($pipeline as $code => [$label, $count]):
+            $isOn = $activeFilterStatus === $code; ?>
+            <a class="pn-tab<?= $isOn ? ' is-active' : '' ?>" href="<?= e($homeLink(['status' => $isOn ? null : $code, 'p' => null])) ?>"<?= $isOn ? ' aria-current="true"' : '' ?>><?= e($label) ?> <span><?= (int)$count ?></span></a>
         <?php endforeach; ?>
-    </section>
+    </nav>
 
-    <details class="dash-more">
-    <summary class="dash-more__toggle"><i class="fa-solid fa-chart-simple" aria-hidden="true"></i> Ver números da operação <i class="fa-solid fa-chevron-down dash-more__chev" aria-hidden="true"></i></summary>
-    <div class="dash-cols">
-        <section class="dash-card dash-load" aria-labelledby="cargaTitulo">
-            <div class="dash-card__head">
-                <h2 id="cargaTitulo">Carga por setor</h2>
-                <span>pedidos abertos</span>
+    <!-- Faixa de estado: filtra a lista -->
+    <div class="pn-band">
+        <a class="pn-chip pn-chip--bad<?= $view === 'atrasados' ? ' is-on' : '' ?>" href="<?= e($homeLink(['v' => $view === 'atrasados' ? null : 'atrasados', 'p' => null])) ?>"><strong><?= (int)$atrasadas ?></strong> <?= (int)$atrasadas === 1 ? 'atrasado' : 'atrasados' ?></a>
+        <a class="pn-chip pn-chip--warn<?= $view === 'hoje' ? ' is-on' : '' ?>" href="<?= e($homeLink(['v' => $view === 'hoje' ? null : 'hoje', 'p' => null])) ?>"><strong><?= (int)$todayCount ?></strong> <?= (int)$todayCount === 1 ? 'vence hoje' : 'vencem hoje' ?></a>
+        <a class="pn-chip pn-chip--ok<?= $view === 'emdia' ? ' is-on' : '' ?>" href="<?= e($homeLink(['v' => $view === 'emdia' ? null : 'emdia', 'p' => null])) ?>"><strong><?= (int)$inTimeCount ?></strong> em dia</a>
+        <span class="pn-band__sep"></span>
+        <details class="pn-more">
+            <summary class="pn-more__toggle"><i class="fa-solid fa-chart-simple" aria-hidden="true"></i> Números da operação <i class="fa-solid fa-chevron-down pn-more__chev" aria-hidden="true"></i></summary>
+            <div class="pn-more__panel">
+                <section class="pn-more__col" aria-labelledby="cargaTitulo">
+                    <div class="pn-more__head"><h2 id="cargaTitulo">Carga por setor</h2><span>pedidos abertos</span></div>
+                    <?php if (array_sum(array_column($sectorLoad, 'open')) === 0): ?>
+                        <p class="pn-more__empty">Nenhum pedido aberto agora.</p>
+                    <?php else: ?>
+                        <ul class="pn-load">
+                            <?php foreach ($sectorLoad as $sector => $load):
+                                $name = requestSectorName((string)$sector);
+                                $aria = $name . ': ' . $load['open'] . ($load['open'] === 1 ? ' aberto' : ' abertos')
+                                    . ($load['late'] > 0 ? ', ' . $load['late'] . ($load['late'] === 1 ? ' atrasado' : ' atrasados') : ''); ?>
+                                <li class="pn-load__row<?= $load['late'] > 0 ? ' is-late' : '' ?>">
+                                    <span class="pn-load__name"><?= e($name) ?></span>
+                                    <span class="pn-load__meta"><?= (int)$load['open'] ?><?php if ($load['late'] > 0): ?> · <b><?= (int)$load['late'] ?></b> atrasado<?= $load['late'] === 1 ? '' : 's' ?><?php endif; ?></span>
+                                    <span class="pn-load__track" role="img" aria-label="<?= e($aria) ?>"><span class="pn-load__fill" style="--w: <?= round($load['open'] / $loadMax * 100) ?>%"></span></span>
+                                </li>
+                            <?php endforeach; ?>
+                        </ul>
+                        <p class="pn-more__foot"><span class="pn-key" aria-hidden="true"></span> Vermelho: setor com pedido atrasado.</p>
+                    <?php endif; ?>
+                </section>
+                <section class="pn-more__col" aria-labelledby="ajudaTitulo">
+                    <div class="pn-more__head"><h2 id="ajudaTitulo">Quem pede ajuda a quem</h2><span>30 dias</span></div>
+                    <?php if ($pairs): ?>
+                        <ul class="pn-pairs">
+                            <?php foreach ($pairs as $p):
+                                $from = RequestForwardService::areaLabel($pdo, $p['from']);
+                                $to = RequestForwardService::areaLabel($pdo, $p['to']);
+                                $ret = $p['ret'] ? $fmtDays(array_sum($p['ret']) / count($p['ret'])) : null; ?>
+                                <li class="pn-pairs__row">
+                                    <span><?= e($from) ?> <span class="pn-pairs__arrow" aria-label="pediu ajuda a">→</span> <?= e($to) ?></span>
+                                    <span class="pn-pairs__info"><?= (int)$p['count'] ?><?= $ret ? ' · devolve em ' . e($ret) : '' ?></span>
+                                </li>
+                            <?php endforeach; ?>
+                        </ul>
+                    <?php else: ?>
+                        <p class="pn-more__empty">Nenhum pedido passou de um setor a outro nos últimos 30 dias.</p>
+                    <?php endif; ?>
+                </section>
             </div>
-            <?php if (array_sum(array_column($sectorLoad, 'open')) === 0): ?>
-                <p class="dash-card__empty">Nenhum pedido aberto agora.</p>
-            <?php else: ?>
-                <ul class="load-list">
-                    <?php foreach ($sectorLoad as $sector => $load):
-                        $name = requestSectorName((string)$sector);
-                        $aria = $name . ': ' . $load['open'] . ($load['open'] === 1 ? ' aberto' : ' abertos')
-                            . ($load['late'] > 0 ? ', ' . $load['late'] . ($load['late'] === 1 ? ' atrasado' : ' atrasados') : '');
-                    ?>
-                        <li class="load-row<?= $load['late'] > 0 ? ' is-late' : '' ?>">
-                            <span class="load-row__name"><?= e($name) ?></span>
-                            <span class="load-row__meta"><?= (int)$load['open'] ?> <?= $load['open'] === 1 ? 'aberto' : 'abertos' ?><?php if ($load['late'] > 0): ?> · <?= (int)$load['late'] ?> <?= $load['late'] === 1 ? 'atrasado' : 'atrasados' ?><?php endif; ?></span>
-                            <span class="load-row__track" role="img" aria-label="<?= e($aria) ?>"><span class="load-row__fill" style="--w: <?= round($load['open'] / $loadMax * 100) ?>%"></span></span>
-                        </li>
-                    <?php endforeach; ?>
-                </ul>
-                <p class="dash-card__foot"><span class="load-key" aria-hidden="true"></span> Laranja: setor com pedido atrasado.</p>
-            <?php endif; ?>
-        </section>
-
-        <div class="dash-side">
-            <section class="dash-card" aria-labelledby="ajudaTitulo">
-                <div class="dash-card__head">
-                    <h2 id="ajudaTitulo">Quem pede ajuda a quem</h2>
-                    <span>30 dias</span>
-                </div>
-                <?php if ($pairs): ?>
-                    <ul class="pair-list">
-                        <?php foreach ($pairs as $p):
-                            $from = RequestForwardService::areaLabel($pdo, $p['from']);
-                            $to = RequestForwardService::areaLabel($pdo, $p['to']);
-                            $ret = $p['ret'] ? $fmtDays(array_sum($p['ret']) / count($p['ret'])) : null;
-                        ?>
-                            <li class="pair-row">
-                                <span><?= e($from) ?> <span class="pair-row__arrow" aria-label="pediu ajuda a">→</span> <?= e($to) ?></span>
-                                <span class="pair-row__info"><?= (int)$p['count'] ?><?= $ret ? ' · devolve em ' . e($ret) : '' ?></span>
-                            </li>
-                        <?php endforeach; ?>
-                    </ul>
-                <?php else: ?>
-                    <p class="dash-card__empty">Nenhum pedido passou de um setor a outro nos últimos 30 dias.</p>
-                <?php endif; ?>
-            </section>
-        </div>
+        </details>
     </div>
-    </details>
 
-    <section class="dash-table" aria-labelledby="tabelaTitulo">
-        <div class="toolbar">
-            <h2 id="tabelaTitulo" class="toolbar__title"><?= e($tableTitle) ?> <span><?= $totalRows ?></span></h2>
-            <form method="get" action="home" class="toolbar__filters" role="search">
+    <!-- Cartão: barra de ferramentas + tabela + rodapé -->
+    <section class="pn-card" aria-labelledby="tabelaTitulo">
+        <div class="pn-tool">
+            <h2 id="tabelaTitulo" class="pn-tool__title"><?= e($activeFilterStatus ? $pipeline[$activeFilterStatus][0] ?? 'Pedidos' : ($view === 'atrasados' ? 'Atrasados' : ($view === 'hoje' ? 'Vencem hoje' : ($view === 'emdia' ? 'Em dia' : 'Todos os pedidos')))) ?>
+                <span class="pn-tool__count"><?= (int)$totalRows ?></span>
+            </h2>
+
+            <form method="get" action="home" class="pn-filters" role="search">
                 <?php if ($activeFilterStatus): ?><input type="hidden" name="status" value="<?= e($activeFilterStatus) ?>"><?php endif; ?>
-                <div class="search-box">
-                    <i class="fas fa-search" aria-hidden="true"></i>
-                    <input type="search" name="q" value="<?= e($searchTerm) ?>" placeholder="Título, número ou quem pediu" aria-label="Buscar por título, número ou quem pediu">
-                </div>
-                <input type="date" name="data" value="<?= e($searchDate) ?>" aria-label="Pedidos feitos neste dia" title="Pedidos feitos neste dia" onchange="this.form.submit()">
+                <?php if ($view): ?><input type="hidden" name="v" value="<?= e($view) ?>"><?php endif; ?>
+                <label class="pn-search">
+                    <i class="fa-solid fa-magnifying-glass" aria-hidden="true"></i>
+                    <span class="visually-hidden">Buscar por título, número ou quem pediu</span>
+                    <input type="search" name="q" value="<?= e($searchTerm) ?>" placeholder="Buscar pedido ou pessoa">
+                </label>
+                <input class="pn-date" type="date" name="data" value="<?= e($searchDate) ?>" aria-label="Pedidos feitos neste dia" title="Pedidos feitos neste dia" onchange="this.form.submit()">
                 <?php if ($hasFilter): ?>
-                    <a class="btn btn--ghost" href="home">Limpar</a>
+                    <a class="pn-clear" href="home">Limpar</a>
                 <?php endif; ?>
             </form>
         </div>
 
-        <nav class="tabs dash-tabs" aria-label="Filtrar por situação">
-            <a class="tab<?= !$activeFilterStatus ? ' is-active' : '' ?>" href="home"<?= !$activeFilterStatus ? ' aria-current="true"' : '' ?>>Todos <span><?= (int)($total ?? 0) ?></span></a>
-            <?php foreach ($pipeline as $code => [$label, $count]):
-                $isOn = $activeFilterStatus === $code;
-            ?>
-                <a class="tab<?= $isOn ? ' is-active' : '' ?>" href="<?= e($isOn ? 'home' : 'home?status=' . $code) ?>"<?= $isOn ? ' aria-current="true"' : '' ?>><?= e($label) ?> <span><?= (int)$count ?></span></a>
-            <?php endforeach; ?>
-        </nav>
+        <?php if (!$isGestor && $pendingOld > 0): ?>
+            <p class="pn-notice">
+                <i class="fa-solid fa-circle-exclamation" aria-hidden="true"></i>
+                <strong><?= (int)$pendingOld ?></strong> <?= $pendingOld === 1 ? 'pedido espera' : 'pedidos esperam' ?> aprovação há mais de 2 dias.
+                <a href="approve">Abrir Aprovar</a>
+            </p>
+        <?php endif; ?>
 
-        <div class="queue queue--sector queue--dash">
+        <div class="pn-table">
+            <div class="pn-thead" aria-hidden="true">
+                <span>Tarefa</span>
+                <span>Prioridade</span>
+                <span>Prazo</span>
+                <span>Status</span>
+                <span></span>
+            </div>
+
             <?php if ($recent_requests): ?>
-                <?= renderQueueHead(['sector' => true]) ?>
-                <ul class="queue-list">
-                    <?php foreach ($recent_requests as $req):
-                        $st = strtoupper($req['status'] ?? 'P') ?: 'P';
-                        $req['context'] = [statusLabel($st), ['C' => 'ok', 'N' => 'bad'][$st] ?? ''];
-                    ?>
-                        <?= renderQueueRow($req, ['sector' => true, 'due' => !in_array($st, ['C', 'N'], true)]) ?>
-                    <?php endforeach; ?>
-                </ul>
+                <?php foreach ($recent_requests as $req):
+                    $st = $normStatus($req);
+                    $slug = (string)($req['table'] ?? $req['sector'] ?? '');
+                    $sectorName = requestSectorName($slug);
+                    $who = trim((string)($req['solicitor_name_formatted'] ?? '')) ?: '—';
+                    [$dueText, $dueKind] = deadlineLabel((string)($req['date'] ?? ''));
+                    $prio = (int)($req['priority'] ?? 2);
+                    $isUrg = $isUrgent($req);
+                    $parado = $paradoCom[$slug . ':' . (int)$req['id']] ?? null;
+                    $href = $reqLink($req);
+                    $desc = trim((string)($req['description'] ?? ''));
+                    $stText = $shortStatus[$st] ?? statusLabel($st);
+                ?>
+                    <a class="pn-row<?= $st === 'C' || $st === 'N' ? ' is-done' : '' ?>" href="<?= e($href) ?>"
+                       data-peek
+                       data-id="<?= (int)$req['id'] ?>"
+                       data-table="<?= e($slug) ?>"
+                       data-title="<?= e((string)($req['title'] ?? 'Sem título')) ?>"
+                       data-sector="<?= e($sectorName) ?>"
+                       data-who="<?= e($who) ?>"
+                       data-status="<?= e($stText) ?>"
+                       data-status-code="<?= e($st) ?>"
+                       data-prazo="<?= e($dueText) ?>"
+                       data-prazo-kind="<?= e($dueKind) ?>"
+                       data-prio="<?= e($prioLabel[$prio] ?? 'Normal') ?>"
+                       data-urgent="<?= $isUrg ? '1' : '0' ?>"
+                       data-parado="<?= $parado ? e($paradoText($parado)) : '' ?>"
+                       data-parado-late="<?= $parado && $parado['late'] ? '1' : '0' ?>"
+                       data-desc="<?= e($desc) ?>"
+                       data-href="<?= e($href) ?>">
+                        <span class="pn-main">
+                            <i class="fa-regular fa-file-lines pn-main__ico" aria-hidden="true"></i>
+                            <span class="pn-main__text">
+                                <span class="pn-ttl"><?= e((string)($req['title'] ?? 'Sem título')) ?></span>
+                                <span class="pn-meta">#<?= (int)$req['id'] ?> · <?= e($sectorName) ?> · <?= e($who) ?><?php if ($parado): ?> · <span class="<?= $parado['late'] ? 'pn-meta__late' : '' ?>"><?= e($paradoText($parado)) ?></span><?php endif; ?></span>
+                            </span>
+                        </span>
+                        <span class="pn-prio pn-prio--<?= (int)$prio ?><?= $isUrg && $prio < 3 ? ' is-urgent' : '' ?>">
+                            <i class="fa-solid fa-circle" aria-hidden="true"></i><?= e($prioLabel[$prio] ?? 'Normal') ?>
+                        </span>
+                        <span class="pn-prazo pn-prazo--<?= e($dueKind ?: 'none') ?>">
+                            <i class="fa-regular fa-clock" aria-hidden="true"></i><span><?= e($dueText) ?></span>
+                        </span>
+                        <span class="pn-status"><span class="status-pill status-pill--<?= e($st) ?>"><?= e($stText) ?></span></span>
+                        <span class="pn-open" aria-hidden="true"><i class="fa-solid fa-chevron-right"></i></span>
+                    </a>
+                <?php endforeach; ?>
             <?php else: ?>
-                <div class="empty-state"><i class="fa-regular fa-folder-open" aria-hidden="true"></i><p><?= $hasFilter ? 'Nenhum pedido com esses filtros.' : 'Ainda não há pedidos.' ?></p></div>
+                <div class="pn-empty">
+                    <i class="fa-regular fa-folder-open" aria-hidden="true"></i>
+                    <p><?= $hasFilter ? 'Nenhum pedido com esses filtros.' : 'Ainda não há pedidos.' ?></p>
+                    <?php if ($hasFilter): ?><a class="btn btn--ghost" href="home">Limpar filtros</a><?php endif; ?>
+                </div>
             <?php endif; ?>
         </div>
 
-        <?php if ($totalPages > 1): ?>
-            <nav class="pager" aria-label="Páginas">
-                <?php if ($currentPageNum > 1): ?><a href="<?= e($pageLink($currentPageNum - 1)) ?>">Anterior</a><?php endif; ?>
-                <span class="is-current"><?= $currentPageNum ?> de <?= $totalPages ?></span>
-                <?php if ($currentPageNum < $totalPages): ?><a href="<?= e($pageLink($currentPageNum + 1)) ?>">Próxima</a><?php endif; ?>
-            </nav>
-        <?php endif; ?>
+        <div class="pn-sum">
+            <span>Mostrando <strong><?= count($recent_requests) ?></strong> de <strong><?= (int)$totalRows ?></strong>
+                <?php if ($view === 'atrasados'): ?>na lente de atrasados<?php elseif ($view === 'hoje'): ?>que vencem hoje<?php elseif ($view === 'emdia'): ?>em dia<?php endif; ?>
+                · <strong><?= (int)$atrasadas ?></strong> atrasados no total
+            </span>
+            <span class="pn-sum__r"><?= e($scopeText) ?></span>
+        </div>
     </section>
+
+    <?php if ($totalPages > 1): ?>
+        <nav class="pager" aria-label="Páginas">
+            <?php if ($currentPageNum > 1): ?><a href="<?= e($pageLink($currentPageNum - 1)) ?>">Anterior</a><?php endif; ?>
+            <span class="is-current"><?= $currentPageNum ?> de <?= $totalPages ?></span>
+            <?php if ($currentPageNum < $totalPages): ?><a href="<?= e($pageLink($currentPageNum + 1)) ?>">Próxima</a><?php endif; ?>
+        </nav>
+    <?php endif; ?>
 </div>
+
+<?php include __DIR__ . '/../components/request_peek.php'; ?>
 
 <script>
 function exportToExcel() {
