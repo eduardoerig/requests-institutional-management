@@ -13,11 +13,14 @@
     --superficie: #FFFFFF;
     --linha: #E4E4E7;
     --linha-forte: #D4D4D8;
-    --linha-suave: #EFEFF3; /* divisória de lista no padrão clean */
+    /* Borda de campo (input, select, textarea, busca): 3,4:1 sobre branco e 3,2:1 sobre --fundo (WCAG 1.4.11).
+       A --linha-forte dava 1,37–1,48:1 e o campo sumia para quem lê devagar. */
+    --linha-campo: #8A8A94;
+    --linha-suave: #E4E4E7; /* divisória de lista no padrão clean (= --linha: a mais clara sumia na tela) */
     --texto: #18181B;
     --texto-2: #52525B;
     --texto-3: #52525B;
-    --texto-4: #6B6B76; /* cinza de apoio (padrão clean): o mais claro permitido para texto, 4,6:1+ em --fundo e --fundo-2 */
+    --texto-4: #52525B; /* cinza de apoio (padrão clean): igual ao --texto-2 (7:1). O #6B6B76 passava no mínimo, mas em 12px ficava difícil de ler */
     --texto-inv: #FFFFFF;
     --texto-inv-2: #D6D6DC;
     --linha-inv: rgb(255 255 255 / .35);
@@ -28,9 +31,10 @@
     --laranja: #C2410C;
     --laranja-escuro: #9A3412;
     --laranja-claro: #FFF7ED;
-    --laranja-borda: #FED7AA;
-    --anel: 0 0 0 3px rgb(240 138 44 / .4);
-    --anel-dentro: inset 0 0 0 3px rgb(240 138 44 / .4);
+    --laranja-borda: #FDBA74; /* 1,56:1 sobre o fundo: a #FED7AA (1,25:1) não separava o cartão de boas-vindas */
+    /* Foco: laranja cheio (5:1 sobre branco) com folga branca; o de 40% tinha 1,4:1 e quase não se via */
+    --anel: 0 0 0 2px var(--superficie), 0 0 0 4px var(--laranja);
+    --anel-dentro: inset 0 0 0 2px var(--laranja);
     --anel-campo: 0 0 0 3px rgb(24 24 27 / .06); /* foco de campo: borda grafite + halo cinza leve (o laranja fica para ações) */
 
     /* Semânticas */
@@ -49,8 +53,8 @@
     /* Tipografia */
     --fonte: "Inter", system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
     --fonte-num: "Inter", system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
-    --t-xs: 0.8125rem;
-    --t-sm: 0.875rem;
+    --t-xs: 0.875rem;   /* 14px: o menor texto do sistema (usuário leigo, leitura lenta) */
+    --t-sm: 0.9375rem;  /* 15px */
     --t-md: 1rem;
     --t-lg: 1.125rem;
     --t-xl: 1.375rem;
@@ -232,8 +236,8 @@ small { font-size: 0.875em; }
 /* Numa linha só: nome que não couber termina em "…" (o nome inteiro fica no title) */
 .sidebar .menu-link > span:not(.sidebar-badge):not(.visually-hidden) { flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .sidebar .menu-link:hover { background: var(--fundo); color: var(--texto); }
-.sidebar .menu-link.is-active { background: var(--fundo-2); color: var(--texto); }
-.sidebar .menu-link.is-active i { color: var(--grafite); }
+.sidebar .menu-link.is-active { background: var(--laranja-claro); color: var(--laranja-escuro); }
+.sidebar .menu-link.is-active i { color: var(--laranja-escuro); }
 .sidebar .menu-link--new { justify-content: center; min-height: var(--h-md); border-radius: var(--r-2); background: var(--laranja); color: var(--texto-inv); margin-bottom: 16px; }
 .sidebar .menu-link--new > span:not(.sidebar-badge):not(.visually-hidden) { flex: 0 0 auto; }
 .sidebar .menu-link--new i,
@@ -326,8 +330,8 @@ small { font-size: 0.875em; }
 .bottom-nav__item.is-active { color: var(--laranja); font-weight: 700; }
 .bottom-nav__item .sidebar-badge {
     position: absolute;
-    top: 6px;
-    left: calc(50% + 6px);
+    top: 4px;
+    left: calc(50% + 9px); /* encostado no ícone, sem cobrir (antes invadia ~2px) */
 }
 .bottom-nav__new { color: var(--laranja); }
 .bottom-nav__new i {
@@ -528,7 +532,8 @@ small { font-size: 0.875em; }
     min-height: var(--h-md);
     margin-bottom: 24px;
 }
-.page-head h1 { font-size: var(--t-2xl); }
+/* Título de página: 30px/600, igual ao Painel e à Caixa (Padrão clean de UI) */
+.page-head h1 { font-size: 30px; font-weight: 600; letter-spacing: -0.03em; line-height: 1.15; }
 .page-head p { color: var(--texto-2); margin-top: 4px; }
 /* No celular o título já está na barra superior */
 @media (max-width: 899.98px) {
@@ -556,7 +561,7 @@ small { font-size: 0.875em; }
 }
 
 /* Aviso na página: ícone, texto e, se for o caso, uma ação */
-.notice { display: flex; align-items: flex-start; gap: 12px; padding: 12px 16px; margin-bottom: 16px; border: 1px solid var(--linha); border-radius: var(--r-2); background: var(--superficie); color: var(--texto-2); }
+.notice { display: flex; align-items: flex-start; gap: 12px; padding: 12px 16px; margin-bottom: 16px; border: 1px solid var(--linha-forte); border-radius: var(--r-2); background: var(--superficie); color: var(--texto-2); }
 .notice > i { margin-top: 3px; color: var(--texto-3); }
 .notice strong, .notice b { color: var(--texto); }
 .notice--bad { border-color: var(--perigo-claro); background: var(--perigo-claro); }
@@ -614,7 +619,7 @@ input[type="date"], input[type="email"], input[type="tel"], input[type="url"], s
     width: 100%;
     min-height: var(--h-md);
     padding: 9px 12px;
-    border: 1px solid var(--linha-forte);
+    border: 1px solid var(--linha-campo);
     border-radius: var(--r-2);
     background: var(--superficie);
     color: var(--texto);
@@ -753,7 +758,7 @@ select option { color: var(--texto); }
 }
 /* Situação em pílula com fundo suave; o texto sempre diz a situação (a cor só reforça) */
 .status-pill--P { --pill-bg: var(--aviso-claro); --pill-fg: #92400E; }
-.status-pill--Y { --pill-bg: var(--fundo-2); --pill-fg: #3F3F46; }
+.status-pill--Y { --pill-bg: var(--superficie); --pill-fg: #3F3F46; box-shadow: inset 0 0 0 1px var(--linha-forte); }
 .status-pill--W { --pill-bg: var(--info-claro); --pill-fg: var(--info); }
 .status-pill--C { --pill-bg: #ECFDF5; --pill-fg: #047857; }
 .status-pill--N { --pill-bg: var(--perigo-claro); --pill-fg: #991B1B; }
@@ -767,14 +772,14 @@ select option { color: var(--texto); }
     padding: 0 8px;
     border-radius: var(--r-pill);
     background: var(--perigo-claro);
-    color: #991B1B;
-    font-size: 11px;
+    color: var(--perigo);
+    font-size: var(--t-xs);
     font-weight: 700;
     letter-spacing: .02em;
     text-transform: uppercase;
     white-space: nowrap;
 }
-.badge-sector { display: inline-flex; align-items: center; min-height: 20px; padding: 0 8px; border-radius: var(--r-pill); background: var(--roxo-claro); color: var(--roxo); font-size: 11px; font-weight: 600; white-space: nowrap; }
+.badge-sector { display: inline-flex; align-items: center; min-height: 20px; padding: 0 8px; border-radius: var(--r-pill); background: var(--roxo-claro); color: var(--roxo); font-size: var(--t-xs); font-weight: 600; white-space: nowrap; }
 
 /* Etapas em 4 barras: Enviado · Aprovado · No setor · Concluído (mesma leitura em toda tela) */
 .steps4 { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 6px; margin: 0; padding: 0; list-style: none; }
@@ -787,7 +792,7 @@ select option { color: var(--texto); }
 .steps4 span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
 /* Cartão base da UI 2.0 */
-.card { background: var(--superficie); border: 1px solid var(--linha); border-radius: var(--r-3); }
+.card { background: var(--superficie); border: 1px solid var(--linha-forte); border-radius: var(--r-3); }
 .card--urgent { border-color: #FECACA; }
 a.card { color: inherit; text-decoration: none; display: block; }
 a.card:hover { border-color: var(--linha-forte); }
@@ -800,7 +805,7 @@ a.card:hover { border-color: var(--linha-forte); }
 /* ---------- 10. Painéis, estados vazios ---------- */
 .panel {
     background: var(--superficie);
-    border: 1px solid var(--linha);
+    border: 1px solid var(--linha-forte);
     border-radius: var(--r-2);
 }
 .panel + .panel { margin-top: 16px; }
@@ -1588,7 +1593,7 @@ details.panel[open] > summary::after { transform: rotate(180deg); }
 .partner-picker__add { justify-self: start; }
 .partner-picker__field { display: grid; gap: 4px; min-width: 0; }
 .partner-picker__field label { font-size: var(--t-sm); font-weight: 600; }
-.partner-picker__field label small { font-weight: 400; color: var(--texto-2); }
+.partner-picker__field label small { font-size: var(--t-xs); font-weight: 400; color: var(--texto-2); }
 .partner-picker select, .partner-picker input { width: 100%; }
 .approve-card__partner, .rv-partner details { font-size: var(--t-sm); }
 .approve-card__partner { margin-top: 4px; }

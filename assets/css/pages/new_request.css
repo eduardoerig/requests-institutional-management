@@ -1,4 +1,6 @@
-/* Nova requisição (UI 2.0) — celular primeiro: 3 passos; computador (≥900px): uma página só */
+/* Nova requisição — padrão clean (referência: Painel). 3 passos no celular e no computador.
+   Formulário não vira lista: só sai a moldura que sobrava (quadro lateral, caixa da urgência).
+   Cartões ficam só para a escolha principal (setor e tipo da Reprografia). Só tokens do app.css. */
 
 .nr { display: flex; flex-direction: column; gap: 16px; padding-bottom: 88px; }
 
@@ -6,7 +8,7 @@
 .nr-head { display: flex; flex-direction: column; gap: 4px; }
 .nr-head__back { display: none; }
 .nr-head__count { margin: 0; font-size: var(--t-xs); color: var(--texto-2); }
-.nr-head__title { margin: 0; font-size: 20px; font-weight: 700; letter-spacing: -0.01em; }
+.nr-head__title { margin: 0; font-size: 24px; font-weight: 600; letter-spacing: -0.03em; line-height: 1.2; }
 .nr-head__title:focus { outline: none; }
 .nr-progress { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 6px; margin: 10px 0 0; padding: 0; list-style: none; }
 .nr-progress li { height: 4px; border-radius: 2px; background: var(--linha); transition: background-color var(--dur-2); }
@@ -22,7 +24,7 @@
     display: flex; flex-direction: column; align-items: flex-start; justify-content: flex-start; gap: 4px;
     min-height: 96px;
     padding: 16px 14px;
-    border: 2px solid var(--linha);
+    border: 1px solid var(--linha-forte);
     border-radius: 14px;
     background: var(--superficie);
     color: var(--texto);
@@ -30,7 +32,9 @@
     font: inherit;
 }
 .type-card.nr-sector:hover { border-color: var(--linha-forte); }
-.type-card.nr-sector[aria-pressed="true"] { border-color: var(--laranja); background: var(--laranja-claro); }
+/* Selecionado: borda laranja de 2px sem mexer no tamanho do cartão */
+.type-card.nr-sector[aria-pressed="true"] { border-color: var(--laranja); background: var(--laranja-claro); box-shadow: inset 0 0 0 1px var(--laranja); }
+.type-card.nr-sector[aria-pressed="true"]:focus-visible { box-shadow: inset 0 0 0 1px var(--laranja), var(--anel); }
 .nr-sector__name { display: flex; align-items: center; gap: 8px; font-size: var(--t-md); font-weight: 600; }
 .nr-sector__name i { font-size: var(--t-sm); color: var(--texto-2); width: 16px; text-align: center; }
 .nr-sector[aria-pressed="true"] .nr-sector__name i { color: var(--laranja-escuro); }
@@ -50,7 +54,7 @@
 .nr-form .form-step { display: flex; flex-direction: column; gap: 0; }
 .form-step__title { display: none; }
 .nr-form .form-group > label,
-.nr-form .form-group > legend { font-size: 15px; }
+.nr-form .form-group > legend { font-size: 16px; }
 .nr-form .form-group { margin-bottom: 20px; } /* mesmo espaço entre campos em todos os formulários */
 .nr-form .form-extras > .form-group, .nr-form .yesno__panel .form-group:last-child { margin-bottom: 0; }
 .nr-form input[type="text"],
@@ -67,18 +71,18 @@
     position: relative;
     display: flex; flex-direction: column; gap: 4px;
     min-height: 88px; padding: 14px;
-    border: 2px solid var(--linha); border-radius: 14px;
+    border: 1px solid var(--linha-forte); border-radius: 14px;
     background: var(--superficie); cursor: pointer;
 }
 .kind-choice__card:hover { border-color: var(--linha-forte); }
-.kind-choice__card:has(input:checked) { border-color: var(--laranja); background: var(--laranja-claro); }
+.kind-choice__card:has(input:checked) { border-color: var(--laranja); background: var(--laranja-claro); box-shadow: inset 0 0 0 1px var(--laranja); }
 .kind-choice__card:has(input:focus-visible) { box-shadow: var(--anel); }
 .kind-choice__card input { position: absolute; opacity: 0; pointer-events: none; }
 .kind-choice__name { display: flex; align-items: center; gap: 8px; font-size: var(--t-md); font-weight: 600; }
 .kind-choice__name i { color: var(--texto-2); width: 16px; text-align: center; }
 .kind-choice__card:has(input:checked) .kind-choice__name i { color: var(--laranja-escuro); }
 .kind-choice__hint { font-size: var(--t-xs); color: var(--texto-2); line-height: 1.35; }
-.form-group.has-error .kind-choice__card { border-color: var(--perigo); }
+.form-group.has-error .kind-choice__card { border-color: var(--perigo); box-shadow: inset 0 0 0 1px var(--perigo); }
 
 /* Prazo: só o calendário (a partir de amanhã); embaixo, a data por extenso */
 .nr-form .date-field { display: flex; flex-direction: column; align-items: stretch; gap: 10px; }
@@ -91,14 +95,18 @@
 .urgent-switch.check-line {
     display: flex; align-items: center; justify-content: space-between; gap: 14px;
     min-height: 44px;
-    padding: 16px;
-    border: 1px solid var(--linha);
+    padding: 12px 14px;
+    margin-inline: -14px;
+    border: 0;
     border-radius: 14px;
-    background: var(--superficie);
+    background: transparent;
     font-weight: 400;
     cursor: pointer;
+    transition: background-color var(--dur-1);
 }
-.urgent-switch:has(input:checked) { background: var(--laranja-claro); border-color: #FDBA74; }
+/* Sem caixa: só a linha do interruptor; ligado, ganha o fundo laranja claro */
+.urgent-switch:hover { background: var(--fundo-2); }
+.urgent-switch:has(input:checked) { background: var(--laranja-claro); }
 .urgent-switch__text { display: flex; flex-direction: column; gap: 4px; text-align: left; }
 .urgent-switch__title { font-size: var(--t-md); font-weight: 600; }
 .urgent-switch__hint { font-size: var(--t-sm); color: var(--texto-2); line-height: 1.4; }
@@ -120,7 +128,7 @@
     top: 3px; left: 3px;
     width: 24px; height: 24px;
     border-radius: 50%;
-    background: #FFFFFF;
+    background: var(--superficie);
     box-shadow: 0 1px 2px rgb(0 0 0 / .2);
     transition: transform var(--dur-1);
 }
@@ -128,8 +136,8 @@
 .urgent-switch input[type="checkbox"]:checked::before { transform: translateX(22px); }
 .urgent-switch input[type="checkbox"]:focus-visible { outline: none; box-shadow: var(--anel); }
 .nr-form .urgent-field__reason { margin-top: 14px; }
-.nr-form .urgent-field__reason label { font-size: 15px; font-weight: 600; }
-.nr-form .urgent-field__reason input { border-color: #FDBA74; }
+.nr-form .urgent-field__reason label { font-size: 16px; font-weight: 600; }
+.nr-form .urgent-field__reason input { border-color: var(--laranja-borda); }
 
 /* Revisão (só no celular) */
 .nr-review:empty { display: none; }
@@ -137,13 +145,14 @@
     display: flex; flex-direction: column; gap: 6px;
     padding: 16px;
     border-radius: 14px;
-    background: var(--fundo-2);
+    background: var(--superficie);
+    border: 1px solid var(--linha-forte);
 }
 .nr-review__label { font-size: var(--t-xs); color: var(--texto-2); }
 .nr-review__title { font-size: var(--t-md); font-weight: 600; }
 .nr-review__line { font-size: var(--t-sm); color: var(--texto); overflow-wrap: anywhere; }
 .nr-review__line b { color: var(--laranja-escuro); }
-.nr-review__text { font-size: var(--t-sm); color: #3F3F46; line-height: 1.45; }
+.nr-review__text { font-size: var(--t-sm); color: var(--texto); line-height: 1.45; }
 
 /* "O que acontece depois" (só no computador) */
 .nr-after { display: none; }
@@ -169,7 +178,7 @@
         gap: 10px;
         padding: 10px 16px;
         background: var(--superficie);
-        border-top: 1px solid var(--linha);
+        border-top: 1px solid var(--linha-forte);
         box-shadow: 0 -4px 12px rgb(24 24 27 / .04);
     }
     .nr-nav .btn { min-height: var(--h-lg); border-radius: 14px; font-size: var(--t-md); font-weight: 600; }
@@ -181,7 +190,7 @@
 @media (min-width: 900px) {
     .nr { padding-bottom: 0; gap: 24px; }
     .nr-head { max-width: 720px; }
-    .nr-nav { justify-content: space-between; padding-top: 20px; border-top: 1px solid var(--linha); }
+    .nr-nav { justify-content: space-between; padding-top: 20px; border-top: 1px solid var(--linha-suave); }
     .nr-nav .btn { min-height: 46px; padding: 0 22px; }
     .nr-nav__next, .nr-nav__send { margin-left: auto; min-width: 180px; justify-content: center; }
     .nr-head__back {
@@ -191,7 +200,7 @@
         color: var(--texto-2); font-size: var(--t-sm); font-weight: 600; text-decoration: none;
     }
     .nr-head__back:hover { color: var(--texto); }
-    .nr-head__title { font-size: 24px; letter-spacing: -0.02em; }
+    .nr-head__title { font-size: 30px; }
 
     .nr-layout { flex-direction: row; flex-wrap: wrap; align-items: flex-start; gap: 24px; }
     .nr-main { flex: 999 1 480px; }
@@ -199,13 +208,13 @@
         display: flex; flex-direction: column; gap: 14px;
         flex: 1 1 260px;
         position: sticky; top: calc(var(--topbar-h) + 24px);
-        padding: 20px;
-        background: var(--superficie);
-        border: 1px solid var(--linha);
-        border-radius: 14px;
+        padding: 4px 0 0 24px;
+        border-left: 1px solid var(--linha-suave);
     }
-    .nr-after h2 { margin: 0; font-size: 15px; font-weight: 600; }
-    .nr-after ol { margin: 0; padding-left: 20px; display: flex; flex-direction: column; gap: 10px; font-size: var(--t-sm); line-height: 1.5; color: #3F3F46; }
+    /* Sem quadro: uma coluna de texto ao lado, mais baixa que o formulário */
+    .nr-after h2 { margin: 0; font-size: 14px; font-weight: 600; color: var(--texto-2); }
+    .nr-after ol { margin: 0; padding-left: 18px; display: flex; flex-direction: column; gap: 10px; font-size: 14px; line-height: 1.5; color: var(--texto-2); }
+    .nr-after ol strong { color: var(--texto); }
 
     .nr-main { max-width: 720px; }
     .nr-sector-grid { grid-template-columns: repeat(auto-fill, minmax(170px, 1fr)); }
@@ -220,8 +229,8 @@
 
     .urgent-switch.check-line { justify-content: flex-start; }
     .urgent-switch input[type="checkbox"] { order: -1; }
-    .urgent-switch__title { font-size: 15px; }
-    .urgent-switch__hint { font-size: 13px; }
+    .urgent-switch__title { font-size: 16px; }
+    .urgent-switch__hint { font-size: 14px; }
 
 }
 

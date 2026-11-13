@@ -286,7 +286,8 @@
         root.classList.add('has-choice');
         panel.hidden = false;
         panel.dataset.sector = card.dataset.sector;
-        if (sectorOut) sectorOut.textContent = card.dataset.sectorName || card.dataset.label;
+        // "Caixa de TI": o "de" vem junto com o nome; sem setor escolhido o texto é "do setor escolhido"
+        if (sectorOut) sectorOut.textContent = 'de ' + (card.dataset.sectorName || card.dataset.label);
 
         const job = loadForm(card);
         loading = job;

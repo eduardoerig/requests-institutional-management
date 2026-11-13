@@ -24,7 +24,8 @@ body.peek-open { overflow: hidden; }
     flex-direction: column;
     background: var(--superficie);
     border-radius: 20px;
-    box-shadow: 0 24px 64px rgb(16 16 24 / .14), 0 0 0 1px rgb(16 16 24 / .04);
+    border: 1px solid var(--linha-forte);
+    box-shadow: 0 24px 64px rgb(16 16 24 / .14);
     overflow: hidden;
     padding: 22px 26px 0;
 }
@@ -42,7 +43,7 @@ body.peek-open { overflow: hidden; }
     height: 30px;
     padding: 0 10px;
     border-radius: 9px;
-    font-size: 12.5px;
+    font-size: 14px;
     font-weight: 500;
     color: var(--texto-2);
     text-decoration: none;
@@ -54,7 +55,7 @@ body.peek-open { overflow: hidden; }
     display: inline-flex;
     align-items: center;
     gap: 8px;
-    font-size: 12.5px;
+    font-size: 14px;
     color: var(--texto-2);
 }
 .peek__ico {
@@ -94,7 +95,7 @@ body.peek-open { overflow: hidden; }
     flex-wrap: wrap;
     gap: 8px;
     margin: 12px 0 0;
-    font-size: 13px;
+    font-size: 14px;
     color: var(--texto-2);
 }
 .peek__m { display: inline-flex; align-items: center; gap: 6px; }
@@ -120,13 +121,13 @@ body.peek-open { overflow: hidden; }
 .peek__sec { margin-bottom: 26px; }
 .peek__sec h3 {
     margin: 0 0 10px;
-    font-size: 13px;
+    font-size: 14px;
     font-weight: 600;
     color: var(--texto-2);
 }
 .peek__sec p {
     margin: 0;
-    font-size: 14px;
+    font-size: 16px;
     line-height: 1.6;
     color: var(--texto);
 }
@@ -137,7 +138,8 @@ body.peek-open { overflow: hidden; }
     gap: 11px;
     padding: 12px 14px;
     border-radius: 12px;
-    background: var(--fundo-2);
+    background: var(--superficie);
+    border: 1px solid var(--linha-forte);
 }
 .peek__av {
     display: inline-flex;
@@ -148,18 +150,19 @@ body.peek-open { overflow: hidden; }
     border-radius: 50%;
     background: var(--linha);
     color: var(--texto-2);
-    font-size: 10.5px;
+    font-size: var(--t-xs);
     font-weight: 700;
     flex: 0 0 30px;
+    box-shadow: inset 0 0 0 1px var(--linha-forte);
 }
 .peek__who-text { display: flex; flex-direction: column; gap: 1px; min-width: 0; }
-.peek__who-text strong { font-size: 13.5px; font-weight: 600; color: var(--texto); }
-.peek__who-text small { font-size: 11.5px; color: var(--texto-4); }
+.peek__who-text strong { font-size: 14px; font-weight: 600; color: var(--texto); }
+.peek__who-text small { font-size: 14px; color: var(--texto-4); }
 .peek__sec[hidden] { display: none; }
 
 /* Onde está: as 4 etapas e a frase de quem é a vez */
 .peek__sec .steps4 { margin-bottom: 10px; }
-.peek__sec p.peek__where { font-size: 13.5px; color: var(--texto-2); }
+.peek__sec p.peek__where { font-size: 14px; color: var(--texto-2); }
 .peek__sec p.peek__where--in { color: var(--laranja-escuro); font-weight: 600; }
 .peek__sec p.peek__where--ok { color: var(--ok); }
 .peek__sec p.peek__where--bad { color: var(--perigo); }
@@ -186,18 +189,18 @@ body.peek-open { overflow: hidden; }
 }
 .peek-talk__feed .chat-item { display: grid; gap: 3px; max-width: 92%; }
 .peek-talk__feed .chat-item.mine { justify-items: end; text-align: right; }
-.peek-talk__feed .chat-meta { margin: 0 0 4px; font-size: 11.5px; line-height: 1.4; color: var(--texto-4); }
+.peek-talk__feed .chat-meta { margin: 0 0 4px; font-size: 14px; line-height: 1.4; color: var(--texto-4); }
 .peek-talk__feed .chat-user-name { display: inline; margin: 0; font-size: inherit; font-weight: 600; color: var(--texto-2); }
 .peek-talk__feed .chat-role { color: var(--texto-4); }
 /* o app.css deixa a hora em bloco (linha própria); aqui ela segue o nome */
 .peek-talk__feed .chat-time { display: inline; margin: 0; font-size: inherit; text-align: left; opacity: 1; color: var(--texto-4); }
 .peek-talk__feed .chat-bubble {
     padding: 9px 12px;
-    border: 0;
+    border: 1px solid var(--linha-forte);
     border-radius: 14px 14px 14px 4px;
-    background: var(--fundo-2);
+    background: var(--superficie);
     color: var(--texto);
-    font-size: 13.5px;
+    font-size: 14px;
     line-height: 1.5;
     text-align: left;
 }
@@ -210,7 +213,7 @@ body.peek-open { overflow: hidden; }
 /* eventos do histórico: discretos, centralizados */
 .peek-talk__feed .feed-day {
     margin: 4px 0;
-    font-size: 11px;
+    font-size: 14px;
     font-weight: 500;
     color: var(--texto-4);
     text-align: center;
@@ -221,27 +224,29 @@ body.peek-open { overflow: hidden; }
     margin: 0;
     padding: 4px 10px;
     border-radius: 999px;
-    background: var(--fundo-2);
-    font-size: 11.5px;
+    background: var(--superficie);
+    box-shadow: inset 0 0 0 1px var(--linha-forte);
+    font-size: 14px;
     line-height: 1.45;
     color: var(--texto-2);
     text-align: center;
 }
 .peek-talk__feed .feed-event p strong { font-weight: 600; color: var(--texto-2); }
-.peek-talk__feed .feed-event p time { margin-left: 4px; font-size: 11px; color: var(--texto-4); }
+.peek-talk__feed .feed-event p time { margin-left: 4px; font-size: 14px; color: var(--texto-4); }
 .peek-talk__feed .feed-event blockquote {
     margin: 4px 0 0;
     padding: 6px 10px;
     border-radius: 10px;
-    background: var(--fundo);
+    background: var(--superficie);
+    border: 1px solid var(--linha-forte);
     color: var(--texto-2);
-    font-size: 12px;
+    font-size: 14px;
 }
 .peek-talk__feed .feed-event--bad p { background: var(--perigo-claro); color: var(--perigo); }
 .peek-talk__feed .feed-event--bad p strong { color: var(--perigo); }
-.peek-talk__feed .feed-empty { margin: 0; font-size: 12.5px; color: var(--texto-4); }
+.peek-talk__feed .feed-empty { margin: 0; font-size: 14px; color: var(--texto-4); }
 
-.peek-talk__hint { margin: 0; font-size: 12.5px; color: var(--texto-4); line-height: 1.5; }
+.peek-talk__hint { margin: 0; font-size: 14px; color: var(--texto-4); line-height: 1.5; }
 
 /* campo de mensagem fixo no pé da gaveta */
 .peek-talk__form {
@@ -250,7 +255,8 @@ body.peek-open { overflow: hidden; }
     gap: 8px;
     padding: 6px 6px 6px 12px;
     border-radius: 14px;
-    background: var(--fundo-2);
+    background: var(--superficie);
+    border: 1px solid var(--linha-campo);
     transition: box-shadow var(--dur-1);
 }
 .peek-talk__form:focus-within { box-shadow: var(--anel); }
@@ -263,7 +269,7 @@ body.peek-open { overflow: hidden; }
     background: transparent;
     resize: none;
     font: inherit;
-    font-size: 13.5px;
+    font-size: 14px;
     line-height: 1.4;
     color: var(--texto);
     outline: none;
@@ -277,7 +283,7 @@ body.peek-open { overflow: hidden; }
     border-radius: 10px;
     background: var(--laranja);
     color: var(--texto-inv);
-    font-size: 12px;
+    font-size: 14px;
     cursor: pointer;
     transition: background-color var(--dur-1);
 }
@@ -302,5 +308,5 @@ body.peek-open { overflow: hidden; }
 @media (max-width: 520px) {
     .peek__panel { padding: 16px 16px 0; }
     .peek__title { font-size: 20px; }
-    .peek__meta { font-size: 12.5px; }
+    .peek__meta { font-size: 14px; }
 }

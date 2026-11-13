@@ -84,7 +84,7 @@ body.page-login { background: var(--superficie); }
     gap: 18px;
     padding: 24px;
     background: var(--superficie);
-    border: 1px solid var(--linha);
+    border: 1px solid var(--linha-forte);
     border-radius: var(--r-3);
     box-shadow: var(--sombra-1);
     transition: opacity var(--dur-3) var(--ease-out), transform var(--dur-3) var(--ease-out);
@@ -100,8 +100,9 @@ body.page-login { background: var(--superficie); }
     gap: 10px;
     align-items: flex-start;
     padding: 12px;
+    border: 1px solid var(--linha-forte);
     border-radius: var(--r-2);
-    background: var(--fundo);
+    background: var(--superficie);
     font-size: var(--t-sm);
     line-height: 1.5;
 }
@@ -114,7 +115,7 @@ body.page-login { background: var(--superficie); }
     border-radius: 50%;
     background: var(--grafite);
     color: var(--texto-inv);
-    font-size: 11px;
+    font-size: var(--t-xs);
     font-weight: 600;
 }
 .auth-demo__caption { margin: 0; font-size: 15px; line-height: 1.6; color: var(--texto-2); text-align: center; }
