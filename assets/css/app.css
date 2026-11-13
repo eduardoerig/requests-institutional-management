@@ -1590,7 +1590,7 @@ details.panel[open] > summary::after { transform: rotate(180deg); }
 .partner-picker__add { justify-self: start; }
 .partner-picker__field { display: grid; gap: 4px; min-width: 0; }
 .partner-picker__field label { font-size: var(--t-sm); font-weight: 600; }
-.partner-picker__field label small { font-weight: 400; color: var(--texto-2); }
+.partner-picker__field label small { font-size: var(--t-xs); font-weight: 400; color: var(--texto-2); }
 .partner-picker select, .partner-picker input { width: 100%; }
 .approve-card__partner, .rv-partner details { font-size: var(--t-sm); }
 .approve-card__partner { margin-top: 4px; }
