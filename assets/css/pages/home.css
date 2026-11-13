@@ -36,7 +36,7 @@
     line-height: 1.45;
 }
 .pn-sub strong { color: var(--texto); font-weight: 600; }
-.pn-head__acts { display: flex; align-items: center; gap: 8px; padding-top: 4px; }
+.pn-head__acts { display: flex; align-items: center; flex-wrap: wrap; justify-content: flex-end; gap: 8px; padding-top: 4px; }
 
 /* botão no tom da tela: baixo, arredondado, sem sombra */
 .pn-btn {
@@ -92,13 +92,22 @@
 .pn-tab.is-active span { color: var(--laranja-escuro); opacity: .7; }
 
 /* ---------- faixa de estado ---------- */
+/* ---------- faixa única de filtros: situação | prazo ---------- */
+.pn-bar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    flex-wrap: wrap;
+    gap: 10px 24px;
+    padding-bottom: 14px;
+    border-bottom: 1px solid var(--linha-suave);
+}
+.pn-bar .pn-tabs { flex: 1 1 auto; min-width: 0; }
 .pn-band {
-    position: relative;
     display: flex;
     align-items: center;
     flex-wrap: wrap;
     gap: 8px;
-    margin-top: -8px;
 }
 .pn-chip {
     display: inline-flex;
@@ -118,18 +127,17 @@
 .pn-chip--bad  { background: var(--perigo-claro); color: var(--perigo); }
 .pn-chip--warn { background: var(--aviso-claro); color: var(--aviso); }
 .pn-chip--ok   { background: var(--ok-claro); color: var(--ok); }
-.pn-band__sep { flex: 1 1 auto; }
 
 /* números da operação: popover, não bloco */
-.pn-more { position: relative; margin-left: auto; }
+.pn-more { position: relative; }
 .pn-more__toggle {
     display: inline-flex;
     align-items: center;
     gap: 7px;
-    height: 30px;
-    padding: 0 11px;
-    border-radius: 999px;
-    font-size: 14px;
+    height: 40px;
+    padding: 0 12px;
+    border-radius: 12px;
+    font-size: 15px;
     font-weight: 500;
     color: var(--texto-2);
     cursor: pointer;
@@ -230,59 +238,52 @@
 /* ---------- bloco da lista (sem cartão) ---------- */
 .pn-card { display: flex; flex-direction: column; min-width: 0; }
 
-.pn-tool {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: 16px;
-    flex-wrap: wrap;
-    margin-bottom: 6px;
-}
-.pn-tool__title {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    margin: 0;
-    font-size: 16px;
-    font-weight: 600;
-    color: var(--texto-2);
-    letter-spacing: -0.01em;
-}
-.pn-tool__count {
+.pn-filters { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin: 0; }
+
+/* "Por dia": só um link até alguém usar */
+.pn-day { display: flex; align-items: center; gap: 6px; }
+.pn-day__toggle {
     display: inline-flex;
     align-items: center;
-    justify-content: center;
-    min-width: 22px;
-    height: 20px;
-    padding: 0 7px;
-    border-radius: 999px;
-    background: var(--fundo-2);
+    gap: 6px;
+    height: 40px;
+    padding: 0 10px;
+    border-radius: 12px;
+    font-size: 15px;
     color: var(--texto-2);
-    font-size: 14px;
-    font-weight: 600;
-    font-variant-numeric: tabular-nums;
+    cursor: pointer;
+    list-style: none;
 }
+.pn-day__toggle::-webkit-details-marker { display: none; }
+.pn-day__toggle:hover { background: var(--fundo-2); color: var(--texto); }
+.pn-day[open] .pn-day__toggle { color: var(--laranja-escuro); }
+.pn-day[open] { display: flex; }
+.pn-day:not([open]) .pn-date { display: none; }
 
-.pn-filters { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+/* Frase do filtro ligado */
+.pn-active { margin: -8px 0 0; font-size: 15px; color: var(--texto-2); }
+.pn-active strong { color: var(--texto); }
+.pn-active a { margin-left: 6px; font-weight: 600; color: var(--laranja-escuro); }
 .pn-search {
     display: flex;
     align-items: center;
     gap: 8px;
-    height: 36px;
+    height: 40px;
     padding: 0 12px;
+    border: 1px solid var(--linha);
     border-radius: 12px;
-    background: var(--fundo-2);
+    background: var(--superficie);
     color: var(--texto-4);
 }
 .pn-search i { font-size: 12px; }
 .pn-search input {
-    width: 190px;
+    width: 220px;
     min-height: 0;
     padding: 0;
     border: 0;
     background: transparent;
     font: inherit;
-    font-size: 14px;
+    font-size: 15px;
     color: var(--texto);
     outline: none;
 }
@@ -291,12 +292,12 @@
 .pn-filters .pn-date {
     flex: 0 0 auto;
     width: auto;
-    height: 36px;
+    height: 40px;
     min-height: 0;
     padding: 0 8px;
-    border: 0;
+    border: 1px solid var(--linha);
     border-radius: 12px;
-    background: var(--fundo-2);
+    background: var(--superficie);
     font: inherit;
     font-size: 14px;
     color: var(--texto-2);
@@ -466,9 +467,12 @@
 
     .pn-thead { display: none; }
     .pn-card { gap: 4px; }
-    .pn-tool { flex-direction: column; align-items: stretch; gap: 10px; margin-bottom: 2px; }
+    .pn-head__acts { justify-content: flex-start; }
+    .pn-filters { flex: 1 1 100%; }
     .pn-search { flex: 1; }
-    .pn-search input { width: 100%; }
+    .pn-search input { width: 100%; font-size: 16px; }
+    /* nowrap: em coluna, o wrap deixava a linha crescer até o conteúdo (720px a 375) */
+    .pn-bar { flex-direction: column; align-items: stretch; flex-wrap: nowrap; }
 
     .pn-row {
         display: flex;
@@ -485,6 +489,8 @@
 
     .pn-sum { padding: 12px 4px 0; }
     .pn-more { margin-left: 0; }
+    /* aberto, os números descem e ocupam a largura toda; fechado, divide a linha com Exportar */
+    .pn-more[open] { flex: 1 1 100%; order: 3; }
     .pn-more__panel { position: static; width: 100%; grid-template-columns: 1fr; gap: 22px; margin-top: 10px; box-shadow: none; padding: 4px 0 0; }
 
 }
