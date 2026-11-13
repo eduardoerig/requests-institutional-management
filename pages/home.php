@@ -238,6 +238,7 @@ $prioLabel = priorityLabels();
 ?>
 
 <div class="pn">
+    <!-- Cabeçalho: título à esquerda; busca, números e exportar à direita -->
     <header class="pn-head">
         <div class="pn-head__main">
             <h1 class="pn-title">Painel</h1>
@@ -246,79 +247,6 @@ $prioLabel = priorityLabels();
             </p>
         </div>
         <div class="pn-head__acts">
-            <button type="button" onclick="exportToExcel()" class="btn pn-btn">
-                <i class="fa-solid fa-download" aria-hidden="true"></i> Exportar
-            </button>
-        </div>
-    </header>
-
-    <!-- Abas por situação -->
-    <nav class="pn-tabs" aria-label="Filtrar por situação">
-        <a class="pn-tab<?= !$activeFilterStatus ? ' is-active' : '' ?>" href="<?= e($homeLink(['status' => null, 'p' => null])) ?>"<?= !$activeFilterStatus ? ' aria-current="true"' : '' ?>>Todos <span><?= (int)($total ?? 0) ?></span></a>
-        <?php foreach ($pipeline as $code => [$label, $count]):
-            $isOn = $activeFilterStatus === $code; ?>
-            <a class="pn-tab<?= $isOn ? ' is-active' : '' ?>" href="<?= e($homeLink(['status' => $isOn ? null : $code, 'p' => null])) ?>"<?= $isOn ? ' aria-current="true"' : '' ?>><?= e($label) ?> <span><?= (int)$count ?></span></a>
-        <?php endforeach; ?>
-    </nav>
-
-    <!-- Faixa de estado: filtra a lista -->
-    <div class="pn-band">
-        <a class="pn-chip pn-chip--bad<?= $view === 'atrasados' ? ' is-on' : '' ?>" href="<?= e($homeLink(['v' => $view === 'atrasados' ? null : 'atrasados', 'p' => null])) ?>"><strong><?= (int)$atrasadas ?></strong> <?= (int)$atrasadas === 1 ? 'atrasado' : 'atrasados' ?></a>
-        <a class="pn-chip pn-chip--warn<?= $view === 'hoje' ? ' is-on' : '' ?>" href="<?= e($homeLink(['v' => $view === 'hoje' ? null : 'hoje', 'p' => null])) ?>"><strong><?= (int)$todayCount ?></strong> <?= (int)$todayCount === 1 ? 'vence hoje' : 'vencem hoje' ?></a>
-        <a class="pn-chip pn-chip--ok<?= $view === 'emdia' ? ' is-on' : '' ?>" href="<?= e($homeLink(['v' => $view === 'emdia' ? null : 'emdia', 'p' => null])) ?>"><strong><?= (int)$inTimeCount ?></strong> em dia</a>
-        <span class="pn-band__sep"></span>
-        <details class="pn-more">
-            <summary class="pn-more__toggle"><i class="fa-solid fa-chart-simple" aria-hidden="true"></i> Números da operação <i class="fa-solid fa-chevron-down pn-more__chev" aria-hidden="true"></i></summary>
-            <div class="pn-more__panel">
-                <section class="pn-more__col" aria-labelledby="cargaTitulo">
-                    <div class="pn-more__head"><h2 id="cargaTitulo">Carga por setor</h2><span>pedidos abertos</span></div>
-                    <?php if (array_sum(array_column($sectorLoad, 'open')) === 0): ?>
-                        <p class="pn-more__empty">Nenhum pedido aberto agora.</p>
-                    <?php else: ?>
-                        <ul class="pn-load">
-                            <?php foreach ($sectorLoad as $sector => $load):
-                                $name = requestSectorName((string)$sector);
-                                $aria = $name . ': ' . $load['open'] . ($load['open'] === 1 ? ' aberto' : ' abertos')
-                                    . ($load['late'] > 0 ? ', ' . $load['late'] . ($load['late'] === 1 ? ' atrasado' : ' atrasados') : ''); ?>
-                                <li class="pn-load__row<?= $load['late'] > 0 ? ' is-late' : '' ?>">
-                                    <span class="pn-load__name"><?= e($name) ?></span>
-                                    <span class="pn-load__meta"><?= (int)$load['open'] ?><?php if ($load['late'] > 0): ?> · <b><?= (int)$load['late'] ?></b> atrasado<?= $load['late'] === 1 ? '' : 's' ?><?php endif; ?></span>
-                                    <span class="pn-load__track" role="img" aria-label="<?= e($aria) ?>"><span class="pn-load__fill" style="--w: <?= round($load['open'] / $loadMax * 100) ?>%"></span></span>
-                                </li>
-                            <?php endforeach; ?>
-                        </ul>
-                        <p class="pn-more__foot"><span class="pn-key" aria-hidden="true"></span> Vermelho: setor com pedido atrasado.</p>
-                    <?php endif; ?>
-                </section>
-                <section class="pn-more__col" aria-labelledby="ajudaTitulo">
-                    <div class="pn-more__head"><h2 id="ajudaTitulo">Quem pede ajuda a quem</h2><span>30 dias</span></div>
-                    <?php if ($pairs): ?>
-                        <ul class="pn-pairs">
-                            <?php foreach ($pairs as $p):
-                                $from = RequestForwardService::areaLabel($pdo, $p['from']);
-                                $to = RequestForwardService::areaLabel($pdo, $p['to']);
-                                $ret = $p['ret'] ? $fmtDays(array_sum($p['ret']) / count($p['ret'])) : null; ?>
-                                <li class="pn-pairs__row">
-                                    <span><?= e($from) ?> <span class="pn-pairs__arrow" aria-label="pediu ajuda a">→</span> <?= e($to) ?></span>
-                                    <span class="pn-pairs__info"><?= (int)$p['count'] ?><?= $ret ? ' · devolve em ' . e($ret) : '' ?></span>
-                                </li>
-                            <?php endforeach; ?>
-                        </ul>
-                    <?php else: ?>
-                        <p class="pn-more__empty">Nenhum pedido passou de um setor a outro nos últimos 30 dias.</p>
-                    <?php endif; ?>
-                </section>
-            </div>
-        </details>
-    </div>
-
-    <!-- Cartão: barra de ferramentas + tabela + rodapé -->
-    <section class="pn-card" aria-labelledby="tabelaTitulo">
-        <div class="pn-tool">
-            <h2 id="tabelaTitulo" class="pn-tool__title"><?= e($activeFilterStatus ? $pipeline[$activeFilterStatus][0] ?? 'Pedidos' : ($view === 'atrasados' ? 'Atrasados' : ($view === 'hoje' ? 'Vencem hoje' : ($view === 'emdia' ? 'Em dia' : 'Todos os pedidos')))) ?>
-                <span class="pn-tool__count"><?= (int)$totalRows ?></span>
-            </h2>
-
             <form method="get" action="home" class="pn-filters" role="search">
                 <?php if ($activeFilterStatus): ?><input type="hidden" name="status" value="<?= e($activeFilterStatus) ?>"><?php endif; ?>
                 <?php if ($view): ?><input type="hidden" name="v" value="<?= e($view) ?>"><?php endif; ?>
@@ -327,13 +255,89 @@ $prioLabel = priorityLabels();
                     <span class="visually-hidden">Buscar por título, número ou quem pediu</span>
                     <input type="search" name="q" value="<?= e($searchTerm) ?>" placeholder="Buscar pedido ou pessoa">
                 </label>
-                <input class="pn-date" type="date" name="data" value="<?= e($searchDate) ?>" aria-label="Pedidos feitos neste dia" title="Pedidos feitos neste dia" onchange="this.form.submit()">
-                <?php if ($hasFilter): ?>
-                    <a class="pn-clear" href="home">Limpar</a>
-                <?php endif; ?>
+                <?php // Filtro por dia: pouco usado, fica fechado até alguém pedir ?>
+                <details class="pn-day"<?= $searchDate !== '' ? ' open' : '' ?>>
+                    <summary class="pn-day__toggle"><i class="fa-regular fa-calendar" aria-hidden="true"></i> Por dia</summary>
+                    <input class="pn-date" type="date" name="data" value="<?= e($searchDate) ?>" aria-label="Pedidos feitos neste dia" onchange="this.form.submit()">
+                </details>
             </form>
+            <details class="pn-more">
+                <summary class="pn-more__toggle"><i class="fa-solid fa-chart-simple" aria-hidden="true"></i> Números da operação <i class="fa-solid fa-chevron-down pn-more__chev" aria-hidden="true"></i></summary>
+                <div class="pn-more__panel">
+                    <section class="pn-more__col" aria-labelledby="cargaTitulo">
+                        <div class="pn-more__head"><h2 id="cargaTitulo">Carga por setor</h2><span>pedidos abertos</span></div>
+                        <?php if (array_sum(array_column($sectorLoad, 'open')) === 0): ?>
+                            <p class="pn-more__empty">Nenhum pedido aberto agora.</p>
+                        <?php else: ?>
+                            <ul class="pn-load">
+                                <?php foreach ($sectorLoad as $sector => $load):
+                                    $name = requestSectorName((string)$sector);
+                                    $aria = $name . ': ' . $load['open'] . ($load['open'] === 1 ? ' aberto' : ' abertos')
+                                        . ($load['late'] > 0 ? ', ' . $load['late'] . ($load['late'] === 1 ? ' atrasado' : ' atrasados') : ''); ?>
+                                    <li class="pn-load__row<?= $load['late'] > 0 ? ' is-late' : '' ?>">
+                                        <span class="pn-load__name"><?= e($name) ?></span>
+                                        <span class="pn-load__meta"><?= (int)$load['open'] ?><?php if ($load['late'] > 0): ?> · <b><?= (int)$load['late'] ?></b> atrasado<?= $load['late'] === 1 ? '' : 's' ?><?php endif; ?></span>
+                                        <span class="pn-load__track" role="img" aria-label="<?= e($aria) ?>"><span class="pn-load__fill" style="--w: <?= round($load['open'] / $loadMax * 100) ?>%"></span></span>
+                                    </li>
+                                <?php endforeach; ?>
+                            </ul>
+                            <p class="pn-more__foot"><span class="pn-key" aria-hidden="true"></span> Vermelho: setor com pedido atrasado.</p>
+                        <?php endif; ?>
+                    </section>
+                    <section class="pn-more__col" aria-labelledby="ajudaTitulo">
+                        <div class="pn-more__head"><h2 id="ajudaTitulo">Quem pede ajuda a quem</h2><span>30 dias</span></div>
+                        <?php if ($pairs): ?>
+                            <ul class="pn-pairs">
+                                <?php foreach ($pairs as $p):
+                                    $from = RequestForwardService::areaLabel($pdo, $p['from']);
+                                    $to = RequestForwardService::areaLabel($pdo, $p['to']);
+                                    $ret = $p['ret'] ? $fmtDays(array_sum($p['ret']) / count($p['ret'])) : null; ?>
+                                    <li class="pn-pairs__row">
+                                        <span><?= e($from) ?> <span class="pn-pairs__arrow" aria-label="pediu ajuda a">→</span> <?= e($to) ?></span>
+                                        <span class="pn-pairs__info"><?= (int)$p['count'] ?><?= $ret ? ' · devolve em ' . e($ret) : '' ?></span>
+                                    </li>
+                                <?php endforeach; ?>
+                            </ul>
+                        <?php else: ?>
+                            <p class="pn-more__empty">Nenhum pedido passou de um setor a outro nos últimos 30 dias.</p>
+                        <?php endif; ?>
+                    </section>
+                </div>
+            </details>
+            <button type="button" onclick="exportToExcel()" class="btn pn-btn">
+                <i class="fa-solid fa-download" aria-hidden="true"></i> Exportar
+            </button>
         </div>
+    </header>
 
+    <!-- Uma faixa de filtros: situação à esquerda (só as que têm pedidos), prazo à direita -->
+    <div class="pn-bar">
+        <nav class="pn-tabs" aria-label="Filtrar por situação">
+            <a class="pn-tab<?= !$activeFilterStatus ? ' is-active' : '' ?>" href="<?= e($homeLink(['status' => null, 'p' => null])) ?>"<?= !$activeFilterStatus ? ' aria-current="true"' : '' ?>>Todos <span><?= (int)($total ?? 0) ?></span></a>
+            <?php foreach ($pipeline as $code => [$label, $count]):
+                $isOn = $activeFilterStatus === $code;
+                if ((int)$count === 0 && !$isOn) continue; // aba vazia não ocupa espaço ?>
+                <a class="pn-tab<?= $isOn ? ' is-active' : '' ?>" href="<?= e($homeLink(['status' => $isOn ? null : $code, 'p' => null])) ?>"<?= $isOn ? ' aria-current="true"' : '' ?>><?= e($label) ?> <span><?= (int)$count ?></span></a>
+            <?php endforeach; ?>
+        </nav>
+        <div class="pn-band" role="group" aria-label="Filtrar por prazo">
+            <a class="pn-chip pn-chip--bad<?= $view === 'atrasados' ? ' is-on' : '' ?>" href="<?= e($homeLink(['v' => $view === 'atrasados' ? null : 'atrasados', 'p' => null])) ?>"<?= $view === 'atrasados' ? ' aria-current="true"' : '' ?>><strong><?= (int)$atrasadas ?></strong> <?= (int)$atrasadas === 1 ? 'atrasado' : 'atrasados' ?></a>
+            <a class="pn-chip pn-chip--warn<?= $view === 'hoje' ? ' is-on' : '' ?>" href="<?= e($homeLink(['v' => $view === 'hoje' ? null : 'hoje', 'p' => null])) ?>"<?= $view === 'hoje' ? ' aria-current="true"' : '' ?>><strong><?= (int)$todayCount ?></strong> <?= (int)$todayCount === 1 ? 'vence hoje' : 'vencem hoje' ?></a>
+            <a class="pn-chip pn-chip--ok<?= $view === 'emdia' ? ' is-on' : '' ?>" href="<?= e($homeLink(['v' => $view === 'emdia' ? null : 'emdia', 'p' => null])) ?>"<?= $view === 'emdia' ? ' aria-current="true"' : '' ?>><strong><?= (int)$inTimeCount ?></strong> em dia</a>
+        </div>
+    </div>
+
+    <?php if ($hasFilter): ?>
+        <?php // Com filtro ligado, uma frase diz o que está valendo e como voltar a ver tudo ?>
+        <p class="pn-active">
+            Mostrando <strong><?= (int)$totalRows ?></strong> de <?= (int)$total ?>
+            <?php if ($searchTerm !== ''): ?> · busca “<?= e($searchTerm) ?>”<?php endif; ?>
+            <?php if ($searchDate !== ''): ?> · feitos em <?= e(date('d/m', strtotime($searchDate))) ?><?php endif; ?>
+            <a href="home">Ver todos</a>
+        </p>
+    <?php endif; ?>
+
+    <section class="pn-card" aria-label="Pedidos">
         <?php if (!$isGestor && $pendingOld > 0): ?>
             <p class="pn-notice">
                 <i class="fa-solid fa-circle-exclamation" aria-hidden="true"></i>
