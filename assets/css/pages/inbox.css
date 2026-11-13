@@ -26,7 +26,8 @@
     min-height: 32px;
     padding: 0 12px;
     border-radius: var(--r-pill);
-    background: var(--fundo-2);
+    background: var(--superficie);
+    box-shadow: inset 0 0 0 1px var(--linha-forte);
     color: var(--texto-2);
     font-size: 14px;
     font-weight: 500;
@@ -239,7 +240,8 @@
     margin: 0;
     padding: 10px 14px;
     border-radius: var(--r-2);
-    background: var(--fundo-2);
+    background: var(--superficie);
+    border: 1px solid var(--linha-forte);
     font-size: 14px;
     line-height: 1.5;
     color: var(--texto);
@@ -278,12 +280,12 @@ body.has-bulk .inbox-detail__act { display: none; }
     white-space: nowrap;
 }
 .status-chip--novo,
-.status-chip--chegou { --chip: var(--texto); --chip-bg: var(--fundo-2); }
+.status-chip--chegou { --chip: var(--texto); --chip-bg: var(--superficie); box-shadow: inset 0 0 0 1px var(--linha-forte); }
 .status-chip--andamento { --chip: var(--info); --chip-bg: var(--info-claro); }
 .status-chip--ajuda { --chip: var(--roxo); --chip-bg: var(--roxo-claro); }
 .status-chip--aguardando { --chip: var(--aviso); --chip-bg: var(--aviso-claro); }
 .status-chip--concluido { --chip: var(--ok); --chip-bg: var(--ok-claro); }
-.status-chip--transferido { --chip: var(--texto-2); --chip-bg: var(--fundo-2); }
+.status-chip--transferido { --chip: var(--texto-2); --chip-bg: var(--superficie); box-shadow: inset 0 0 0 1px var(--linha-forte); }
 
 /* ---------- Celular: painel em tela cheia ---------- */
 @media (max-width: 899.98px) {

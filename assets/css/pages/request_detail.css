@@ -39,7 +39,7 @@
     font-size: var(--t-xs); font-weight: 600; white-space: nowrap;
 }
 .rv-pill--P { --pill: var(--aviso); --pill-bg: var(--aviso-claro); }
-.rv-pill--Y, .rv-pill--F { --pill: var(--texto-2); --pill-bg: var(--fundo-2); }
+.rv-pill--Y, .rv-pill--F { --pill: var(--texto-2); --pill-bg: var(--superficie); box-shadow: inset 0 0 0 1px var(--linha-forte); }
 .rv-pill--C { --pill: var(--ok); --pill-bg: var(--ok-claro); }
 .rv-pill--N { --pill: var(--perigo); --pill-bg: var(--perigo-claro); }
 
@@ -199,7 +199,7 @@
 .rv2 .chat-bubble {
     --b-bg: var(--superficie);
     --b-fg: var(--texto);
-    --b-line: var(--linha);
+    --b-line: var(--linha-forte);
     padding: 10px 14px;
     border: 1px solid var(--b-line);
     border-radius: var(--r-3);
@@ -234,7 +234,7 @@
     max-width: min(100%, 520px);
     margin: 0;
     padding: 10px 14px;
-    border: 1px solid var(--linha);
+    border: 1px solid var(--linha-forte);
     border-radius: var(--r-2);
     background: var(--superficie);
     color: var(--texto);
@@ -254,7 +254,7 @@
     display: grid;
     gap: 8px;
     padding: 10px 12px;
-    border-top: 1px solid var(--linha);
+    border-top: 1px solid var(--linha-forte);
     background: var(--superficie);
     box-shadow: 0 -6px 16px rgb(24 24 27 / .06);
 }
@@ -321,7 +321,7 @@
 .rv2 .chat-threads__tab.has-new::after { content: ""; width: 7px; height: 7px; border-radius: 50%; background: var(--laranja); }
 
 /* Mensagem de quem pediu durante a ajuda: o setor que ajuda também recebeu */
-.rv2 .chat-to-tag { margin-left: 4px; padding: 1px 8px; border-radius: var(--r-pill); background: var(--fundo-2); color: var(--texto-2); font-weight: 600; }
+.rv2 .chat-to-tag { margin-left: 4px; padding: 1px 8px; border-radius: var(--r-pill); background: var(--fundo-2); color: var(--texto-2); font-weight: 600; box-shadow: inset 0 0 0 1px var(--linha-forte); }
 .rv2 .chat-readonly { display: flex; gap: 8px; align-items: center; margin: 0; font-size: var(--t-sm); color: var(--texto-2); }
 .rv2 .rv-composer--internal .chat-input,
 .rv2 .rv-composer--internal .chat-input:focus { border-color: var(--roxo); }
@@ -338,6 +338,7 @@
     display: grid; place-items: center;
     border-radius: 50%; background: var(--fundo-2); color: var(--texto-2);
     font-size: var(--t-xs); font-weight: 700; letter-spacing: .02em;
+    box-shadow: inset 0 0 0 1px var(--linha-forte);
 }
 .rv-person__text { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
 .rv-person__text strong { font-size: var(--t-sm); font-weight: 600; overflow-wrap: anywhere; }
@@ -390,8 +391,8 @@
 .rv2 .rv-write-close {
     display: none; place-items: center; flex: none;
     width: 40px; height: 48px;
-    border: 0; border-radius: var(--r-2);
-    background: var(--fundo); color: var(--texto-2);
+    border: 1px solid var(--linha-forte); border-radius: var(--r-2);
+    background: var(--superficie); color: var(--texto-2);
     cursor: pointer;
 }
 
@@ -433,15 +434,15 @@
     .rv2 .rv-fwd__cols { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 20px; }
 
     /* Conversa: abas em cima, linha do tempo sobre cinza, campo embaixo */
-    .rv2 .rv-talk { gap: 0; padding: 0; overflow: hidden; border: 1px solid var(--linha); border-radius: var(--r-3); background: var(--superficie); }
+    .rv2 .rv-talk { gap: 0; padding: 0; overflow: hidden; border: 1px solid var(--linha-forte); border-radius: var(--r-3); background: var(--superficie); }
     .rv2 .rv-talk__head { min-height: 52px; padding: 0 20px; border-bottom: 1px solid var(--linha); }
     /* Mesmo estilo de aba do celular: um jeito só de aba na tela */
     .rv2 .rv-talk__head .chat-threads { align-self: center; flex-wrap: nowrap; gap: 4px; min-width: 0; padding: 0; border-radius: 0; background: none; }
     .rv2 .rv-talk__head .chat-threads__tab.has-new::after { width: 6px; height: 6px; }
-    .rv2 .rv-feed { min-height: 220px; padding: 20px; background: var(--fundo); }
+    .rv2 .rv-feed { min-height: 220px; padding: 20px; background: var(--superficie); }
     .rv2 .rv-feed .chat-item { max-width: 78%; }
 
-    .rv2 .rv-dock { position: static; padding: 16px 20px; border-top: 1px solid var(--linha); background: var(--superficie); box-shadow: none; }
+    .rv2 .rv-dock { position: static; padding: 16px 20px; border-top: 1px solid var(--linha-forte); background: var(--superficie); box-shadow: none; }
     .rv2 .rv-actions--dock { display: none; }
     .rv2 .rv-composer .chat-input-area { align-items: stretch; }
     .rv2 .rv-composer .chat-input { min-height: 56px; border-radius: var(--r-2); font-size: 0.9375rem; }
