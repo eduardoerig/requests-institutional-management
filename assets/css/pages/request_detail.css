@@ -66,7 +66,7 @@
 /* Urgência com o motivo: faixa vermelha clara */
 .rv-urgent {
     margin: 4px 0 0; padding: 10px 12px;
-    border: 1px solid #FECACA; border-radius: var(--r-2);
+    border: 0; border-radius: var(--r-2); /* o fundo já separa: sem borda (hierarquia por cor e espaço) */
     background: var(--perigo-claro); color: var(--perigo);
     font-size: var(--t-sm); line-height: 1.45; overflow-wrap: anywhere;
 }
@@ -80,7 +80,7 @@
     align-items: flex-start;
     margin: 4px 0 0;
     padding: 12px 14px;
-    border: 1px solid var(--laranja-borda);
+    border: 0;
     border-radius: var(--r-2);
     background: var(--laranja-claro);
     font-size: var(--t-sm);
@@ -114,7 +114,7 @@
     gap: 4px;
     padding: 4px;
     border-radius: var(--r-2);
-    background: var(--fundo-2);
+    background: transparent;
 }
 .rv-tabs [role="tab"] {
     min-height: var(--h-md);
@@ -126,7 +126,8 @@
     font-weight: 600;
     cursor: pointer;
 }
-.rv-tabs [role="tab"][aria-selected="true"] { background: var(--superficie); color: var(--texto); box-shadow: 0 1px 2px rgb(0 0 0 / .08); }
+/* Aba ativa = seleção: laranja claro, sem borda nem sombra (Padrão clean de UI) */
+.rv-tabs [role="tab"][aria-selected="true"] { background: var(--laranja-claro); color: var(--laranja-escuro); }
 
 /* Ações: no cabeçalho (computador) e na barra de baixo (celular) — o mesmo conjunto.
    No celular o cabeçalho mostra só o ••• (os botões ficam na barra de baixo) */
@@ -174,7 +175,7 @@
     padding: 0 10px;
     border-radius: var(--r-pill);
     background: transparent;
-    font-size: 11px;
+    font-size: var(--t-xs);
     font-weight: 600;
     letter-spacing: .04em;
     text-transform: uppercase;
@@ -192,7 +193,7 @@
     justify-self: start;
 }
 .rv2 .rv-feed .chat-item.mine { justify-self: end; align-items: flex-end; flex-direction: column; }
-.rv2 .chat-meta { margin: 0; padding: 0 4px; font-size: 12px; line-height: 1.35; color: var(--texto-2); }
+.rv2 .chat-meta { margin: 0; padding: 0 4px; font-size: var(--t-xs); line-height: 1.35; color: var(--texto-2); }
 .rv2 .chat-meta .chat-user-name { display: inline; margin: 0; font-size: inherit; font-weight: 600; color: var(--texto); }
 .rv2 .chat-meta .chat-time { display: inline; margin: 0; font-size: inherit; text-align: left; opacity: 1; }
 .rv2 .chat-bubble {
@@ -227,8 +228,8 @@
 }
 .rv2 .feed-event .feed-pill strong { font-weight: 600; color: inherit; }
 .rv2 .feed-event .feed-pill time { margin-left: 4px; font-size: inherit; color: inherit; opacity: .8; }
-.rv2 .feed-event--bad .feed-pill { background: var(--perigo-claro); color: #991B1B; }
-.rv2 .feed-event--bad .feed-pill strong { color: #991B1B; }
+.rv2 .feed-event--bad .feed-pill { background: var(--perigo-claro); color: var(--perigo); }
+.rv2 .feed-event--bad .feed-pill strong { color: var(--perigo); }
 .rv2 .feed-event blockquote {
     max-width: min(100%, 520px);
     margin: 0;
@@ -288,9 +289,10 @@
     display: grid;
     place-items: center;
     border-radius: 50%;
-    background: var(--grafite);
+    background: var(--laranja); /* enviar é a ação da conversa: laranja, não preto */
+    color: var(--texto-inv);
 }
-.rv2 .rv-composer .btn-send:hover { background: #3F3F46; }
+.rv2 .rv-composer .btn-send:hover { background: var(--laranja-escuro); }
 .rv2 .btn-send__text { display: none; }
 .rv2 .rv-composer .chat-hint { display: none; font-size: var(--t-xs); }
 .rv2 .rv-composer .chat-hint i { margin-right: 4px; }
@@ -300,7 +302,7 @@
     display: flex; flex-wrap: nowrap; gap: 4px; max-width: 100%; overflow-x: auto;
     padding: 3px;
     border-radius: 20px;
-    background: var(--fundo);
+    background: transparent;
 }
 .rv2 .chat-threads__tab {
     flex: 0 0 auto;
@@ -312,8 +314,9 @@
     transition: background-color var(--dur-1), color var(--dur-1);
 }
 .rv2 .chat-threads__tab i { font-size: 11px; }
-.rv2 .chat-threads__tab[aria-selected="true"] { background: var(--superficie); color: var(--texto); box-shadow: var(--sombra-1); }
-.rv2 .chat-threads__tab[data-chat-thread="internal"][aria-selected="true"] { color: var(--roxo); }
+.rv2 .chat-threads__tab[aria-selected="true"] { background: var(--laranja-claro); color: var(--laranja-escuro); box-shadow: none; }
+/* Conversa interna entre setores mantém o roxo que a identifica */
+.rv2 .chat-threads__tab[data-chat-thread="internal"][aria-selected="true"] { background: var(--roxo-claro); color: var(--roxo); }
 /* Esperando resposta: bolinha laranja ao lado do nome */
 .rv2 .chat-threads__tab.has-new::after { content: ""; width: 7px; height: 7px; border-radius: 50%; background: var(--laranja); }
 
@@ -334,7 +337,7 @@
     flex: 0 0 36px; width: 36px; height: 36px;
     display: grid; place-items: center;
     border-radius: 50%; background: var(--fundo-2); color: var(--texto-2);
-    font-size: 12px; font-weight: 700; letter-spacing: .02em;
+    font-size: var(--t-xs); font-weight: 700; letter-spacing: .02em;
 }
 .rv-person__text { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
 .rv-person__text strong { font-size: var(--t-sm); font-weight: 600; overflow-wrap: anywhere; }
@@ -376,6 +379,11 @@
     .rv2 .rv-dock.has-actions:not(.is-writing) :is(.rv-composer, .chat-readonly) { display: none; }
     .rv2 .rv-dock.has-actions.is-writing .rv-actions--dock { display: none; }
     .rv2 .rv-dock.has-actions.is-writing .rv-write-close { display: grid; }
+
+    /* Uma barra fixa só: na página do pedido o menu inferior sai e a barra do pedido desce
+       até o pé (volta pelo link do topo). Zerar --bottomnav-h ajusta todos os cálculos */
+    body:has(.rv2 .rv-dock) { --bottomnav-h: 0px; }
+    body:has(.rv2 .rv-dock) .bottom-nav { display: none; }
 }
 .rv2 .rv-actions--dock .rv-write-btn { flex: 0 0 46px; position: relative; padding: 0; font-size: 1.125rem; }
 .rv2 .rv-write-btn.has-new::after { content: ""; position: absolute; top: 8px; right: 8px; width: 8px; height: 8px; border-radius: 50%; background: var(--laranja); }
@@ -427,12 +435,8 @@
     /* Conversa: abas em cima, linha do tempo sobre cinza, campo embaixo */
     .rv2 .rv-talk { gap: 0; padding: 0; overflow: hidden; border: 1px solid var(--linha); border-radius: var(--r-3); background: var(--superficie); }
     .rv2 .rv-talk__head { min-height: 52px; padding: 0 20px; border-bottom: 1px solid var(--linha); }
-    .rv2 .rv-talk__head .chat-threads { align-self: stretch; flex-wrap: nowrap; gap: 20px; min-width: 0; padding: 0; border-radius: 0; background: none; }
-    .rv2 .rv-talk__head .chat-threads__tab {
-        min-height: 52px; padding: 0 2px; border-radius: 0;
-        border-bottom: 2px solid transparent; margin-bottom: -1px;
-    }
-    .rv2 .rv-talk__head .chat-threads__tab[aria-selected="true"] { background: none; box-shadow: none; color: var(--texto); border-bottom-color: var(--laranja); }
+    /* Mesmo estilo de aba do celular: um jeito só de aba na tela */
+    .rv2 .rv-talk__head .chat-threads { align-self: center; flex-wrap: nowrap; gap: 4px; min-width: 0; padding: 0; border-radius: 0; background: none; }
     .rv2 .rv-talk__head .chat-threads__tab.has-new::after { width: 6px; height: 6px; }
     .rv2 .rv-feed { min-height: 220px; padding: 20px; background: var(--fundo); }
     .rv2 .rv-feed .chat-item { max-width: 78%; }

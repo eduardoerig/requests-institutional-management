@@ -221,7 +221,7 @@
     .urgent-switch.check-line { justify-content: flex-start; }
     .urgent-switch input[type="checkbox"] { order: -1; }
     .urgent-switch__title { font-size: 15px; }
-    .urgent-switch__hint { font-size: 13px; }
+    .urgent-switch__hint { font-size: var(--t-xs); }
 
 }
 

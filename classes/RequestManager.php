@@ -67,15 +67,20 @@ class RequestManager {
         )", array_merge($ids, $ids)];
     }
 
-    /** Quantos pedidos aguardam aprovação (contador do menu), numa consulta só e com o mesmo filtro de getRequests */
-    public static function countPending($pdo, $subdivisionId = null): int
+    /**
+     * Quantos pedidos aguardam aprovação (contador do menu), numa consulta só e com o mesmo filtro de getRequests.
+     * $viewerId > 0 tira os pedidos da própria pessoa: ninguém aprova o próprio pedido,
+     * e a tela Aprovar (RequestInbox::approvals) já os esconde.
+     */
+    public static function countPending($pdo, $subdivisionId = null, int $viewerId = 0): int
     {
         $parts = [];
         $params = [];
         foreach (allowedRequestTables() as $sector) {
             [$subSql, $subParams] = self::subdivisionFilter($subdivisionId);
-            $parts[] = "(SELECT COUNT(*) FROM `ctd_{$sector}_frm` r WHERE r.status = 'P'$subSql)";
-            $params = array_merge($params, $subParams);
+            $ownSql = $viewerId > 0 ? ' AND (r.created_by IS NULL OR r.created_by <> ?)' : '';
+            $parts[] = "(SELECT COUNT(*) FROM `ctd_{$sector}_frm` r WHERE r.status = 'P'$subSql$ownSql)";
+            $params = array_merge($params, $subParams, $viewerId > 0 ? [$viewerId] : []);
         }
         $stmt = $pdo->prepare('SELECT ' . implode(' + ', $parts));
         $stmt->execute($params);

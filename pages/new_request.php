@@ -77,7 +77,7 @@ if (count($sessionAreaIds) > 1) {
             <h2 id="depoisTitulo">O que acontece depois</h2>
             <ol>
                 <li>A coordenação da sua área aprova.</li>
-                <li>O pedido entra na Caixa de <strong data-sector-name-out>do setor escolhido</strong>.</li>
+                <li>O pedido entra na Caixa <strong data-sector-name-out>do setor escolhido</strong>.</li>
                 <li>Se outro setor precisar participar, a coordenação ou o setor chama. Você acompanha tudo aqui.</li>
                 <li>Você recebe um aviso a cada etapa.</li>
             </ol>

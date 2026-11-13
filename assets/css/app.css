@@ -326,8 +326,8 @@ small { font-size: 0.875em; }
 .bottom-nav__item.is-active { color: var(--laranja); font-weight: 700; }
 .bottom-nav__item .sidebar-badge {
     position: absolute;
-    top: 6px;
-    left: calc(50% + 6px);
+    top: 4px;
+    left: calc(50% + 9px); /* encostado no ícone, sem cobrir (antes invadia ~2px) */
 }
 .bottom-nav__new { color: var(--laranja); }
 .bottom-nav__new i {
@@ -528,7 +528,8 @@ small { font-size: 0.875em; }
     min-height: var(--h-md);
     margin-bottom: 24px;
 }
-.page-head h1 { font-size: var(--t-2xl); }
+/* Título de página: 30px/600, igual ao Painel e à Caixa (Padrão clean de UI) */
+.page-head h1 { font-size: 30px; font-weight: 600; letter-spacing: -0.03em; line-height: 1.15; }
 .page-head p { color: var(--texto-2); margin-top: 4px; }
 /* No celular o título já está na barra superior */
 @media (max-width: 899.98px) {
@@ -767,14 +768,14 @@ select option { color: var(--texto); }
     padding: 0 8px;
     border-radius: var(--r-pill);
     background: var(--perigo-claro);
-    color: #991B1B;
-    font-size: 11px;
+    color: var(--perigo);
+    font-size: var(--t-xs);
     font-weight: 700;
     letter-spacing: .02em;
     text-transform: uppercase;
     white-space: nowrap;
 }
-.badge-sector { display: inline-flex; align-items: center; min-height: 20px; padding: 0 8px; border-radius: var(--r-pill); background: var(--roxo-claro); color: var(--roxo); font-size: 11px; font-weight: 600; white-space: nowrap; }
+.badge-sector { display: inline-flex; align-items: center; min-height: 20px; padding: 0 8px; border-radius: var(--r-pill); background: var(--roxo-claro); color: var(--roxo); font-size: var(--t-xs); font-weight: 600; white-space: nowrap; }
 
 /* Etapas em 4 barras: Enviado · Aprovado · No setor · Concluído (mesma leitura em toda tela) */
 .steps4 { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 6px; margin: 0; padding: 0; list-style: none; }

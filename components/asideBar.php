@@ -19,7 +19,7 @@ $badge_inbox = 0;
 
 if ($canApprove) {
     $subdivisionFilter = $isAdmSub ? ($_SESSION['subdivision_ids'] ?? null) : null;
-    $badge_pendentes = RequestManager::countPending($pdo, $subdivisionFilter);
+    $badge_pendentes = RequestManager::countPending($pdo, $subdivisionFilter, (int)$sidebar_user_id);
 }
 if ($canManage) {
     require_once __DIR__ . '/../classes/RequestInbox.php';

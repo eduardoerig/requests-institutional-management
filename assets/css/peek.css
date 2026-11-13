@@ -149,7 +149,7 @@ body.peek-open { overflow: hidden; }
     border-radius: 50%;
     background: var(--linha);
     color: var(--texto-2);
-    font-size: 10.5px;
+    font-size: var(--t-xs);
     font-weight: 700;
     flex: 0 0 30px;
 }
