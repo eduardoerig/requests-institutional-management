@@ -234,7 +234,7 @@ $accData = [
                     <label class="acc-search">
                         <i class="fa-solid fa-magnifying-glass" aria-hidden="true"></i>
                         <span class="visually-hidden">Buscar pessoa</span>
-                        <input type="search" id="accSearch" placeholder="Buscar por nome ou usuário" autocomplete="off" autocapitalize="none">
+                        <input type="search" id="accSearch" placeholder="Nome ou usuário" aria-label="Buscar por nome ou usuário" autocomplete="off" autocapitalize="none">
                     </label>
                     <div class="acc-filters" role="group" aria-label="Filtrar por perfil">
                         <button type="button" class="acc-pill is-active" aria-pressed="true" data-acc-kind="all">Todos</button>
